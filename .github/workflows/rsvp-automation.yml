@@ -27,20 +27,15 @@ jobs:
           cd scripts
           npm install
 
-      - name: Get changed flyer files
-        id: changed
-        run: |
-          CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | head -1)
-          echo "flyer=$CHANGED" >> $GITHUB_OUTPUT
-          echo "Found flyer: $CHANGED"
-
-      - name: Run RSVP automation
+      - name: Process all new flyers
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TALLY_API_KEY: ${{ secrets.TALLY_API_KEY }}
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-          FLYER_PATH: ${{ steps.changed.outputs.flyer }}
         run: |
           cd scripts
-          node automate.js
+          git diff --name-only HEAD~1 HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | while IFS= read -r flyer; do
+            echo "🎯 Processing: $flyer"
+            FLYER_PATH="$flyer" node automate.js
+          done
