@@ -1,0 +1,11 @@
+{
+  "name": "rsvp-automation-scripts",
+  "version": "1.0.0",
+  "description": "RSVP automation scripts",
+  "main": "automate.js",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "adm-zip": "^0.5.10",
+    "axios": "^1.6.0"
+  }
+}
