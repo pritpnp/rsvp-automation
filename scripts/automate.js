@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
+const { google } = require('googleapis');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -75,56 +76,100 @@ Return only the JSON, no other text.`
   return info;
 }
 
-// ─── Step 2: Create Tally Form ───────────────────────────────────────────────
+// ─── Step 2: Create Google Form ───────────────────────────────────────────────
 
-async function createTallyForm(eventInfo, zone) {
-  console.log('📋 Creating Tally form...');
+async function createGoogleForm(eventInfo, zone) {
+  console.log('📋 Creating Google Form...');
 
   const zoneLabel = zoneName(zone);
-  const formTitle = `${eventInfo.eventName} – ${zoneLabel} RSVP`;
+  const formTitle = `${eventInfo.eventName} – ${zoneLabel} RSVP${eventInfo.date ? ' | ' + eventInfo.date : ''}`;
 
-  const response = await axios.post(
-    'https://api.tally.so/forms',
-    {
-      title: formTitle,
-      fields: [
-        {
-          type: 'INPUT_TEXT',
-          label: 'Full Name',
-          placeholder: 'Enter your full name',
-          required: true
-        },
-        {
-          type: 'INPUT_PHONE_NUMBER',
-          label: 'Phone Number',
-          placeholder: 'Enter your phone number',
-          required: true
-        },
-        {
-          type: 'INPUT_NUMBER',
-          label: 'Number of Guests Attending',
-          placeholder: 'Including yourself',
-          required: true
-        }
-      ]
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.TALLY_API_KEY}`,
-        'Content-Type': 'application/json'
+  // Auth via service account
+  const serviceAccountJson = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+  const auth = new google.auth.GoogleAuth({
+    credentials: serviceAccountJson,
+    scopes: [
+      'https://www.googleapis.com/auth/forms.body',
+      'https://www.googleapis.com/auth/drive'
+    ]
+  });
+
+  const formsClient = google.forms({ version: 'v1', auth });
+  const driveClient = google.drive({ version: 'v3', auth });
+
+  // Create the form
+  const createRes = await formsClient.forms.create({
+    requestBody: {
+      info: {
+        title: formTitle,
+        documentTitle: formTitle
       }
     }
-  );
+  });
 
-  const formId = response.data.id;
-  const embedUrl = `https://tally.so/embed/${formId}?alignLeft=1&hideTitle=1&transparentBackground=1`;
-  console.log('✅ Tally form created:', formId);
-  return { formId, embedUrl };
+  const formId = createRes.data.formId;
+
+  // Add questions via batchUpdate
+  await formsClient.forms.batchUpdate({
+    formId,
+    requestBody: {
+      requests: [
+        {
+          createItem: {
+            item: {
+              title: 'Full Name',
+              questionItem: {
+                question: {
+                  required: true,
+                  textQuestion: { paragraph: false }
+                }
+              }
+            },
+            location: { index: 0 }
+          }
+        },
+        {
+          createItem: {
+            item: {
+              title: 'Number of Guests Attending (including yourself)',
+              questionItem: {
+                question: {
+                  required: true,
+                  scaleQuestion: {
+                    low: 1,
+                    high: 10,
+                    lowLabel: '1 person',
+                    highLabel: '10+'
+                  }
+                }
+              }
+            },
+            location: { index: 1 }
+          }
+        }
+      ]
+    }
+  });
+
+  // Make the form publicly accessible
+  await driveClient.permissions.create({
+    fileId: formId,
+    requestBody: {
+      role: 'reader',
+      type: 'anyone'
+    }
+  });
+
+  const formUrl = `https://docs.google.com/forms/d/${formId}/viewform`;
+  const embedUrl = `https://docs.google.com/forms/d/${formId}/viewform?embedded=true`;
+
+  console.log('✅ Google Form created:', formUrl);
+  return { formId, formUrl, embedUrl };
 }
 
 // ─── Step 3: Build HTML Page ─────────────────────────────────────────────────
 
-async function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl) {
+async function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   console.log('🏗️ Building HTML page...');
 
   const zoneLabel = zoneName(zone);
@@ -222,9 +267,22 @@ async function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl) {
     iframe {
       width: 100%;
       border: none;
-      min-height: 420px;
+      min-height: 480px;
       border-radius: 12px;
-      background: #1a1a1a;
+      background: #fff;
+    }
+
+    .open-form {
+      display: block;
+      text-align: center;
+      margin-top: 16px;
+      color: #888;
+      font-size: 13px;
+    }
+
+    .open-form a {
+      color: #7c3aed;
+      text-decoration: none;
     }
 
     .footer {
@@ -252,7 +310,11 @@ async function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl) {
     <hr class="divider" />
 
     <p class="rsvp-title">RSVP Below</p>
-    <iframe src="${embedUrl}" title="RSVP Form"></iframe>
+    <iframe src="${embedUrl}" title="RSVP Form">Loading…</iframe>
+
+    <p class="open-form">
+      Form not loading? <a href="${formUrl}" target="_blank">Open in new tab</a>
+    </p>
 
     <div class="footer">scparasabha.com</div>
   </div>
@@ -270,18 +332,9 @@ async function deployToNetlify(html, eventSlug, zone) {
   console.log('🚀 Deploying to Netlify...');
 
   const deployPath = `rsvp/${zone}/${eventSlug}`;
-  const files = {
-    [`${deployPath}/index.html`]: Buffer.from(html)
-  };
-
-  // Build zip in memory
   const AdmZip = require('adm-zip');
   const zip = new AdmZip();
-
-  for (const [filePath, content] of Object.entries(files)) {
-    zip.addFile(filePath, content);
-  }
-
+  zip.addFile(`${deployPath}/index.html`, Buffer.from(html));
   const zipBuffer = zip.toBuffer();
 
   const response = await axios.post(
@@ -303,17 +356,17 @@ async function deployToNetlify(html, eventSlug, zone) {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const flyerPath = path.join(REPO_ROOT, process.env.FLYER_PATH);
+  const flyerRelPath = process.env.FLYER_PATH;
+  const flyerPath = path.join(REPO_ROOT, flyerRelPath);
 
-  if (!flyerPath) {
+  if (!flyerRelPath) {
     console.error('❌ No flyer path provided');
     process.exit(1);
   }
 
   console.log(`\n🎉 Processing flyer: ${flyerPath}\n`);
 
-  // Parse zone from path: flyers/scranton/image.jpg
-  const flyerRelPath = process.env.FLYER_PATH;
+  // Parse zone from FLYER_PATH env var (e.g. flyers/mountain-top/image.png)
   const parts = flyerRelPath.split('/');
   const zone = parts[1];
   const fileName = parts[2];
@@ -322,8 +375,8 @@ async function main() {
 
   // Run all steps
   const eventInfo = await extractEventInfo(flyerPath);
-  const { embedUrl } = await createTallyForm(eventInfo, zone);
-  const html = await buildHtmlPage(eventInfo, zone, flyerPath, embedUrl);
+  const { embedUrl, formUrl } = await createGoogleForm(eventInfo, zone);
+  const html = await buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
   const eventSlug = slugify(eventInfo.eventName);
   const deployedUrl = await deployToNetlify(html, eventSlug, zone);
 
