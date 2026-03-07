@@ -312,7 +312,7 @@ async function main() {
 
   console.log(`\n🎉 Processing flyer: ${flyerPath}\n`);
 
- // Parse zone from FLYER_PATH env var (e.g. flyers/mountain-top/image.png)
+  // Parse zone from path: flyers/scranton/image.jpg
   const flyerRelPath = process.env.FLYER_PATH;
   const parts = flyerRelPath.split('/');
   const zone = parts[1];
