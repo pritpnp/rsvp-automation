@@ -5,6 +5,9 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Repo root is one level up from scripts/
+const REPO_ROOT = path.join(__dirname, '..');
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function slugify(text) {
@@ -300,7 +303,7 @@ async function deployToNetlify(html, eventSlug, zone) {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const flyerPath = process.env.FLYER_PATH;
+  const flyerPath = path.join(REPO_ROOT, process.env.FLYER_PATH);
 
   if (!flyerPath) {
     console.error('❌ No flyer path provided');
