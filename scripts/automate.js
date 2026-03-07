@@ -98,14 +98,20 @@ async function createGoogleForm(eventInfo, zone) {
   const driveClient = google.drive({ version: 'v3', auth });
 
   // Create the form
-  const createRes = await formsClient.forms.create({
-    requestBody: {
-      info: {
-        title: formTitle,
-        documentTitle: formTitle
+  let createRes;
+  try {
+    createRes = await formsClient.forms.create({
+      requestBody: {
+        info: {
+          title: formTitle,
+          documentTitle: formTitle
+        }
       }
-    }
-  });
+    });
+  } catch (err) {
+    console.error('❌ Google Forms create error:', JSON.stringify(err?.response?.data || err?.message || err, null, 2));
+    throw err;
+  }
 
   const formId = createRes.data.formId;
 
