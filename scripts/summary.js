@@ -66,21 +66,19 @@ async function main() {
   const XLSX = require('xlsx');
   const workbook = XLSX.readFile(xlsxPath);
 
-  // Log available sheets
   console.log('📋 Sheets found:', workbook.SheetNames);
 
-  // Read deadlines sheet (try Sheet1 and first sheet)
-  const deadlinesSheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('sheet1') || n.toLowerCase().includes('deadline')) || workbook.SheetNames[0];
-  const deadlinesSheet = workbook.Sheets[deadlinesSheetName];
-  const deadlines = XLSX.utils.sheet_to_json(deadlinesSheet);
-  console.log(`📊 Deadlines sheet: "${deadlinesSheetName}" — ${deadlines.length} rows`);
-  if (deadlines.length > 0) console.log('📊 First row keys:', Object.keys(deadlines[0]));
+  // Read deadlines from Sheet1 with raw dates
+  const deadlinesSheet = workbook.Sheets['Sheet1'];
+  const deadlines = XLSX.utils.sheet_to_json(deadlinesSheet, { raw: false, dateNF: 'yyyy-mm-dd' });
+  console.log(`📊 Deadlines: ${deadlines.length} rows`);
+  if (deadlines.length > 0) console.log('📊 Sample:', JSON.stringify(deadlines[0]));
 
   // Read responses sheet
-  const responsesSheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('response')) || workbook.SheetNames[1];
-  const responsesSheet = workbook.Sheets[responsesSheetName];
-  const responses = responsesSheet ? XLSX.utils.sheet_to_json(responsesSheet) : [];
-  console.log(`📊 Responses sheet: "${responsesSheetName}" — ${responses.length} rows`);
+  const responsesSheet = workbook.Sheets['responses'];
+  const responses = responsesSheet ? XLSX.utils.sheet_to_json(responsesSheet, { raw: false }) : [];
+  console.log(`📊 Responses: ${responses.length} rows`);
+  if (responses.length > 0) console.log('📊 Sample response:', JSON.stringify(responses[0]));
 
   const today = new Date().toISOString().split('T')[0];
   console.log(`📅 Today: ${today} | TEST_MODE: ${TEST_MODE}`);
@@ -95,12 +93,8 @@ async function main() {
     if (!zone || !deadline) continue;
 
     // Normalize deadline to YYYY-MM-DD
-    let deadlineStr = deadline;
-    if (typeof deadline === 'number') {
-      // Excel serial date
-      const date = XLSX.SSF.parse_date_code(deadline);
-      deadlineStr = `${date.y}-${String(date.m).padStart(2,'0')}-${String(date.d).padStart(2,'0')}`;
-    }
+    let deadlineStr = String(deadline || '').trim().substring(0, 10);
+    console.log(`🔍 Zone: ${zone} | Raw deadline: "${deadline}" | Normalized: "${deadlineStr}"`);
 
     const matches = TEST_MODE || deadlineStr === today;
     if (!matches) {
