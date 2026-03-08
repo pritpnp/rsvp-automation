@@ -244,13 +244,11 @@ async function main() {
 
   const deployedUrls = await deployAllToNetlify(pages);
 
-  console.log('
-✨ All done!');
+  console.log('\n✨ All done!');
   for (const url of deployedUrls) {
     console.log(`🔗 ${url}`);
   }
-  console.log('📲 Share these links on WhatsApp/Telegram!
-');
+  console.log('📲 Share these links on WhatsApp/Telegram!');
 }
 
 main().catch(err => {
