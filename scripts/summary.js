@@ -98,9 +98,14 @@ async function main() {
     const { deadline, eventName } = info;
     if (!deadline) continue;
 
-    const matches = TEST_MODE || deadline === today;
-    if (!matches) {
-      console.log(`Skipping ${zone} (deadline: ${deadline})`);
+    // Send if TEST_MODE, or if today is between when the flyer was posted and the deadline
+    const pastDeadline = deadline && today > deadline;
+    if (!TEST_MODE && pastDeadline) {
+      console.log(`Skipping ${zone} — deadline ${deadline} has passed`);
+      continue;
+    }
+    if (!TEST_MODE && !deadline) {
+      console.log(`Skipping ${zone} — no deadline set`);
       continue;
     }
 
