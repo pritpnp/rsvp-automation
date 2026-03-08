@@ -120,6 +120,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
     .rsvp-note { font-size: 13px; color: var(--text-muted); text-align: center; margin-bottom: 16px; line-height: 1.5; }
     .form-container { background: #fff; border-radius: 20px; box-shadow: 0 4px 24px rgba(92,45,10,0.10); overflow: hidden; }
     iframe { width: 100%; border: none; height: 900px; display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .open-form-link { text-align: center; padding: 14px; border-top: 1px solid var(--cream-dark); }
     .open-form-link a { font-size: 13px; color: var(--saffron); text-decoration: none; font-weight: 500; }
     .footer { text-align: center; padding: 20px; font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
@@ -145,9 +146,14 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   <div class="section-divider"><span>RSVP</span></div>
   <div class="rsvp-section">
     <div id="rsvp-open">
+      ${!eventInfo.rsvpDeadline ? `<p style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C8860A;text-align:center;margin-bottom:8px;">RSVP Not Required</p>` : ''}
       <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
-      <div class="form-container">
-        <iframe id="rsvp-iframe" data-src="${embedUrl}" title="RSVP Form" src="about:blank">Loading…</iframe>
+      <div class="form-container" style="position:relative;">
+        <div id="form-loader" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#fff;z-index:1;min-height:200px;">
+          <div style="width:36px;height:36px;border:3px solid #e0d5c8;border-top-color:#C8860A;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+          <span style="font-size:13px;color:#8B6040;">Loading form...</span>
+        </div>
+        <iframe id="rsvp-iframe" data-src="${embedUrl}" title="RSVP Form" src="about:blank" onload="document.getElementById('form-loader').style.display='none'">Loading…</iframe>
         <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
       </div>
     </div>
