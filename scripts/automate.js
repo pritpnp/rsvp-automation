@@ -44,7 +44,7 @@ async function extractEventInfo(flyerPath) {
     max_tokens: 1000,
     messages: [{ role: 'user', content: [
       { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
-      { type: 'text', text: `Extract event info. Return ONLY JSON:\n{"eventName":"...","date":"...","time":"...","location":"...","description":"..."}` }
+      { type: 'text', text: `Extract event info. Return ONLY JSON:\n{"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"YYYY-MM-DD or empty string if not mentioned"}` }
     ]}]
   });
   const info = JSON.parse(response.content[0].text.trim().replace(/\`\`\`json|\`\`\`/g, '').trim());
@@ -131,16 +131,38 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   <div class="details-card">
     ${eventInfo.date ? `<div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">${eventInfo.date}${eventInfo.time ? ' at ' + eventInfo.time : ''}</div></div></div>` : ''}
     ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
+    ${eventInfo.rsvpDeadline ? `<div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">${eventInfo.rsvpDeadline}</div></div></div>` : ''}
   </div>
   <div class="section-divider"><span>RSVP</span></div>
   <div class="rsvp-section">
-    <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
-    <div class="form-container">
-      <iframe src="${embedUrl}" title="RSVP Form">Loading…</iframe>
-      <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
+    <div id="rsvp-open">
+      <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
+      <div class="form-container">
+        <iframe src="${embedUrl}" title="RSVP Form">Loading…</iframe>
+        <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
+      </div>
+    </div>
+    <div id="rsvp-closed" style="display:none;">
+      <div style="background:#fff;border-radius:20px;padding:40px 24px;text-align:center;box-shadow:0 4px 24px rgba(92,45,10,0.10);">
+        <div style="font-size:48px;margin-bottom:16px;">🙏</div>
+        <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#5C2D0A;margin-bottom:10px;">RSVP is now closed</h2>
+        <p style="font-size:14px;color:#8B6040;line-height:1.6;">Thank you for your interest. The RSVP deadline for this event has passed.<br>We hope to see you at the sabha!</p>
+      </div>
     </div>
   </div>
   <div class="footer"><span class="footer-logo">SC Parasabha</span>scparasabha.com</div>
+  <script>
+    (function() {
+      var deadline = "${eventInfo.rsvpDeadline || ''}";
+      if (!deadline) return;
+      var cutoff = new Date(deadline);
+      cutoff.setHours(23, 59, 59, 999);
+      if (new Date() > cutoff) {
+        document.getElementById("rsvp-open").style.display = "none";
+        document.getElementById("rsvp-closed").style.display = "block";
+      }
+    })();
+  </script>
 </body>
 </html>`;
 }
