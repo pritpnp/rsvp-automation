@@ -44,7 +44,7 @@ async function extractEventInfo(flyerPath) {
     max_tokens: 1000,
     messages: [{ role: 'user', content: [
       { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
-      { type: 'text', text: `Extract event info. Return ONLY JSON:\n{"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"YYYY-MM-DD or empty string if not mentioned"}` }
+      { type: 'text', text: `The current year is 2026. Extract event info. Return ONLY JSON:\n{"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"YYYY-MM-DD using year 2026 unless flyer clearly states otherwise, or empty string if no RSVP deadline mentioned"}` }
     ]}]
   });
   const info = JSON.parse(response.content[0].text.trim().replace(/\`\`\`json|\`\`\`/g, '').trim());
@@ -131,7 +131,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   <div class="details-card">
     ${eventInfo.date ? `<div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">${eventInfo.date}${eventInfo.time ? ' at ' + eventInfo.time : ''}</div></div></div>` : ''}
     ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
-    ${eventInfo.rsvpDeadline ? `<div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">${eventInfo.rsvpDeadline}</div></div></div>` : ''}
+    ${eventInfo.rsvpDeadline ? `<div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">${new Date(eventInfo.rsvpDeadline + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric'})}</div></div></div>` : ''}
   </div>
   <div class="section-divider"><span>RSVP</span></div>
   <div class="rsvp-section">
