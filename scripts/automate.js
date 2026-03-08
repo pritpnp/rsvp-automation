@@ -195,38 +195,62 @@ async function deployAllToNetlify(pages) {
 
 async function main() {
   const flyerPathsRaw = process.env.FLYER_PATHS || process.env.FLYER_PATH || '';
-  const flyerRelPaths = flyerPathsRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const changedFlyers = flyerPathsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
-  if (!flyerRelPaths.length) {
+  if (!changedFlyers.length) {
     console.error('❌ No flyer paths provided');
     process.exit(1);
   }
 
-  console.log(`\n🎉 Processing ${flyerRelPaths.length} flyer(s)...\n`);
+  console.log(`
+🎉 Changed flyers: ${changedFlyers.join(', ')}
+`);
+
+  // Scan ALL zone folders in the repo and collect every flyer
+  const REPO_ROOT_PATH = path.join(__dirname, '..');
+  const zones = ['mountain-top', 'scranton', 'satsang-sabha', 'moosic', 'bloomsburg'];
+  const allFlyers = [];
+
+  for (const zone of zones) {
+    const zoneDir = path.join(REPO_ROOT_PATH, 'flyers', zone);
+    if (!fs.existsSync(zoneDir)) continue;
+    const files = fs.readdirSync(zoneDir).filter(f => /.(png|jpg|jpeg)$/i.test(f));
+    for (const file of files) {
+      allFlyers.push({ zone, flyerRelPath: `flyers/${zone}/${file}`, flyerPath: path.join(zoneDir, file) });
+    }
+  }
+
+  if (!allFlyers.length) {
+    console.log('ℹ️ No flyers found in any zone folder.');
+    process.exit(0);
+  }
+
+  console.log(`📦 Deploying all ${allFlyers.length} flyer(s) across all zones...
+`);
 
   const pages = [];
 
-  for (const flyerRelPath of flyerRelPaths) {
-    const flyerPath = path.join(REPO_ROOT, flyerRelPath);
-    const parts = flyerRelPath.split('/');
-    const zone = parts[1];
-
-    console.log(`\n📍 Zone: ${zone} — ${flyerRelPath}`);
+  for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
+    const isChanged = changedFlyers.includes(flyerRelPath);
+    console.log(`
+📍 Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'}`);
 
     const eventInfo = await extractEventInfo(flyerPath);
     const { embedUrl, formUrl } = getGoogleForm(zone);
     const html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
     pages.push({ zone, html, flyerPath });
-    console.log('✅ Page ready for', zone);
+    console.log(`✅ Page ready for ${zone}`);
   }
 
   const deployedUrls = await deployAllToNetlify(pages);
 
-  console.log('\n✨ All done!');
+  console.log('
+✨ All done!');
   for (const url of deployedUrls) {
     console.log(`🔗 ${url}`);
   }
-  console.log('📲 Share these links on WhatsApp/Telegram!\n');
+  console.log('📲 Share these links on WhatsApp/Telegram!
+');
 }
 
 main().catch(err => {
