@@ -138,10 +138,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
 <body>
   <div class="top-border"></div>
   <div class="header">
-    <span class="header-ornament">✦ ✦ ✦</span>
     <div class="zone-label">BAPS ${zoneLabel} Zone</div>
-    <h1>${eventInfo.eventName}</h1>
-    <p class="header-subtitle">You are cordially invited</p>
   </div>
   <div class="flyer-wrap"><img src="${imageDataUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
