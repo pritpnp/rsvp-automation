@@ -203,7 +203,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
       var chatId = '${process.env.TELEGRAM_CHAT_ID}';
       var zone = '${zoneLabel}';
       var event = '${eventInfo.eventName}';
-      var text = '⚠️ Late RSVP Request\n🏛 ' + zone + ' Zone — ' + event + '\n👤 ' + name + '\n👥 Guests: ' + guests;
+      var text = '⚠️ Late RSVP Request\\n🏛 ' + zone + ' Zone — ' + event + '\\n👤 ' + name + '\\n👥 Guests: ' + guests;
       fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
