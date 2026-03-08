@@ -66,13 +66,21 @@ async function main() {
   const XLSX = require('xlsx');
   const workbook = XLSX.readFile(xlsxPath);
 
-  // Read deadlines sheet
-  const deadlinesSheet = workbook.Sheets['Sheet1'];
+  // Log available sheets
+  console.log('📋 Sheets found:', workbook.SheetNames);
+
+  // Read deadlines sheet (try Sheet1 and first sheet)
+  const deadlinesSheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('sheet1') || n.toLowerCase().includes('deadline')) || workbook.SheetNames[0];
+  const deadlinesSheet = workbook.Sheets[deadlinesSheetName];
   const deadlines = XLSX.utils.sheet_to_json(deadlinesSheet);
+  console.log(`📊 Deadlines sheet: "${deadlinesSheetName}" — ${deadlines.length} rows`);
+  if (deadlines.length > 0) console.log('📊 First row keys:', Object.keys(deadlines[0]));
 
   // Read responses sheet
-  const responsesSheet = workbook.Sheets['responses'];
-  const responses = XLSX.utils.sheet_to_json(responsesSheet);
+  const responsesSheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('response')) || workbook.SheetNames[1];
+  const responsesSheet = workbook.Sheets[responsesSheetName];
+  const responses = responsesSheet ? XLSX.utils.sheet_to_json(responsesSheet) : [];
+  console.log(`📊 Responses sheet: "${responsesSheetName}" — ${responses.length} rows`);
 
   const today = new Date().toISOString().split('T')[0];
   console.log(`📅 Today: ${today} | TEST_MODE: ${TEST_MODE}`);
