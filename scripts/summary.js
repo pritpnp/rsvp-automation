@@ -109,9 +109,7 @@ async function main() {
     const zoneName = zone.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     if (zoneResponses.length === 0) {
-      const message = `<b>${zoneName} Zone - ${eventName}</b>\n\nNo RSVPs received.`;
-      await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, message);
-      summariesSent++;
+      console.log(`No RSVPs for ${zone} — skipping`);
       continue;
     }
 
