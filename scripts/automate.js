@@ -230,12 +230,294 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
 </html>`;
 }
 
-async function deployAllToNetlify(pages) {
+
+function buildHubPage(allFlyers, deadlines) {
+  const zoneLabels = {
+    'mountain-top': 'Mountain Top',
+    'scranton': 'Scranton',
+    'satsang-sabha': 'Satsang Sabha',
+    'moosic': 'Moosic',
+    'bloomsburg': 'Bloomsburg'
+  };
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Only show zones with a flyer AND upcoming event date
+  const activeZones = allFlyers.filter(({ zone }) => {
+    const info = deadlines[zone];
+    if (!info) return false;
+    if (info.eventDate && info.eventDate < today) return false;
+    return true;
+  });
+
+  const cards = activeZones.map(({ zone }) => {
+    const info = deadlines[zone] || {};
+    const label = zoneLabels[zone] || zone;
+    const eventName = info.eventName || 'Para Satsang Sabha';
+    const date = info.date || '';
+    const time = info.time || '';
+    const deadline = info.deadline ? new Date(info.deadline + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+
+    return `
+    <a href="/${zone}" class="card" style="animation-delay: ${activeZones.indexOf(allFlyers.find(f => f.zone === zone))}00ms">
+      <div class="card-inner">
+        <div class="card-zone">${label} Zone</div>
+        <div class="card-event">${eventName}</div>
+        ${date ? `<div class="card-detail">📅 ${date}${time ? ' at ' + time : ''}</div>` : ''}
+        ${deadline ? `<div class="card-detail">⏳ RSVP by ${deadline}</div>` : ''}
+        <div class="card-cta">View Invitation →</div>
+      </div>
+    </a>`;
+  }).join('');
+
+  const noEvents = activeZones.length === 0 ? `
+    <div class="no-events">
+      <p>No upcoming events at this time.</p>
+      <p>Check back soon!</p>
+    </div>` : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BAPS Parasabha — Scranton Region</title>
+  <meta name="description" content="RSVP for upcoming BAPS Parasabha events in the Scranton region." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --saffron: #C8860A;
+      --gold: #E8A020;
+      --cream: #FDF6EC;
+      --brown: #3D1F0A;
+      --light-brown: #7A4520;
+      --card-bg: #FFFAF3;
+    }
+
+    body {
+      background-color: var(--cream);
+      color: var(--brown);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* Decorative top border */
+    .top-border {
+      height: 5px;
+      background: linear-gradient(90deg, var(--saffron), var(--gold), var(--saffron));
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      padding: 56px 24px 40px;
+      background: linear-gradient(180deg, #FDF0D8 0%, var(--cream) 100%);
+      border-bottom: 1px solid rgba(200, 134, 10, 0.15);
+    }
+
+    .baps-logo {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 20px;
+      opacity: 0.85;
+    }
+
+    header h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(28px, 6vw, 44px);
+      font-weight: 700;
+      color: var(--brown);
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+
+    header h1 span {
+      color: var(--saffron);
+      font-style: italic;
+    }
+
+    header p {
+      margin-top: 12px;
+      font-size: 15px;
+      color: var(--light-brown);
+      font-weight: 300;
+      letter-spacing: 0.04em;
+    }
+
+    .divider {
+      width: 48px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 20px auto 0;
+    }
+
+    /* Grid */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 20px 80px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--saffron);
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 20px;
+    }
+
+    /* Cards */
+    .card {
+      text-decoration: none;
+      display: block;
+      opacity: 0;
+      animation: fadeUp 0.5s ease forwards;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-inner {
+      background: var(--card-bg);
+      border: 1px solid rgba(200, 134, 10, 0.2);
+      border-radius: 16px;
+      padding: 28px 24px;
+      height: 100%;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-inner::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--saffron), var(--gold));
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .card:hover .card-inner {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(200, 134, 10, 0.12);
+      border-color: rgba(200, 134, 10, 0.4);
+    }
+
+    .card:hover .card-inner::before {
+      opacity: 1;
+    }
+
+    .card-zone {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--saffron);
+      margin-bottom: 8px;
+    }
+
+    .card-event {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--brown);
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+
+    .card-detail {
+      font-size: 13px;
+      color: var(--light-brown);
+      margin-bottom: 6px;
+      font-weight: 300;
+    }
+
+    .card-cta {
+      margin-top: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--saffron);
+      letter-spacing: 0.02em;
+    }
+
+    /* No events */
+    .no-events {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--light-brown);
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      line-height: 1.8;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: rgba(122, 69, 32, 0.5);
+      letter-spacing: 0.04em;
+      border-top: 1px solid rgba(200, 134, 10, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="top-border"></div>
+
+  <header>
+    <svg class="baps-logo" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="40" cy="40" r="38" stroke="#C8860A" stroke-width="1.5" fill="none" opacity="0.3"/>
+      <circle cx="40" cy="40" r="30" stroke="#C8860A" stroke-width="1" fill="none" opacity="0.2"/>
+      <text x="40" y="47" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="18" font-weight="700" fill="#C8860A">ॐ</text>
+    </svg>
+    <h1>BAPS <span>Parasabha</span><br>Scranton Region</h1>
+    <p>Upcoming Events & RSVP</p>
+    <div class="divider"></div>
+  </header>
+
+  <main>
+    ${activeZones.length > 0 ? '<p class="section-label">Select your zone to RSVP</p>' : ''}
+    <div class="grid">
+      ${cards}
+    </div>
+    ${noEvents}
+  </main>
+
+  <footer>
+    BAPS Swaminarayan Sanstha &nbsp;·&nbsp; www.baps.org
+  </footer>
+</body>
+</html>`;
+}
+
+async function deployAllToNetlify(pages, deadlines = {}) {
   console.log(`🚀 Deploying ${pages.length} page(s) to Netlify in one deploy...`);
 
   // Build file manifest
   const files = {};
   const fileContents = {};
+
+  // Add hub page at root
+  const hubHtml = buildHubPage(pages, deadlines || {});
+  const hubContent = Buffer.from(hubHtml);
+  const hubSha1 = crypto.createHash('sha1').update(hubContent).digest('hex');
+  files['/index.html'] = hubSha1;
+  fileContents[hubSha1] = { filePath: '/index.html', content: hubContent };
 
   for (const { zone, html, flyerPath } of pages) {
     // HTML page
@@ -360,7 +642,7 @@ async function main() {
   fs.writeFileSync(deadlinesPath, JSON.stringify(merged, null, 2));
   console.log('📅 deadlines.json updated:', merged);
 
-  const deployedUrls = await deployAllToNetlify(pages);
+  const deployedUrls = await deployAllToNetlify(pages, merged);
 
   console.log('\n✨ All done!');
   for (const url of deployedUrls) {
