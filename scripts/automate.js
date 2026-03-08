@@ -223,14 +223,11 @@ async function main() {
   const flyerPathsRaw = process.env.FLYER_PATHS || process.env.FLYER_PATH || '';
   const changedFlyers = flyerPathsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
-  if (!changedFlyers.length) {
-    console.error('❌ No flyer paths provided');
-    process.exit(1);
+  if (changedFlyers.length) {
+    console.log(`\n🎉 Changed flyers: ${changedFlyers.join(', ')}`);
+  } else {
+    console.log('\n♻️ No changed flyers detected — redeploying all zones...');
   }
-
-  console.log(`
-🎉 Changed flyers: ${changedFlyers.join(', ')}
-`);
 
   // Scan ALL zone folders in the repo and collect every flyer
   const REPO_ROOT_PATH = path.join(__dirname, '..');

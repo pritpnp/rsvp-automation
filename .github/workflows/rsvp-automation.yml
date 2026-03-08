@@ -2,10 +2,8 @@ name: RSVP Automation
 
 on:
   push:
-    paths:
-      - 'flyers/**/*.jpg'
-      - 'flyers/**/*.jpeg'
-      - 'flyers/**/*.png'
+    branches:
+      - main
 
 jobs:
   build-and-deploy:
