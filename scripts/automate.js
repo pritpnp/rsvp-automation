@@ -47,8 +47,9 @@ STRICT RULES:
 - time: Use format "6:00 pm" (lowercase am/pm)
 - location: Address ONLY. No sponsor names, no host names. Just the street address, city, state, zip.
 - rsvpDeadline: YYYY-MM-DD format using year 2026 unless clearly stated otherwise. Empty string if not mentioned.
+- invitationYPercent: A number between 0 and 1 representing how far down the image (as a fraction of total height) the word "Invitation" first appears. If not present, use 0.55.
 
-{"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"..."}` }
+{"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"...","invitationYPercent":0.55}` }
     ]}]
   });
   const info = JSON.parse(response.content[0].text.trim().replace(/\`\`\`json|\`\`\`/g, '').trim());
@@ -80,11 +81,11 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   <title>${eventInfo.eventName} — ${zoneLabel} Zone</title>
   <meta property="og:title" content="${eventInfo.eventName} — ${zoneLabel} Zone" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
-  <meta property="og:image" content="${pageUrl}/flyer.jpg" />
+  <meta property="og:image" content="${pageUrl}/og.jpg" />
   <meta property="og:url" content="${pageUrl}" />
   <meta property="og:type" content="website" />
-  <meta property="og:image:width" content="1080" />
-  <meta property="og:image:height" content="2340" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta property="og:image:type" content="image/jpeg" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -230,6 +231,41 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
 </html>`;
 }
 
+
+async function buildOgImage(flyerPath, invitationYPercent) {
+  const metadata = await sharp(flyerPath).metadata();
+  const { width: w, height: h } = metadata;
+
+  const cutY = Math.max(0, Math.round((invitationYPercent || 0.55) * h) - 20);
+  console.log(`🖼️  OG image cut at y=${cutY} (${Math.round(cutY/h*100)}%)`);
+
+  // Left panel: top half, resize to width 600, crop 600x630 at y=60
+  const topHalfBuf = await sharp(flyerPath)
+    .extract({ left: 0, top: 0, width: w, height: cutY })
+    .resize(600)
+    .toBuffer();
+  const topMeta = await sharp(topHalfBuf).metadata();
+  const cropY = Math.min(60, Math.max(0, topMeta.height - 630));
+  const leftPanel = await sharp(topHalfBuf)
+    .extract({ left: 0, top: cropY, width: 600, height: Math.min(630, topMeta.height - cropY) })
+    .resize(600, 630)
+    .toBuffer();
+
+  // Right panel: bottom half, cover 600x630 from top
+  const rightPanel = await sharp(flyerPath)
+    .extract({ left: 0, top: cutY, width: w, height: h - cutY })
+    .resize(600, 630, { fit: 'cover', position: 'top' })
+    .toBuffer();
+
+  // Composite side by side
+  return sharp({ create: { width: 1200, height: 630, channels: 3, background: { r: 253, g: 246, b: 236 } } })
+    .composite([
+      { input: leftPanel, left: 0, top: 0 },
+      { input: rightPanel, left: 600, top: 0 }
+    ])
+    .jpeg({ quality: 90 })
+    .toBuffer();
+}
 
 function buildHubPage(allFlyers, deadlines) {
   const zoneLabels = {
@@ -505,7 +541,7 @@ function buildHubPage(allFlyers, deadlines) {
 </html>`;
 }
 
-async function deployAllToNetlify(pages, deadlines = {}) {
+async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   console.log(`🚀 Deploying ${pages.length} page(s) to Netlify in one deploy...`);
 
   // Build file manifest
@@ -526,6 +562,20 @@ async function deployAllToNetlify(pages, deadlines = {}) {
     const htmlSha1 = crypto.createHash('sha1').update(htmlContent).digest('hex');
     files[htmlFilePath] = htmlSha1;
     fileContents[htmlSha1] = { filePath: htmlFilePath, content: htmlContent };
+
+    // OG image — 1200x630 split preview for WhatsApp/social
+    // Use preview.png/jpg if present in zone folder, otherwise fall back to flyer
+    const zoneDir = path.dirname(flyerPath);
+    const previewPath = ['preview.png', 'preview.jpg', 'preview.jpeg']
+      .map(f => path.join(zoneDir, f))
+      .find(f => fs.existsSync(f)) || flyerPath;
+    console.log(`🖼️  OG source: ${path.basename(previewPath)}`);
+    const ogFilePath = `/${zone}/og.jpg`;
+    const ogContent = await buildOgImage(previewPath, eventInfoMap[zone]?.invitationYPercent);
+    const ogSha1 = crypto.createHash('sha1').update(ogContent).digest('hex');
+    files[ogFilePath] = ogSha1;
+    fileContents[ogSha1] = { filePath: ogFilePath, content: ogContent };
+    console.log(`🖼️  OG image: ${Math.round(ogContent.length / 1024)}KB`);
 
     // Flyer image — compress to JPEG under 300KB for WhatsApp preview
     const imgFilePath = `/${zone}/flyer.jpg`;
@@ -597,25 +647,22 @@ async function main() {
 `);
 
   const pages = [];
+  const eventInfoMap = {};
+  const deadlines = {};
 
   for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
     const isChanged = changedFlyers.includes(flyerRelPath);
-    console.log(`
-📍 Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'}`);
+    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'}`);
 
     const eventInfo = await extractEventInfo(flyerPath);
+    eventInfoMap[zone] = eventInfo;
+
     const { embedUrl, formUrl } = getGoogleForm(zone);
     const html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
     pages.push({ zone, html, flyerPath });
     console.log(`✅ Page ready for ${zone}`);
-  }
 
-  // Save deadlines.json to repo for summary.js to use
-  const deadlines = {};
-  for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
-    const eventInfo = await extractEventInfo(flyerPath).catch(() => null);
     if (eventInfo && eventInfo.rsvpDeadline) {
-      // Convert friendly date like "Friday, March 20" to YYYY-MM-DD
       let eventDateISO = '';
       if (eventInfo.date) {
         try {
@@ -632,8 +679,9 @@ async function main() {
       };
     }
   }
+
+  // Save deadlines.json
   const deadlinesPath = path.join(REPO_ROOT, 'deadlines.json');
-  // Merge with existing deadlines to preserve other zones
   let existing = {};
   if (fs.existsSync(deadlinesPath)) {
     try { existing = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
@@ -642,6 +690,7 @@ async function main() {
   fs.writeFileSync(deadlinesPath, JSON.stringify(merged, null, 2));
   console.log('📅 deadlines.json updated:', merged);
 
+  const deployedUrls = await deployAllToNetlify(pages, merged, eventInfoMap);
   const deployedUrls = await deployAllToNetlify(pages, merged);
 
   console.log('\n✨ All done!');
