@@ -3,6 +3,7 @@ const path = require('path');
 const axios = require('axios');
 const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
+const sharp = require('sharp');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const REPO_ROOT = path.join(__dirname, '..');
@@ -67,12 +68,12 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   <title>${eventInfo.eventName} — ${zoneLabel} Zone</title>
   <meta property="og:title" content="${eventInfo.eventName} — ${zoneLabel} Zone" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
-  <meta property="og:image" content="${pageUrl}/flyer${path.extname(flyerPath).toLowerCase()}" />
+  <meta property="og:image" content="${pageUrl}/flyer.jpg" />
   <meta property="og:url" content="${pageUrl}" />
   <meta property="og:type" content="website" />
-  <meta property="og:image:width" content="1125" />
-  <meta property="og:image:height" content="2436" />
-  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1080" />
+  <meta property="og:image:height" content="2340" />
+  <meta property="og:image:type" content="image/jpeg" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -159,10 +160,13 @@ async function deployAllToNetlify(pages) {
     files[htmlFilePath] = htmlSha1;
     fileContents[htmlSha1] = { filePath: htmlFilePath, content: htmlContent };
 
-    // Flyer image for OG preview
-    const ext = require('path').extname(flyerPath).toLowerCase();
-    const imgFilePath = `/${zone}/flyer${ext}`;
-    const imgContent = fs.readFileSync(flyerPath);
+    // Flyer image — compress to JPEG under 300KB for WhatsApp preview
+    const imgFilePath = `/${zone}/flyer.jpg`;
+    const imgContent = await sharp(flyerPath)
+      .resize({ width: 1080, withoutEnlargement: true })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer();
+    console.log(`🗜️ Compressed flyer: ${Math.round(imgContent.length / 1024)}KB`);
     const imgSha1 = crypto.createHash('sha1').update(imgContent).digest('hex');
     files[imgFilePath] = imgSha1;
     fileContents[imgSha1] = { filePath: imgFilePath, content: imgContent };
