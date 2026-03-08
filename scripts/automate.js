@@ -110,7 +110,7 @@ async function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   const mediaType = ext === '.png' ? 'image/png' : 'image/jpeg';
   const imageDataUrl = `data:${mediaType};base64,${base64Image}`;
 
-  const pageUrl = `https://scparasabha.com/rsvp/${zone}/${slugify(eventInfo.eventName)}`;
+  const pageUrl = `https://scparasabha.com/${zone}`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -237,7 +237,7 @@ async function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
 async function deployToNetlify(html, eventSlug, zone) {
   console.log('🚀 Deploying to Netlify...');
 
-  const deployPath = `rsvp/${zone}/${eventSlug}`;
+  const deployPath = zone;
   const AdmZip = require('adm-zip');
   const zip = new AdmZip();
   zip.addFile(`${deployPath}/index.html`, Buffer.from(html));
