@@ -121,7 +121,7 @@ async function main() {
       lines += `${r['name']} - ${guests}\n`;
     }
 
-    const message = `<b>${zoneName} Zone - ${eventName}</b>\n\nTotal Responses: ${zoneResponses.length} | Total Guests: ${totalGuests}\n\n${lines.trim()}`;
+    const message = `<b>${zoneName} Zone - ${eventName}</b>\n\n⭐ <b><u>Total Responses: ${zoneResponses.length} | Total Guests: ${totalGuests}</u></b> ⭐\n\n${lines.trim()}`;
     console.log(`Sending summary for ${zone}...`);
     const result = await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, message);
     if (result.ok) {
