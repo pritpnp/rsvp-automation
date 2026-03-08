@@ -44,7 +44,15 @@ async function extractEventInfo(flyerPath) {
     max_tokens: 1000,
     messages: [{ role: 'user', content: [
       { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
-      { type: 'text', text: `The current year is 2026. Extract event info. Return ONLY JSON:\n{"eventName":"...","date":"Friday, March 20 (always use friendly format like 'Weekday, Month Day' — never ISO format)","time":"6:00 pm","location":"...","description":"...","rsvpDeadline":"YYYY-MM-DD using year 2026 unless flyer clearly states otherwise, or empty string if no RSVP deadline mentioned"}` }
+      { type: 'text', text: `The current year is 2026. Extract event info from this flyer. Return ONLY valid JSON with NO extra text.
+
+STRICT RULES:
+- date: Use format "Weekday, Month Day" e.g. "Friday, March 20". NEVER use ISO format. NEVER include year.
+- time: Use format "6:00 pm" (lowercase am/pm)
+- location: Address ONLY. No sponsor names, no host names. Just the street address, city, state, zip.
+- rsvpDeadline: YYYY-MM-DD format using year 2026 unless clearly stated otherwise. Empty string if not mentioned.
+
+{"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"..."}` }
     ]}]
   });
   const info = JSON.parse(response.content[0].text.trim().replace(/\`\`\`json|\`\`\`/g, '').trim());
@@ -52,7 +60,11 @@ async function extractEventInfo(flyerPath) {
   if (info.date && /^\d{4}-\d{2}-\d{2}$/.test(info.date)) {
     info.date = new Date(info.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   }
-  console.log('✅ Extracted:', info);
+  // If no rsvpDeadline found, warn loudly
+  if (!info.rsvpDeadline) {
+    console.warn('⚠️  No RSVP deadline found on flyer — form will always be shown');
+  }
+  console.log('✅ Extracted:', JSON.stringify(info, null, 2));
   return info;
 }
 
