@@ -1,7 +1,6 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const XLSX = require('xlsx');
 
 function download(url, dest) {
   return new Promise((resolve, reject) => {
@@ -49,10 +48,9 @@ function sendTelegram(token, chatId, message) {
 async function main() {
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-  const ONEDRIVE_URL = process.env.ONEDRIVE_URL;
   const TEST_MODE = process.env.TEST_MODE === 'true';
 
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID || !ONEDRIVE_URL) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     console.error('Missing required environment variables');
     process.exit(1);
   }
@@ -66,28 +64,23 @@ async function main() {
   const deadlines = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8'));
   console.log('Deadlines loaded:', JSON.stringify(deadlines, null, 2));
 
-  // Download responses Excel from OneDrive
-  // SharePoint share URLs need to be converted to direct download
-  // Replace the ?e=xxx with download=1
-  let downloadUrl = ONEDRIVE_URL;
-  if (downloadUrl.includes('sharepoint.com') || downloadUrl.includes('1drv.ms')) {
-    // Convert SharePoint share URL to download URL
-    downloadUrl = downloadUrl.replace('/:x:/g/', '/:x:/r/').split('?')[0] + '?download=1';
-  }
-  console.log('Download URL:', downloadUrl);
-
-  console.log('Downloading Excel responses...');
-  const xlsxPath = '/tmp/rsvp-deadlines.xlsx';
-  await download(downloadUrl, xlsxPath);
+  // Download responses from Google Sheet as CSV (no auth needed)
+  const SHEET_ID = '1OaLLmNaBQJ8lLSw3Y6qReao6tbHsjC7ADX7fCTDyXCc';
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+  console.log('Downloading responses from Google Sheets...');
+  const csvPath = '/tmp/responses.csv';
+  await download(csvUrl, csvPath);
   console.log('Downloaded successfully');
 
-  const workbook = XLSX.readFile(xlsxPath);
-  console.log('Sheets found:', workbook.SheetNames);
-
-  const responsesSheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('response'));
-  const responses = responsesSheetName
-    ? XLSX.utils.sheet_to_json(workbook.Sheets[responsesSheetName], { defval: '' })
-    : [];
+  const csvText = fs.readFileSync(csvPath, 'utf8');
+  const lines = csvText.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const responses = lines.slice(1).map(line => {
+    const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    const row = {};
+    headers.forEach((h, i) => row[h] = vals[i] || '');
+    return row;
+  });
   console.log(`${responses.length} responses found`);
   if (responses.length > 0) console.log('Sample row:', JSON.stringify(responses[0]));
 

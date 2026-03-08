@@ -3,7 +3,7 @@ name: RSVP Nightly Summary
 on:
   schedule:
     - cron: '45 23 * * *'  # 11:45 PM UTC every night
-  workflow_dispatch:        # Manual trigger for testing
+  workflow_dispatch:
     inputs:
       test_mode:
         description: 'Run in test mode (send all zones regardless of deadline)'
@@ -21,15 +21,9 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: |
-          cd scripts
-          npm install xlsx
-
       - name: Send RSVP Summary
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          ONEDRIVE_URL: ${{ secrets.ONEDRIVE_URL }}
           TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
         run: node scripts/summary.js
