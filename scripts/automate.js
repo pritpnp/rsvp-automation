@@ -119,7 +119,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
     .rsvp-section { padding: 0 16px 40px; }
     .rsvp-note { font-size: 13px; color: var(--text-muted); text-align: center; margin-bottom: 16px; line-height: 1.5; }
     .form-container { background: #fff; border-radius: 20px; box-shadow: 0 4px 24px rgba(92,45,10,0.10); overflow: hidden; }
-    iframe { width: 100%; border: none; height: 750px; display: block; }
+    iframe { width: 100%; border: none; height: 900px; display: block; }
     .open-form-link { text-align: center; padding: 14px; border-top: 1px solid var(--cream-dark); }
     .open-form-link a { font-size: 13px; color: var(--saffron); text-decoration: none; font-weight: 500; }
     .footer { text-align: center; padding: 20px; font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
@@ -134,7 +134,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
 <body>
   <div class="top-border"></div>
   <div class="header">
-    <div class="zone-label">BAPS ${zoneLabel} Zone</div>
+    <div class="zone-label">BAPS ${zoneLabel}${zone === 'satsang-sabha' ? '' : ' Zone'}</div>
   </div>
   <div class="flyer-wrap"><img src="${imageDataUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
