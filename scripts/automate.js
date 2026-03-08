@@ -19,19 +19,15 @@ function zoneName(zoneSlug) {
 
 function getGoogleForm(zone) {
   const zoneForms = {
-    'mountain-top':  '1o-Pf2-5yy5VKBZivdWlXrlKRTY6Gn0w3aC5tXWx0aZs',
-    'scranton':      '18cyDaaAMUf8eOg99xt0BhpKceKqzO4IRbBcyNB9GjiI',
-    'satsang-sabha': '1F0gzZ1TnagC5jBw8rdO58k4qj3LXxCFgD3LKX1OWN7o',
-    'moosic':        '1rGN-E1xHU6U1OSCsJhBNoik92iiNpG-7Fop1d9eHE04',
-    'bloomsburg':    '1PD9pyiweTKTutVB8maKZPqNqwR4bIPl_2TYdPmTfM3o'
+    'mountain-top':  'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNUwxNTFRV0tSVTkyVDBGRVpYRE5QSDVBSi4u',
+    'scranton':      'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNThFNTFGMTRKVlE1SUM4MVJKR05JNlA2Ny4u',
+    'satsang-sabha': 'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUODdBRUVZM1pLRk8xRDZaN0JENkg3WUJRVi4u',
+    'moosic':        'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNjhXRUVMNkExVEVNQVZRNDhBRTRRUDFXRy4u',
+    'bloomsburg':    'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNlpMN09XTFBNUTBCMjRLSVNUOVcxVjkzRC4u'
   };
-  const formId = zoneForms[zone];
-  if (!formId) throw new Error(`No form found for zone: ${zone}`);
-  return {
-    formId,
-    formUrl: `https://docs.google.com/forms/d/${formId}/viewform`,
-    embedUrl: `https://docs.google.com/forms/d/${formId}/viewform?embedded=true`
-  };
+  const formUrl = zoneForms[zone];
+  if (!formUrl) throw new Error('No form found for zone: ' + zone);
+  return { formUrl, embedUrl: formUrl };
 }
 
 async function extractEventInfo(flyerPath) {
@@ -123,7 +119,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
     .rsvp-section { padding: 0 16px 40px; }
     .rsvp-note { font-size: 13px; color: var(--text-muted); text-align: center; margin-bottom: 16px; line-height: 1.5; }
     .form-container { background: #fff; border-radius: 20px; box-shadow: 0 4px 24px rgba(92,45,10,0.10); overflow: hidden; }
-    iframe { width: 100%; border: none; min-height: 520px; display: block; }
+    iframe { width: 100%; border: none; height: 750px; display: block; }
     .open-form-link { text-align: center; padding: 14px; border-top: 1px solid var(--cream-dark); }
     .open-form-link a { font-size: 13px; color: var(--saffron); text-decoration: none; font-weight: 500; }
     .footer { text-align: center; padding: 20px; font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
