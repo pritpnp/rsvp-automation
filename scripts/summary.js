@@ -1,27 +1,32 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const XLSX = require('xlsx');
 
-// Download file from URL
 function download(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
-    https.get(url, res => {
+    const handleResponse = (res) => {
       if (res.statusCode === 302 || res.statusCode === 301) {
         file.close();
-        download(res.headers.location, dest).then(resolve).catch(reject);
+        https.get(res.headers.location, handleResponse).on('error', reject);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`Download failed: HTTP ${res.statusCode}`));
         return;
       }
       res.pipe(file);
       file.on('finish', () => file.close(resolve));
-    }).on('error', err => {
+    };
+    https.get(url, handleResponse).on('error', err => {
       fs.unlink(dest, () => {});
       reject(err);
     });
   });
 }
 
-async function sendTelegram(token, chatId, message) {
+function sendTelegram(token, chatId, message) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' });
     const options = {
@@ -48,67 +53,60 @@ async function main() {
   const TEST_MODE = process.env.TEST_MODE === 'true';
 
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID || !ONEDRIVE_URL) {
-    console.error('❌ Missing required environment variables');
+    console.error('Missing required environment variables');
     process.exit(1);
   }
 
-  // Convert SharePoint share URL to direct download URL
+  // Read deadlines.json from repo
+  const deadlinesPath = path.join(__dirname, '..', 'deadlines.json');
+  if (!fs.existsSync(deadlinesPath)) {
+    console.log('No deadlines.json found — nothing to do');
+    process.exit(0);
+  }
+  const deadlines = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8'));
+  console.log('Deadlines loaded:', JSON.stringify(deadlines, null, 2));
+
+  // Download responses Excel from OneDrive
   const base64 = Buffer.from(ONEDRIVE_URL).toString('base64')
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const downloadUrl = `https://api.onedrive.com/v1.0/shares/u!${base64}/root/content`;
 
-  console.log('📥 Downloading Excel file...');
+  console.log('Downloading Excel responses...');
   const xlsxPath = '/tmp/rsvp-deadlines.xlsx';
   await download(downloadUrl, xlsxPath);
-  console.log('✅ Downloaded');
+  console.log('Downloaded successfully');
 
-  // Parse Excel
-  const XLSX = require('xlsx');
   const workbook = XLSX.readFile(xlsxPath);
+  console.log('Sheets found:', workbook.SheetNames);
 
-  console.log('📋 Sheets found:', workbook.SheetNames);
-
-  // Read deadlines from Sheet1 with raw dates
-  const deadlinesSheet = workbook.Sheets['Sheet1'];
-  const deadlines = XLSX.utils.sheet_to_json(deadlinesSheet, { raw: false, dateNF: 'yyyy-mm-dd' });
-  console.log(`📊 Deadlines: ${deadlines.length} rows`);
-  if (deadlines.length > 0) console.log('📊 Sample:', JSON.stringify(deadlines[0]));
-
-  // Read responses sheet
-  const responsesSheet = workbook.Sheets['responses'];
-  const responses = responsesSheet ? XLSX.utils.sheet_to_json(responsesSheet, { raw: false }) : [];
-  console.log(`📊 Responses: ${responses.length} rows`);
-  if (responses.length > 0) console.log('📊 Sample response:', JSON.stringify(responses[0]));
+  const responsesSheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('response'));
+  const responses = responsesSheetName
+    ? XLSX.utils.sheet_to_json(workbook.Sheets[responsesSheetName], { defval: '' })
+    : [];
+  console.log(`${responses.length} responses found`);
+  if (responses.length > 0) console.log('Sample row:', JSON.stringify(responses[0]));
 
   const today = new Date().toISOString().split('T')[0];
-  console.log(`📅 Today: ${today} | TEST_MODE: ${TEST_MODE}`);
+  console.log(`Today: ${today} | TEST_MODE: ${TEST_MODE}`);
 
   let summariesSent = 0;
 
-  for (const row of deadlines) {
-    const zone = row['zone'];
-    const deadline = row['deadline'];
-    const eventName = row['eventName'] || 'Para Satsang Sabha';
+  for (const [zone, info] of Object.entries(deadlines)) {
+    const { deadline, eventName } = info;
+    if (!deadline) continue;
 
-    if (!zone || !deadline) continue;
-
-    // Normalize deadline to YYYY-MM-DD
-    let deadlineStr = String(deadline || '').trim().substring(0, 10);
-    console.log(`🔍 Zone: ${zone} | Raw deadline: "${deadline}" | Normalized: "${deadlineStr}"`);
-
-    const matches = TEST_MODE || deadlineStr === today;
+    const matches = TEST_MODE || deadline === today;
     if (!matches) {
-      console.log(`⏭ Skipping ${zone} (deadline: ${deadlineStr})`);
+      console.log(`Skipping ${zone} (deadline: ${deadline})`);
       continue;
     }
 
-    console.log(`📊 Building summary for ${zone}...`);
-
-    // Filter responses for this zone
-    const zoneResponses = responses.filter(r => r['zone'] === zone);
+    console.log(`Building summary for ${zone}...`);
+    const zoneResponses = responses.filter(r => String(r['zone']).trim() === zone);
+    const zoneName = zone.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     if (zoneResponses.length === 0) {
-      const message = `🏛 <b>${zone.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} Zone — ${eventName}</b>\n\n📭 No RSVPs received.`;
+      const message = `<b>${zoneName} Zone - ${eventName}</b>\n\nNo RSVPs received.`;
       await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, message);
       summariesSent++;
       continue;
@@ -119,28 +117,26 @@ async function main() {
     for (const r of zoneResponses) {
       const guests = parseInt(r['guests']) || 0;
       totalGuests += guests;
-      lines += `${r['name']} — ${guests}\n`;
+      lines += `${r['name']} - ${guests}\n`;
     }
 
-    const zoneName = zone.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const message = `🏛 <b>${zoneName} Zone — ${eventName}</b>\n\nTotal Responses: ${zoneResponses.length} | Total Guests: ${totalGuests}\n\n${lines.trim()}`;
-
-    console.log(`📤 Sending summary for ${zone}...`);
+    const message = `<b>${zoneName} Zone - ${eventName}</b>\n\nTotal Responses: ${zoneResponses.length} | Total Guests: ${totalGuests}\n\n${lines.trim()}`;
+    console.log(`Sending summary for ${zone}...`);
     const result = await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, message);
     if (result.ok) {
-      console.log(`✅ Summary sent for ${zone}`);
+      console.log(`Summary sent for ${zone}`);
       summariesSent++;
     } else {
-      console.error(`❌ Failed for ${zone}:`, result);
+      console.error(`Failed for ${zone}:`, JSON.stringify(result));
     }
   }
 
   if (summariesSent === 0) {
-    console.log('ℹ️ No deadlines matched today — no summaries sent');
+    console.log('No deadlines matched today - no summaries sent');
   }
 }
 
 main().catch(err => {
-  console.error('❌ Error:', err.message);
+  console.error('Error:', err.message);
   process.exit(1);
 });

@@ -328,6 +328,29 @@ async function main() {
     console.log(`✅ Page ready for ${zone}`);
   }
 
+  // Save deadlines.json to repo for summary.js to use
+  const deadlines = {};
+  for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
+    const eventInfo = await extractEventInfo(flyerPath).catch(() => null);
+    if (eventInfo && eventInfo.rsvpDeadline) {
+      deadlines[zone] = {
+        deadline: eventInfo.rsvpDeadline,
+        eventName: eventInfo.eventName || 'Para Satsang Sabha',
+        date: eventInfo.date || '',
+        time: eventInfo.time || ''
+      };
+    }
+  }
+  const deadlinesPath = path.join(REPO_ROOT, 'deadlines.json');
+  // Merge with existing deadlines to preserve other zones
+  let existing = {};
+  if (fs.existsSync(deadlinesPath)) {
+    try { existing = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
+  }
+  const merged = { ...existing, ...deadlines };
+  fs.writeFileSync(deadlinesPath, JSON.stringify(merged, null, 2));
+  console.log('📅 deadlines.json updated:', merged);
+
   const deployedUrls = await deployAllToNetlify(pages);
 
   console.log('\n✨ All done!');

@@ -38,3 +38,11 @@ jobs:
           FLYERS=$(git diff --name-only HEAD~1 HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | tr '\n' ',')
           echo "🎯 Flyers to process: $FLYERS"
           FLYER_PATHS="$FLYERS" node automate.js
+
+      - name: Commit deadlines.json
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deadlines.json || true
+          git diff --staged --quiet || git commit -m "Auto-update deadlines.json [skip ci]"
+          git push origin main || true
