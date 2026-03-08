@@ -67,9 +67,14 @@ async function main() {
   console.log('Deadlines loaded:', JSON.stringify(deadlines, null, 2));
 
   // Download responses Excel from OneDrive
-  const base64 = Buffer.from(ONEDRIVE_URL).toString('base64')
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const downloadUrl = `https://api.onedrive.com/v1.0/shares/u!${base64}/root/content`;
+  // SharePoint share URLs need to be converted to direct download
+  // Replace the ?e=xxx with download=1
+  let downloadUrl = ONEDRIVE_URL;
+  if (downloadUrl.includes('sharepoint.com') || downloadUrl.includes('1drv.ms')) {
+    // Convert SharePoint share URL to download URL
+    downloadUrl = downloadUrl.replace('/:x:/g/', '/:x:/r/').split('?')[0] + '?download=1';
+  }
+  console.log('Download URL:', downloadUrl);
 
   console.log('Downloading Excel responses...');
   const xlsxPath = '/tmp/rsvp-deadlines.xlsx';
