@@ -333,10 +333,19 @@ async function main() {
   for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
     const eventInfo = await extractEventInfo(flyerPath).catch(() => null);
     if (eventInfo && eventInfo.rsvpDeadline) {
+      // Convert friendly date like "Friday, March 20" to YYYY-MM-DD
+      let eventDateISO = '';
+      if (eventInfo.date) {
+        try {
+          const parsed = new Date(eventInfo.date + ', 2026');
+          if (!isNaN(parsed)) eventDateISO = parsed.toISOString().split('T')[0];
+        } catch(e) {}
+      }
       deadlines[zone] = {
         deadline: eventInfo.rsvpDeadline,
         eventName: eventInfo.eventName || 'Para Satsang Sabha',
         date: eventInfo.date || '',
+        eventDate: eventDateISO,
         time: eventInfo.time || ''
       };
     }
