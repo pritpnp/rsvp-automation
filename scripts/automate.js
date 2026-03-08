@@ -147,7 +147,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
     <div id="rsvp-open">
       <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
       <div class="form-container">
-        <iframe src="${embedUrl}" title="RSVP Form">Loading…</iframe>
+        <iframe src="${embedUrl}" title="RSVP Form" tabindex="-1" scrolling="no" onload="this.style.height=this.scrollHeight+'px'">Loading…</iframe>
         <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
       </div>
     </div>
@@ -161,6 +161,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   </div>
   <div class="footer"><span class="footer-logo">SC Parasabha</span>scparasabha.com</div>
   <script>
+    window.scrollTo(0, 0);
     (function() {
       var deadline = "${eventInfo.rsvpDeadline || ''}";
       if (!deadline) return;
