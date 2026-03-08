@@ -691,7 +691,6 @@ async function main() {
   console.log('📅 deadlines.json updated:', merged);
 
   const deployedUrls = await deployAllToNetlify(pages, merged, eventInfoMap);
-  const deployedUrls = await deployAllToNetlify(pages, merged);
 
   console.log('\n✨ All done!');
   for (const url of deployedUrls) {
