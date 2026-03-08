@@ -235,27 +235,44 @@ async function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
 // ─── Step 4: Deploy to Netlify ───────────────────────────────────────────────
 
 async function deployToNetlify(html, eventSlug, zone) {
-  console.log('🚀 Deploying to Netlify...');
+  console.log("🚀 Deploying to Netlify...");
 
-  const deployPath = zone;
-  const AdmZip = require('adm-zip');
-  const zip = new AdmZip();
-  zip.addFile(`${deployPath}/index.html`, Buffer.from(html));
-  const zipBuffer = zip.toBuffer();
+  const crypto = require("crypto");
+  const filePath = `${zone}/index.html`;
+  const fileContent = Buffer.from(html);
+  const sha1 = crypto.createHash("sha1").update(fileContent).digest("hex");
 
-  const response = await axios.post(
+  // Step 1: Create deploy with file digest
+  const deployRes = await axios.post(
     `https://api.netlify.com/api/v1/sites/${process.env.NETLIFY_SITE_ID}/deploys`,
-    zipBuffer,
+    { files: { [`/${filePath}`]: sha1 }, async: false },
     {
       headers: {
         Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
-        'Content-Type': 'application/zip'
+        "Content-Type": "application/json"
       }
     }
   );
 
-  const deployedUrl = `https://scparasabha.com/${deployPath}`;
-  console.log('✅ Deployed!', deployedUrl);
+  const deployId = deployRes.data.id;
+  const required = deployRes.data.required || [];
+
+  // Step 2: Upload file if required
+  if (required.includes(sha1)) {
+    await axios.put(
+      `https://api.netlify.com/api/v1/deploys/${deployId}/files/${filePath}`,
+      fileContent,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
+          "Content-Type": "application/octet-stream"
+        }
+      }
+    );
+  }
+
+  const deployedUrl = `https://scparasabha.com/${zone}`;
+  console.log("✅ Deployed!", deployedUrl);
   return deployedUrl;
 }
 
