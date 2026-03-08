@@ -35,7 +35,6 @@ jobs:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: |
           cd scripts
-          git diff --name-only HEAD~1 HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | while IFS= read -r flyer; do
-            echo "🎯 Processing: $flyer"
-            FLYER_PATH="$flyer" node automate.js
-          done
+          FLYERS=$(git diff --name-only HEAD~1 HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | tr '\n' ',')
+          echo "🎯 Flyers to process: $FLYERS"
+          FLYER_PATHS="$FLYERS" node automate.js
