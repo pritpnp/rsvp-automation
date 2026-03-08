@@ -172,18 +172,17 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
     if (history.scrollRestoration) history.scrollRestoration = 'manual';
     window.addEventListener('load', function() { window.scrollTo(0, 0); });
 
-    // Load iframe only when user scrolls near it
-    var iframeLoaded = false;
-    window.addEventListener('scroll', function() {
-      if (iframeLoaded) return;
-      var iframe = document.getElementById('rsvp-iframe');
-      if (!iframe) return;
-      var rect = iframe.getBoundingClientRect();
-      if (rect.top < window.innerHeight + 200) {
-        iframe.src = iframe.getAttribute('data-src');
-        iframeLoaded = true;
-      }
-    });
+    // Load iframe when it comes into view
+    var iframe = document.getElementById('rsvp-iframe');
+    if (iframe) {
+      var observer = new IntersectionObserver(function(entries) {
+        if (entries[0].isIntersecting) {
+          iframe.src = iframe.getAttribute('data-src');
+          observer.disconnect();
+        }
+      }, { rootMargin: '200px' });
+      observer.observe(iframe);
+    }
 
     (function() {
       var deadline = "${eventInfo.rsvpDeadline || ''}";
