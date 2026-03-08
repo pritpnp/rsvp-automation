@@ -67,9 +67,12 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   <title>${eventInfo.eventName} — ${zoneLabel} Zone</title>
   <meta property="og:title" content="${eventInfo.eventName} — ${zoneLabel} Zone" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
-  <meta property="og:image" content="${pageUrl}/flyer.jpg" />
+  <meta property="og:image" content="${pageUrl}/flyer${path.extname(flyerPath).toLowerCase()}" />
   <meta property="og:url" content="${pageUrl}" />
   <meta property="og:type" content="website" />
+  <meta property="og:image:width" content="1125" />
+  <meta property="og:image:height" content="2436" />
+  <meta property="og:image:type" content="image/png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -148,12 +151,21 @@ async function deployAllToNetlify(pages) {
   const files = {};
   const fileContents = {};
 
-  for (const { zone, html } of pages) {
-    const filePath = `/${zone}/index.html`;
-    const content = Buffer.from(html);
-    const sha1 = crypto.createHash('sha1').update(content).digest('hex');
-    files[filePath] = sha1;
-    fileContents[sha1] = { filePath, content };
+  for (const { zone, html, flyerPath } of pages) {
+    // HTML page
+    const htmlFilePath = `/${zone}/index.html`;
+    const htmlContent = Buffer.from(html);
+    const htmlSha1 = crypto.createHash('sha1').update(htmlContent).digest('hex');
+    files[htmlFilePath] = htmlSha1;
+    fileContents[htmlSha1] = { filePath: htmlFilePath, content: htmlContent };
+
+    // Flyer image for OG preview
+    const ext = require('path').extname(flyerPath).toLowerCase();
+    const imgFilePath = `/${zone}/flyer${ext}`;
+    const imgContent = fs.readFileSync(flyerPath);
+    const imgSha1 = crypto.createHash('sha1').update(imgContent).digest('hex');
+    files[imgFilePath] = imgSha1;
+    fileContents[imgSha1] = { filePath: imgFilePath, content: imgContent };
   }
 
   // Create deploy
@@ -204,7 +216,7 @@ async function main() {
     const eventInfo = await extractEventInfo(flyerPath);
     const { embedUrl, formUrl } = getGoogleForm(zone);
     const html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
-    pages.push({ zone, html });
+    pages.push({ zone, html, flyerPath });
     console.log('✅ Page ready for', zone);
   }
 
