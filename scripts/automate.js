@@ -152,10 +152,17 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
       </div>
     </div>
     <div id="rsvp-closed" style="display:none;">
-      <div style="background:#fff;border-radius:20px;padding:40px 24px;text-align:center;box-shadow:0 4px 24px rgba(92,45,10,0.10);">
-        <div style="font-size:48px;margin-bottom:16px;">🙏</div>
-        <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#5C2D0A;margin-bottom:10px;">RSVP is now closed</h2>
-        <p style="font-size:14px;color:#8B6040;line-height:1.6;">Thank you for your interest. The RSVP deadline for this event has passed.<br>We hope to see you at the sabha!</p>
+      <div style="background:#fff;border-radius:20px;padding:32px 24px;text-align:center;box-shadow:0 4px 24px rgba(92,45,10,0.10);">
+        <div style="font-size:48px;margin-bottom:12px;">🙏</div>
+        <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#5C2D0A;margin-bottom:8px;">RSVP is now closed</h2>
+        <p style="font-size:14px;color:#8B6040;line-height:1.6;margin-bottom:24px;">The deadline has passed, but you can still send a late request below.</p>
+        <div id="late-form" style="text-align:left;">
+          <input id="late-name" type="text" placeholder="Full Name" style="width:100%;padding:12px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;" />
+          <input id="late-guests" type="number" placeholder="Number of Guests" min="1" style="width:100%;padding:12px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:16px;box-sizing:border-box;font-family:'DM Sans',sans-serif;" />
+          <button onclick="sendLateRsvp()" style="width:100%;padding:14px;background:linear-gradient(135deg,#C8860A,#E6A817);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Send Late Request 🙏</button>
+        </div>
+        <div id="late-success" style="display:none;padding:16px;background:#f0fdf4;border-radius:12px;color:#166534;font-size:14px;">✅ Your late RSVP request has been sent!</div>
+        <div id="late-error" style="display:none;padding:16px;background:#fef2f2;border-radius:12px;color:#991b1b;font-size:14px;">❌ Something went wrong. Please try again.</div>
       </div>
     </div>
   </div>
@@ -188,6 +195,31 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
         document.getElementById("rsvp-closed").style.display = "block";
       }
     })();
+
+    function sendLateRsvp() {
+      var name = document.getElementById('late-name').value.trim();
+      var guests = document.getElementById('late-guests').value.trim();
+      if (!name || !guests) { alert('Please enter your name and number of guests.'); return; }
+      var token = '${process.env.TELEGRAM_BOT_TOKEN}';
+      var chatId = '${process.env.TELEGRAM_CHAT_ID}';
+      var zone = '${zoneLabel}';
+      var event = '${eventInfo.eventName}';
+      var text = '⚠️ Late RSVP Request\n🏛 ' + zone + ' Zone — ' + event + '\n👤 ' + name + '\n👥 Guests: ' + guests;
+      fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: text })
+      }).then(function(r) {
+        if (r.ok) {
+          document.getElementById('late-form').style.display = 'none';
+          document.getElementById('late-success').style.display = 'block';
+        } else {
+          document.getElementById('late-error').style.display = 'block';
+        }
+      }).catch(function() {
+        document.getElementById('late-error').style.display = 'block';
+      });
+    }
   </script>
 </body>
 </html>`;
