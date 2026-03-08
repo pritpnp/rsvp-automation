@@ -6,17 +6,21 @@ function download(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     const handleResponse = (res) => {
-      if (res.statusCode === 302 || res.statusCode === 301) {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
         file.close();
-        https.get(res.headers.location, handleResponse).on('error', reject);
+        fs.truncate(dest, 0, () => {});
+        const redirectUrl = res.headers.location;
+        const lib = redirectUrl.startsWith('https') ? https : require('http');
+        lib.get(redirectUrl, handleResponse).on('error', reject);
         return;
       }
       if (res.statusCode !== 200) {
         reject(new Error(`Download failed: HTTP ${res.statusCode}`));
         return;
       }
-      res.pipe(file);
-      file.on('finish', () => file.close(resolve));
+      const newFile = fs.createWriteStream(dest);
+      res.pipe(newFile);
+      newFile.on('finish', () => newFile.close(resolve));
     };
     https.get(url, handleResponse).on('error', err => {
       fs.unlink(dest, () => {});
