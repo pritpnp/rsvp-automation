@@ -43,6 +43,7 @@ function sendTelegram(token, chatId, message) {
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(JSON.parse(data)));
     });
+    req.setTimeout(10000, () => { req.destroy(new Error('Telegram request timed out')); });
     req.on('error', reject);
     req.write(body);
     req.end();
