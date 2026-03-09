@@ -73,12 +73,18 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   const imageDataUrl = `data:${mediaType};base64,${base64Image}`;
   const pageUrl = `https://scparasabha.com/${zone}`;
 
+  const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
+  const bapsLogoBase64 = fs.existsSync(logoPath)
+    ? fs.readFileSync(logoPath).toString('base64')
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>${eventInfo.eventName} — ${zoneLabel} Zone</title>
+  ${bapsLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${bapsLogoBase64}" />` : ''}
   <meta property="og:title" content="${eventInfo.eventName} — ${zoneLabel} Zone" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
   <meta property="og:image" content="${pageUrl}/og.jpg" />
