@@ -374,7 +374,7 @@ function buildHubPage(allFlyers, deadlines) {
 
     header h1 {
       font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(28px, 6vw, 44px);
+      font-size: clamp(34px, 7vw, 48px);
       font-weight: 700;
       color: var(--brown);
       line-height: 1.15;
@@ -388,7 +388,7 @@ function buildHubPage(allFlyers, deadlines) {
 
     header p {
       margin-top: 12px;
-      font-size: 15px;
+      font-size: 17px;
       color: var(--light-brown);
       font-weight: 300;
       letter-spacing: 0.04em;
@@ -409,7 +409,7 @@ function buildHubPage(allFlyers, deadlines) {
     }
 
     .section-label {
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 500;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -469,7 +469,7 @@ function buildHubPage(allFlyers, deadlines) {
     }
 
     .card-zone {
-      font-size: 14px;
+      font-size: 17px;
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
@@ -479,7 +479,7 @@ function buildHubPage(allFlyers, deadlines) {
 
     .card-event {
       font-family: 'Cormorant Garamond', serif;
-      font-size: 24px;
+      font-size: 30px;
       font-weight: 700;
       color: var(--brown);
       line-height: 1.2;
@@ -487,7 +487,7 @@ function buildHubPage(allFlyers, deadlines) {
     }
 
     .card-detail {
-      font-size: 13px;
+      font-size: 15px;
       color: var(--light-brown);
       margin-bottom: 6px;
       font-weight: 300;
@@ -495,7 +495,7 @@ function buildHubPage(allFlyers, deadlines) {
 
     .card-cta {
       margin-top: 20px;
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 500;
       color: var(--saffron);
       letter-spacing: 0.02em;
