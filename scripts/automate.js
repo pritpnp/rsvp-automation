@@ -328,7 +328,8 @@ function buildHubPage(allFlyers, deadlines) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BAPS Scranton Region</title>
+  <title>BAPS SCRANTON MANDIR</title>
+  ${bapsLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${bapsLogoBase64}" />` : ''}
   <meta name="description" content="RSVP for upcoming BAPS events in the Scranton region." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -527,7 +528,7 @@ function buildHubPage(allFlyers, deadlines) {
 
   <header>
     ${bapsLogoBase64 ? `<div style="width:120px;height:120px;border-radius:50%;border:2px solid rgba(200,134,10,0.4);overflow:hidden;margin:0 auto 20px;"><img src="data:image/png;base64,${bapsLogoBase64}" style="width:100%;height:100%;object-fit:contain;" alt="BAPS" /></div>` : ''}
-    <h1>BAPS Scranton Region</h1>
+    <h1>BAPS SCRANTON MANDIR</h1>
     <p>Upcoming Events & RSVP</p>
     <div class="divider"></div>
   </header>
