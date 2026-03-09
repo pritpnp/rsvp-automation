@@ -533,7 +533,7 @@ function buildHubPage(allFlyers, deadlines) {
   <div class="top-border"></div>
 
   <header>
-    ${bapsLogoBase64 ? `<div style="width:120px;height:120px;border-radius:50%;border:2px solid rgba(200,134,10,0.4);overflow:hidden;margin:0 auto 20px;"><img src="data:image/png;base64,${bapsLogoBase64}" style="width:100%;height:100%;object-fit:contain;" alt="BAPS" /></div>` : ''}
+    ${bapsLogoBase64 ? `<div style="width:120px;height:120px;border-radius:50%;border:2px solid rgba(200,134,10,0.4);overflow:hidden;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;"><img src="data:image/png;base64,${bapsLogoBase64}" style="width:100%;height:auto;object-fit:contain;" alt="BAPS" /></div>` : ''}
     <h1>BAPS SCRANTON MANDIR</h1>
     <p>Upcoming Events & RSVP</p>
     <div class="divider"></div>
