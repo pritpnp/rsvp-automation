@@ -65,7 +65,7 @@ STRICT RULES:
   return info;
 }
 
-function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
+function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview = false) {
   const zoneLabel = zoneName(zone);
   const imageBuffer = fs.readFileSync(flyerPath);
   const base64Image = imageBuffer.toString('base64');
@@ -85,7 +85,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>${eventInfo.eventName} — ${zoneLabel} Zone</title>
   ${bapsLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${bapsLogoBase64}" />` : ''}
-  <meta property="og:title" content="${eventInfo.eventName} — ${zoneLabel} Zone" />
+  ${noPreview ? '' : `<meta property="og:title" content="${eventInfo.eventName} — ${zoneLabel} Zone" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
   <meta property="og:image" content="${pageUrl}/og.jpg" />
   <meta property="og:url" content="${pageUrl}" />
@@ -93,7 +93,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl) {
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:type" content="image/jpeg" />
-  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:card" content="summary_large_image" />`}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
@@ -579,6 +579,17 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     files[htmlFilePath] = htmlSha1;
     fileContents[htmlSha1] = { filePath: htmlFilePath, content: htmlContent };
 
+    // No-preview version at /np/{zone}/ — same page but OG/Twitter tags stripped
+    const pageData = pages.find(p => p.zone === zone);
+    if (pageData) {
+      const npHtml = buildHtmlPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true);
+      const npFilePath = `/np/${zone}/index.html`;
+      const npContent = Buffer.from(npHtml);
+      const npSha1 = crypto.createHash('sha1').update(npContent).digest('hex');
+      files[npFilePath] = npSha1;
+      fileContents[npSha1] = { filePath: npFilePath, content: npContent };
+    }
+
     // OG image — 1200x630 split preview for WhatsApp/social
     // Use preview.png/jpg if present in zone folder, otherwise fall back to flyer
     const zoneDir = path.dirname(flyerPath);
@@ -675,7 +686,7 @@ async function main() {
 
     const { embedUrl, formUrl } = getGoogleForm(zone);
     const html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
-    pages.push({ zone, html, flyerPath });
+    pages.push({ zone, html, flyerPath, embedUrl, formUrl });
     console.log(`✅ Page ready for ${zone}`);
 
     if (eventInfo && eventInfo.rsvpDeadline) {
