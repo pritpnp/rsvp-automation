@@ -158,7 +158,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
           <div style="width:36px;height:36px;border:3px solid #e0d5c8;border-top-color:#C8860A;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
           <span style="font-size:13px;color:#8B6040;">Loading form...</span>
         </div>
-        <iframe id="rsvp-iframe" data-src="${embedUrl}" title="RSVP Form" src="about:blank" onload="document.getElementById('form-loader').style.display='none'">Loading…</iframe>
+        <iframe id="rsvp-iframe" src="${embedUrl}" title="RSVP Form" tabindex="-1" onload="onIframeLoad()">Loading…</iframe>
         <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
       </div>
     </div>
@@ -179,25 +179,26 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   </div>
   <div class="footer"><span class="footer-logo">SC Parasabha</span>scparasabha.com</div>
   <script>
-    // Force page to top on load
+    // Lock scroll to top until user intentionally scrolls
     if (history.scrollRestoration) history.scrollRestoration = 'manual';
+    document.documentElement.style.scrollBehavior = 'auto';
     window.scrollTo(0, 0);
-    window.addEventListener('load', function() { window.scrollTo(0, 0); });
 
-    // Load iframe only when actually scrolled into view, prevent focus steal
-    var iframe = document.getElementById('rsvp-iframe');
-    if (iframe) {
-      iframe.setAttribute('tabindex', '-1');
-      var observer = new IntersectionObserver(function(entries) {
-        if (entries[0].isIntersecting) {
-          iframe.src = iframe.getAttribute('data-src');
-          iframe.addEventListener('load', function() {
-            setTimeout(function() { window.scrollTo(0, window.scrollY); }, 50);
-          }, { once: true });
-          observer.disconnect();
-        }
-      }, { rootMargin: '0px' });
-      observer.observe(iframe);
+    var userHasScrolled = false;
+    window.addEventListener('touchstart', function() { userHasScrolled = true; }, { once: true });
+    window.addEventListener('wheel', function() { userHasScrolled = true; }, { once: true });
+
+    function onIframeLoad() {
+      document.getElementById('form-loader').style.display = 'none';
+      if (!userHasScrolled) {
+        window.scrollTo(0, 0);
+        // Keep snapping back for a short window in case of delayed focus steal
+        var snaps = 0;
+        var interval = setInterval(function() {
+          if (!userHasScrolled) window.scrollTo(0, 0);
+          if (++snaps >= 10) clearInterval(interval);
+        }, 50);
+      }
     }
 
     (function() {
