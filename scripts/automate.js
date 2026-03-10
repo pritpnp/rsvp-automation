@@ -539,7 +539,7 @@ function buildHubPage(allFlyers, deadlines) {
   <header>
     ${bapsLogoBase64 ? `<div style="width:120px;height:120px;border-radius:50%;border:2px solid rgba(200,134,10,0.4);overflow:hidden;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;"><img src="data:image/png;base64,${bapsLogoBase64}" style="width:100%;height:auto;object-fit:contain;" alt="BAPS" /></div>` : ''}
     <h1>BAPS SCRANTON MANDIR</h1>
-    <p>Upcoming Events & RSVP</p>
+    <p>Upcoming Events</p>
     <div class="divider"></div>
   </header>
 
@@ -657,7 +657,7 @@ async function main() {
 
   // Scan ALL zone folders in the repo and collect every flyer
   const REPO_ROOT_PATH = path.join(__dirname, '..');
-  const zones = ['mountain-top', 'scranton', 'satsang-sabha', 'moosic', 'bloomsburg'];
+  const zones = ['satsang-sabha', 'mountain-top', 'scranton', 'moosic', 'bloomsburg'];
   const allFlyers = [];
 
   for (const zone of zones) {
