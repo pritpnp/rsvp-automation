@@ -140,7 +140,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 <body>
   <div class="top-border"></div>
   <div class="header">
-    <div class="zone-label">BAPS ${zoneLabel}${zone === 'satsang-sabha' ? '' : ' Zone'}</div>
+    <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneLabel + ' Zone'}</div>
   </div>
   <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
@@ -318,7 +318,7 @@ function buildHubPage(allFlyers, deadlines) {
     return `
     <a href="/${zone}" class="card" style="animation-delay: ${activeZones.indexOf(allFlyers.find(f => f.zone === zone))}00ms">
       <div class="card-inner">
-        <div class="card-zone">${label} Zone</div>
+        <div class="card-zone">${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : label + ' Zone'}</div>
         <div class="card-event">${eventName}</div>
         ${date ? `<div class="card-detail">📅 ${date}${time ? ' at ' + time : ''}</div>` : ''}
         ${deadline ? `<div class="card-detail">⏳ RSVP by ${deadline}</div>` : ''}
