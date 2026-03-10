@@ -46,6 +46,7 @@ STRICT RULES:
 - date: Use format "Weekday, Month Day" e.g. "Friday, March 20". NEVER use ISO format. NEVER include year.
 - time: Use format "6:00 pm" (lowercase am/pm)
 - location: Address ONLY. No sponsor names, no host names. Just the street address, city, state, zip.
+- location: Read street numbers very carefully. Count each digit exactly as printed. Do not add or remove digits (e.g. "311" must not become "3111").
 - rsvpDeadline: YYYY-MM-DD format using year 2026 unless clearly stated otherwise. Empty string if not mentioned.
 - invitationYPercent: A number between 0 and 1 representing how far down the image (as a fraction of total height) the word "Invitation" first appears. If not present, use 0.55.
 
