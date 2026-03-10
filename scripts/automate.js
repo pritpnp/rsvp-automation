@@ -181,17 +181,22 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   <script>
     // Force page to top on load
     if (history.scrollRestoration) history.scrollRestoration = 'manual';
+    window.scrollTo(0, 0);
     window.addEventListener('load', function() { window.scrollTo(0, 0); });
 
-    // Load iframe when it comes into view
+    // Load iframe only when actually scrolled into view, prevent focus steal
     var iframe = document.getElementById('rsvp-iframe');
     if (iframe) {
+      iframe.setAttribute('tabindex', '-1');
       var observer = new IntersectionObserver(function(entries) {
         if (entries[0].isIntersecting) {
           iframe.src = iframe.getAttribute('data-src');
+          iframe.addEventListener('load', function() {
+            setTimeout(function() { window.scrollTo(0, window.scrollY); }, 50);
+          }, { once: true });
           observer.disconnect();
         }
-      }, { rootMargin: '200px' });
+      }, { rootMargin: '0px' });
       observer.observe(iframe);
     }
 
