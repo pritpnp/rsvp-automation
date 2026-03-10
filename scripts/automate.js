@@ -68,11 +68,8 @@ STRICT RULES:
 
 function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview = false) {
   const zoneLabel = zoneName(zone);
-  const imageBuffer = fs.readFileSync(flyerPath);
-  const base64Image = imageBuffer.toString('base64');
-  const mediaType = path.extname(flyerPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-  const imageDataUrl = `data:${mediaType};base64,${base64Image}`;
   const pageUrl = `https://scparasabha.com/${zone}`;
+  const flyerUrl = `${pageUrl}/flyer.jpg`;
 
   const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
   const bapsLogoBase64 = fs.existsSync(logoPath)
@@ -145,7 +142,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   <div class="header">
     <div class="zone-label">BAPS ${zoneLabel}${zone === 'satsang-sabha' ? '' : ' Zone'}</div>
   </div>
-  <div class="flyer-wrap"><img src="${imageDataUrl}" alt="${eventInfo.eventName} flyer" /></div>
+  <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
     ${eventInfo.date ? `<div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">${eventInfo.date}${eventInfo.time ? ' at ' + eventInfo.time : ''}</div></div></div>` : ''}
     ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
