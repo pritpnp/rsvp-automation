@@ -68,7 +68,7 @@ STRICT RULES:
 
 function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview = false) {
   const zoneLabel = zoneName(zone);
-  const pageUrl = `https://scparasabha.com/${zone}`;
+  const pageUrl = `https://screvents.com/${zone}`;
   const flyerUrl = `${pageUrl}/flyer.jpg`;
 
   const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
