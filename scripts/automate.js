@@ -586,6 +586,23 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   files['/index.html'] = hubSha1;
   fileContents[hubSha1] = { filePath: '/index.html', content: hubContent };
 
+  // Add static pages: VIP pass and admin panel
+  const staticPages = [
+    { filePath: '/vip/index.html', diskPath: path.join(__dirname, '..', 'public', 'vip', 'index.html') },
+    { filePath: '/admin/index.html', diskPath: path.join(__dirname, '..', 'public', 'admin', 'index.html') },
+  ];
+  for (const { filePath, diskPath } of staticPages) {
+    if (fs.existsSync(diskPath)) {
+      const content = fs.readFileSync(diskPath);
+      const sha1 = crypto.createHash('sha1').update(content).digest('hex');
+      files[filePath] = sha1;
+      fileContents[sha1] = { filePath, content };
+      console.log(`📄 Added static page: ${filePath}`);
+    } else {
+      console.warn(`⚠️  Static page not found, skipping: ${diskPath}`);
+    }
+  }
+
   for (const { zone, html, flyerPath } of pages) {
     // HTML page
     const htmlFilePath = `/${zone}/index.html`;
