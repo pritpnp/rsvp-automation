@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — VIP Passes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --saffron: #E8650A; --gold: #C8860A; --gold-light: #F5C842;
+      --cream: #FDF6EC; --cream-dark: #F5E6CC;
+      --brown: #5C2D0A; --brown-mid: #8B4513; --text-muted: #8B6040;
+    }
+    body { font-family: 'DM Sans', sans-serif; background: #F7F0E8; color: var(--brown); min-height: 100vh; }
+    .top-border { height: 4px; background: linear-gradient(90deg, var(--brown), var(--saffron), var(--gold-light), var(--saffron), var(--brown)); }
+
+    /* Login screen */
+    #login-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 40px 32px;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 8px 32px rgba(92,45,10,0.12);
+      text-align: center;
+    }
+    .login-card h1 { font-family: 'Cormorant Garamond', serif; font-size: 28px; margin-bottom: 6px; }
+    .login-card p { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+    .login-card input {
+      width: 100%; padding: 12px 14px;
+      border: 1px solid var(--cream-dark); border-radius: 12px;
+      font-size: 15px; font-family: 'DM Sans', sans-serif;
+      margin-bottom: 12px; background: var(--cream);
+    }
+    .login-card input:focus { outline: none; border-color: var(--gold); }
+    .btn-primary {
+      width: 100%; padding: 13px;
+      background: linear-gradient(135deg, var(--brown), var(--brown-mid));
+      color: #fff; border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 500; cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: opacity 0.2s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .login-error { color: #991b1b; font-size: 13px; margin-top: 10px; display: none; }
+
+    /* Admin screen */
+    #admin-screen { display: none; }
+    .admin-header {
+      background: linear-gradient(160deg, var(--brown) 0%, #7a1f00 100%);
+      padding: 24px 24px 28px;
+      color: #fff;
+    }
+    .admin-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700; }
+    .admin-header p { font-size: 13px; opacity: 0.6; margin-top: 4px; }
+    .logout-btn {
+      float: right; background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2); color: #fff;
+      padding: 6px 14px; border-radius: 8px; font-size: 12px;
+      cursor: pointer; font-family: 'DM Sans', sans-serif;
+    }
+
+    .admin-body { max-width: 700px; margin: 0 auto; padding: 28px 20px 60px; }
+
+    /* New pass form */
+    .card {
+      background: #fff; border-radius: 16px;
+      padding: 24px; margin-bottom: 24px;
+      box-shadow: 0 2px 16px rgba(92,45,10,0.08);
+    }
+    .card h2 { font-family: 'Cormorant Garamond', serif; font-size: 22px; margin-bottom: 16px; color: var(--brown); }
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .form-group { flex: 1; min-width: 140px; }
+    .form-group label { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 6px; }
+    .form-group input {
+      width: 100%; padding: 11px 13px;
+      border: 1px solid var(--cream-dark); border-radius: 10px;
+      font-size: 14px; font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+    }
+    .form-group input:focus { outline: none; border-color: var(--gold); }
+    .btn-create {
+      margin-top: 14px; padding: 12px 24px;
+      background: linear-gradient(135deg, var(--saffron), var(--gold));
+      color: #fff; border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: opacity 0.2s;
+    }
+    .btn-create:hover { opacity: 0.9; }
+    .create-success { display: none; margin-top: 12px; padding: 12px 14px; background: #f0fdf4; border-radius: 10px; font-size: 13px; color: #166534; }
+    .create-success a { color: var(--gold); font-weight: 500; }
+
+    /* Pass list */
+    .pass-list { display: flex; flex-direction: column; gap: 10px; }
+    .pass-item {
+      background: var(--cream); border-radius: 12px;
+      padding: 14px 16px; display: flex; align-items: center;
+      gap: 12px; border: 1px solid rgba(200,134,10,0.15);
+      transition: border-color 0.2s;
+    }
+    .pass-item:hover { border-color: rgba(200,134,10,0.35); }
+    .pass-item-info { flex: 1; }
+    .pass-item-name { font-size: 15px; font-weight: 500; color: var(--brown); }
+    .pass-item-event { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .pass-item-link { font-size: 11px; color: var(--gold); text-decoration: none; display: block; margin-top: 4px; }
+    .pass-item-link:hover { text-decoration: underline; }
+    .btn-delete {
+      background: none; border: 1px solid #fca5a5; color: #dc2626;
+      border-radius: 8px; padding: 6px 12px; font-size: 12px;
+      cursor: pointer; font-family: 'DM Sans', sans-serif;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-delete:hover { background: #fef2f2; }
+    .empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+    .spinner { width: 28px; height: 28px; border: 2px solid rgba(200,134,10,0.2); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 32px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="top-border"></div>
+
+  <!-- Login -->
+  <div id="login-screen">
+    <div class="login-card">
+      <h1>Admin Panel</h1>
+      <p>Enter password to manage VIP passes</p>
+      <input type="password" id="password-input" placeholder="Password" onkeydown="if(event.key==='Enter')login()" />
+      <button class="btn-primary" onclick="login()">Sign In</button>
+      <div class="login-error" id="login-error">Incorrect password</div>
+    </div>
+  </div>
+
+  <!-- Admin -->
+  <div id="admin-screen">
+    <div class="admin-header">
+      <button class="logout-btn" onclick="logout()">Sign Out</button>
+      <h1>VIP Pass Manager</h1>
+      <p>BAPS Scranton — screvents.com</p>
+    </div>
+
+    <div class="admin-body">
+      <!-- Create form -->
+      <div class="card">
+        <h2>Create New Pass</h2>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Guest Name</label>
+            <input type="text" id="new-guest" placeholder="e.g. Anupbhai Patel" />
+          </div>
+          <div class="form-group">
+            <label>Event Name</label>
+            <input type="text" id="new-event" placeholder="e.g. Para Satsang Sabha" />
+          </div>
+          <div class="form-group">
+            <label>Event Date</label>
+            <input type="text" id="new-date" placeholder="e.g. Friday, March 20" />
+          </div>
+        </div>
+        <button class="btn-create" onclick="createPass()">Generate Pass →</button>
+        <div class="create-success" id="create-success"></div>
+      </div>
+
+      <!-- Pass list -->
+      <div class="card">
+        <h2>All Passes</h2>
+        <div id="passes-container"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let adminPassword = '';
+    const BASE = '/.netlify/functions/admin-passes';
+
+    function login() {
+      const pwd = document.getElementById('password-input').value;
+      if (!pwd) return;
+      adminPassword = pwd;
+      loadPasses().then(() => {
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('admin-screen').style.display = 'block';
+        document.getElementById('login-error').style.display = 'none';
+      }).catch(() => {
+        document.getElementById('login-error').style.display = 'block';
+        adminPassword = '';
+      });
+    }
+
+    function logout() {
+      adminPassword = '';
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('admin-screen').style.display = 'none';
+      document.getElementById('password-input').value = '';
+    }
+
+    async function loadPasses() {
+      const res = await fetch(BASE, { headers: { 'x-admin-password': adminPassword } });
+      if (!res.ok) throw new Error('Unauthorized');
+      const passes = await res.json();
+      renderPasses(passes);
+    }
+
+    function renderPasses(passes) {
+      const container = document.getElementById('passes-container');
+      if (!passes.length) {
+        container.innerHTML = '<div class="empty-state">No passes yet. Create one above.</div>';
+        return;
+      }
+      container.innerHTML = '<div class="pass-list">' + passes.map(p => `
+        <div class="pass-item" id="pass-${p.id}">
+          <div class="pass-item-info">
+            <div class="pass-item-name">${p.guest_name}</div>
+            <div class="pass-item-event">${p.event_name} · ${p.event_date}</div>
+            <a class="pass-item-link" href="https://screvents.com/vip/${p.id}" target="_blank">screvents.com/vip/${p.id} ↗</a>
+          </div>
+          <button class="btn-delete" onclick="deletePass('${p.id}')">Delete</button>
+        </div>
+      `).join('') + '</div>';
+    }
+
+    async function createPass() {
+      const guest_name = document.getElementById('new-guest').value.trim();
+      const event_name = document.getElementById('new-event').value.trim();
+      const event_date = document.getElementById('new-date').value.trim();
+      if (!guest_name || !event_name || !event_date) { alert('Please fill in all fields'); return; }
+
+      const res = await fetch(BASE, {
+        method: 'POST',
+        headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_name, event_name, event_date })
+      });
+      const pass = await res.json();
+
+      document.getElementById('new-guest').value = '';
+      const link = `https://screvents.com/vip/${pass.id}`;
+      const successEl = document.getElementById('create-success');
+      successEl.innerHTML = `✅ Pass created! <a href="${link}" target="_blank">${link}</a>`;
+      successEl.style.display = 'block';
+      setTimeout(() => successEl.style.display = 'none', 8000);
+      loadPasses();
+    }
+
+    async function deletePass(id) {
+      if (!confirm('Delete this pass?')) return;
+      await fetch(BASE, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      document.getElementById(`pass-${id}`)?.remove();
+    }
+  </script>
+</body>
+</html>

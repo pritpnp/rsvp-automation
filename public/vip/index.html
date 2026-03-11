@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>VIP Pass — BAPS Scranton</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --saffron: #E8650A;
+      --gold: #C8860A;
+      --gold-light: #F5C842;
+      --cream: #FDF6EC;
+      --brown: #5C2D0A;
+      --brown-mid: #8B4513;
+      --text-muted: #8B6040;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .top-border {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--brown), var(--saffron), var(--gold-light), var(--saffron), var(--brown));
+    }
+
+    /* Loading */
+    .loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(200,134,10,0.2);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Pass card */
+    .pass-wrap {
+      display: none;
+      width: 100%;
+      max-width: 420px;
+      animation: fadeUp 0.6s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .pass-card {
+      background: linear-gradient(160deg, #3D1F0A 0%, #6B2D0A 50%, #3D1F0A 100%);
+      border-radius: 24px;
+      padding: 40px 32px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 24px 64px rgba(92,45,10,0.35), 0 0 0 1px rgba(245,200,66,0.2);
+    }
+
+    /* Decorative gold border */
+    .pass-card::before {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 18px;
+      border: 1px solid rgba(245,200,66,0.25);
+      pointer-events: none;
+    }
+
+    /* Shimmer effect */
+    .pass-card::after {
+      content: '';
+      position: absolute;
+      top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: radial-gradient(ellipse at 30% 20%, rgba(245,200,66,0.08) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .pass-header {
+      text-align: center;
+      margin-bottom: 32px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .pass-ornament {
+      font-size: 20px;
+      letter-spacing: 8px;
+      color: var(--gold-light);
+      opacity: 0.6;
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    .pass-org {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: rgba(245,200,66,0.6);
+      margin-bottom: 6px;
+    }
+
+    .pass-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold-light);
+    }
+
+    /* Divider */
+    .pass-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 24px 0;
+      position: relative;
+      z-index: 1;
+    }
+    .pass-divider::before,
+    .pass-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(245,200,66,0.4), transparent);
+    }
+    .pass-divider-dot {
+      width: 5px; height: 5px;
+      background: var(--gold-light);
+      border-radius: 50%;
+      opacity: 0.6;
+    }
+
+    .pass-guest-label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(245,200,66,0.5);
+      text-align: center;
+      margin-bottom: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .pass-guest-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(32px, 8vw, 44px);
+      font-weight: 700;
+      color: #fff;
+      text-align: center;
+      line-height: 1.1;
+      margin-bottom: 32px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .pass-event-box {
+      background: rgba(245,200,66,0.08);
+      border: 1px solid rgba(245,200,66,0.2);
+      border-radius: 14px;
+      padding: 18px 20px;
+      margin-bottom: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .pass-event-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--gold-light);
+      margin-bottom: 4px;
+    }
+
+    .pass-event-date {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      font-weight: 300;
+    }
+
+    /* Ticket notch effect */
+    .pass-notch {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 0 -32px;
+      position: relative;
+      z-index: 1;
+    }
+    .notch-line {
+      flex: 1;
+      height: 1px;
+      background: repeating-linear-gradient(90deg, rgba(245,200,66,0.3) 0px, rgba(245,200,66,0.3) 6px, transparent 6px, transparent 12px);
+    }
+    .notch-circle {
+      width: 20px; height: 20px;
+      background: var(--cream);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .pass-id {
+      font-size: 10px;
+      color: rgba(255,255,255,0.25);
+      text-align: center;
+      letter-spacing: 0.15em;
+      margin-top: 20px;
+      font-family: monospace;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Footer */
+    .pass-footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+    }
+
+    /* Error */
+    .error-box {
+      display: none;
+      text-align: center;
+      padding: 48px 24px;
+    }
+    .error-box .icon { font-size: 48px; margin-bottom: 16px; }
+    .error-box h2 { font-family: 'Cormorant Garamond', serif; font-size: 26px; color: var(--brown); margin-bottom: 8px; }
+    .error-box p { font-size: 14px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="top-border"></div>
+
+  <div class="loader" id="loader">
+    <div class="spinner"></div>
+    <span style="font-size:13px;color:var(--text-muted);">Loading your pass...</span>
+  </div>
+
+  <div class="pass-wrap" id="pass-wrap">
+    <div class="pass-card">
+      <div class="pass-header">
+        <span class="pass-ornament">✦ ✦ ✦</span>
+        <div class="pass-org">BAPS Swaminarayan Sanstha</div>
+        <div class="pass-title">VIP Invitation</div>
+      </div>
+
+      <div class="pass-divider"><div class="pass-divider-dot"></div></div>
+
+      <div class="pass-guest-label">This pass admits</div>
+      <div class="pass-guest-name" id="guest-name">—</div>
+
+      <div class="pass-event-box">
+        <div class="pass-event-name" id="event-name">—</div>
+        <div class="pass-event-date" id="event-date">—</div>
+      </div>
+
+      <div class="pass-notch">
+        <div class="notch-circle"></div>
+        <div class="notch-line"></div>
+        <div class="notch-circle"></div>
+      </div>
+
+      <div class="pass-id" id="pass-id">—</div>
+    </div>
+    <div class="pass-footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
+  </div>
+
+  <div class="error-box" id="error-box">
+    <div class="icon">🙏</div>
+    <h2>Pass Not Found</h2>
+    <p>This VIP pass link is invalid or has been removed.</p>
+  </div>
+
+  <script>
+    (async function() {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      const id = parts[parts.length - 1];
+
+      if (!id || id === 'vip') {
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('error-box').style.display = 'block';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/.netlify/functions/get-pass?id=${id}`);
+        if (!res.ok) throw new Error('Not found');
+        const pass = await res.json();
+
+        document.getElementById('guest-name').textContent = pass.guest_name;
+        document.getElementById('event-name').textContent = pass.event_name;
+        document.getElementById('event-date').textContent = pass.event_date;
+        document.getElementById('pass-id').textContent = pass.id.toUpperCase();
+
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('pass-wrap').style.display = 'block';
+      } catch (e) {
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('error-box').style.display = 'block';
+      }
+    })();
+  </script>
+</body>
+</html>

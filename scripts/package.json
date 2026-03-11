@@ -5,6 +5,7 @@
   "main": "automate.js",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
+    "@supabase/supabase-js": "^2.99.1",
     "adm-zip": "^0.5.10",
     "axios": "^1.6.0",
     "googleapis": "^171.4.0",
