@@ -62,7 +62,8 @@ STRICT RULES:
   if (!info.rsvpDeadline) {
     console.warn('⚠️  No RSVP deadline found on flyer — form will always be shown');
   }
-  console.log('✅ Extracted:', JSON.stringify(info, null, 2));
+  const safeLog = { ...info, location: '[redacted]' };
+  console.log('✅ Extracted:', JSON.stringify(safeLog, null, 2));
   return info;
 }
 
