@@ -241,39 +241,45 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 async function buildOgImage(flyerPath, invitationYPercent) {
   const metadata = await sharp(flyerPath).metadata();
   const { width: w, height: h } = metadata;
+  const aspectRatio = w / h;
+  const TARGET_RATIO = 1.9;
+  const VARIATION = 0.20;
 
-  const cutY = Math.max(0, Math.round((invitationYPercent || 0.55) * h) - 150);
-  console.log(`🖼️  OG image cut at y=${cutY} (${Math.round(cutY/h*100)}%)`);
-
-  // Sample dominant background color from flyer
-  const { dominant } = await sharp(flyerPath).stats();
-  const bg = { r: dominant.r, g: dominant.g, b: dominant.b };
-
-  async function makePanel(top, left, width, height) {
-    // Sharp thumbnail (contain) — no cropping
-    const contained = await sharp(flyerPath)
-      .extract({ left, top, width, height })
-      .resize(600, 630, { fit: 'contain', background: bg })
+  // If flyer is already close to 1.9:1 (within 20%), just resize and use directly
+  if (aspectRatio >= TARGET_RATIO * (1 - VARIATION) && aspectRatio <= TARGET_RATIO * (1 + VARIATION)) {
+    console.log(`🖼️  Flyer ratio ${aspectRatio.toFixed(2)} is close to 1.9:1 — using directly`);
+    return sharp(flyerPath)
+      .resize(1200, 630, { fit: 'cover', position: 'centre' })
+      .jpeg({ quality: 90 })
       .toBuffer();
+  }
 
-    // Blurred background — stretch to fill then blur
+  // Otherwise do 50/50 split with blurred background
+  console.log(`🖼️  Flyer ratio ${aspectRatio.toFixed(2)} — using 50/50 split`);
+  const cutY = Math.round(h * 0.50);
+
+  async function makePanel(top, width, height) {
     const blurred = await sharp(flyerPath)
-      .extract({ left, top, width, height })
       .resize(600, 630, { fit: 'fill' })
       .blur(40)
       .toBuffer();
 
-    // Composite: blurred bg + sharp contained image on top
+    const contained = await sharp(flyerPath)
+      .extract({ left: 0, top, width, height })
+      .resize(600, 630, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toBuffer();
+
     return sharp(blurred)
-      .composite([{ input: contained }])
+      .composite([{ input: contained, blend: 'over' }])
       .toBuffer();
   }
 
-  const leftPanel = await makePanel(0, 0, w, cutY);
-  const rightPanel = await makePanel(cutY, 0, w, h - cutY);
+  const leftPanel = await makePanel(0, w, cutY);
+  const rightPanel = await makePanel(cutY, w, h - cutY);
 
-  // Composite side by side
-  return sharp({ create: { width: 1200, height: 630, channels: 3, background: bg } })
+  const { dominant } = await sharp(flyerPath).stats();
+  return sharp({ create: { width: 1200, height: 630, channels: 3, background: dominant } })
     .composite([
       { input: leftPanel, left: 0, top: 0 },
       { input: rightPanel, left: 600, top: 0 }
