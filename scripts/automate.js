@@ -242,7 +242,7 @@ async function buildOgImage(flyerPath, invitationYPercent) {
   const metadata = await sharp(flyerPath).metadata();
   const { width: w, height: h } = metadata;
 
-  const cutY = Math.max(0, Math.round((invitationYPercent || 0.55) * h) - 50);
+  const cutY = Math.max(0, Math.round((invitationYPercent || 0.55) * h) - 150);
   console.log(`🖼️  OG image cut at y=${cutY} (${Math.round(cutY/h*100)}%)`);
 
   // Sample dominant background color from flyer
