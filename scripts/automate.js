@@ -62,7 +62,8 @@ STRICT RULES:
   if (!info.rsvpDeadline) {
     console.warn('⚠️  No RSVP deadline found on flyer — form will always be shown');
   }
-  console.log('✅ Extracted:', JSON.stringify(info, null, 2));
+  const safeLog = { ...info, location: '[redacted]' };
+  console.log('✅ Extracted:', JSON.stringify(safeLog, null, 2));
   return info;
 }
 
@@ -241,29 +242,38 @@ async function buildOgImage(flyerPath, invitationYPercent) {
   const metadata = await sharp(flyerPath).metadata();
   const { width: w, height: h } = metadata;
 
-  const cutY = Math.max(0, Math.round((invitationYPercent || 0.55) * h) - 20);
+  const cutY = Math.max(0, Math.round((invitationYPercent || 0.55) * h) - 50);
   console.log(`🖼️  OG image cut at y=${cutY} (${Math.round(cutY/h*100)}%)`);
 
-  // Left panel: top half, resize to width 600, crop 600x630 at y=60
-  const topHalfBuf = await sharp(flyerPath)
-    .extract({ left: 0, top: 0, width: w, height: cutY })
-    .resize(600)
-    .toBuffer();
-  const topMeta = await sharp(topHalfBuf).metadata();
-  const cropY = Math.min(60, Math.max(0, topMeta.height - 630));
-  const leftPanel = await sharp(topHalfBuf)
-    .extract({ left: 0, top: cropY, width: 600, height: Math.min(630, topMeta.height - cropY) })
-    .resize(600, 630)
-    .toBuffer();
+  // Sample dominant background color from flyer
+  const { dominant } = await sharp(flyerPath).stats();
+  const bg = { r: dominant.r, g: dominant.g, b: dominant.b };
 
-  // Right panel: bottom half, cover 600x630 from top
-  const rightPanel = await sharp(flyerPath)
-    .extract({ left: 0, top: cutY, width: w, height: h - cutY })
-    .resize(600, 630, { fit: 'cover', position: 'top' })
-    .toBuffer();
+  async function makePanel(top, left, width, height) {
+    // Sharp thumbnail (contain) — no cropping
+    const contained = await sharp(flyerPath)
+      .extract({ left, top, width, height })
+      .resize(600, 630, { fit: 'contain', background: bg })
+      .toBuffer();
+
+    // Blurred background — stretch to fill then blur
+    const blurred = await sharp(flyerPath)
+      .extract({ left, top, width, height })
+      .resize(600, 630, { fit: 'fill' })
+      .blur(40)
+      .toBuffer();
+
+    // Composite: blurred bg + sharp contained image on top
+    return sharp(blurred)
+      .composite([{ input: contained }])
+      .toBuffer();
+  }
+
+  const leftPanel = await makePanel(0, 0, w, cutY);
+  const rightPanel = await makePanel(cutY, 0, w, h - cutY);
 
   // Composite side by side
-  return sharp({ create: { width: 1200, height: 630, channels: 3, background: { r: 253, g: 246, b: 236 } } })
+  return sharp({ create: { width: 1200, height: 630, channels: 3, background: bg } })
     .composite([
       { input: leftPanel, left: 0, top: 0 },
       { input: rightPanel, left: 600, top: 0 }
