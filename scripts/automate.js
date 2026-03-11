@@ -62,8 +62,7 @@ STRICT RULES:
   if (!info.rsvpDeadline) {
     console.warn('⚠️  No RSVP deadline found on flyer — form will always be shown');
   }
-  const safeLog = { ...info, location: '[redacted]' };
-  console.log('✅ Extracted:', JSON.stringify(safeLog, null, 2));
+  console.log('✅ Extracted:', JSON.stringify(info, null, 2));
   return info;
 }
 
@@ -217,15 +216,10 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
       var name = document.getElementById('late-name').value.trim();
       var guests = document.getElementById('late-guests').value.trim();
       if (!name || !guests) { alert('Please enter your name and number of guests.'); return; }
-      var token = '${process.env.TELEGRAM_BOT_TOKEN}';
-      var chatId = '${process.env.TELEGRAM_CHAT_ID}';
-      var zone = '${zoneLabel}';
-      var event = '${eventInfo.eventName}';
-      var text = '⚠️ Late RSVP Request\\n🏛 ' + zone + ' Zone — ' + event + '\\n👤 ' + name + '\\n👥 Guests: ' + guests;
-      fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+      fetch('/.netlify/functions/late-rsvp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: text })
+        body: JSON.stringify({ name: name, guests: guests, zone: '${zoneLabel} Zone', eventName: '${eventInfo.eventName}' })
       }).then(function(r) {
         if (r.ok) {
           document.getElementById('late-form').style.display = 'none';
