@@ -38,9 +38,10 @@
     .logout-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 7px 16px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
 
     /* Tabs */
-    .tabs { background: rgba(0,0,0,0.15); display: flex; }
-    .tab-btn { flex: 1; padding: 14px; background: none; border: none; color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; border-bottom: 2px solid transparent; transition: all 0.2s; }
-    .tab-btn.active { color: var(--gold-light); border-bottom-color: var(--gold-light); background: rgba(255,255,255,0.05); }
+    .tabs { background: #1a1a1a; display: flex; }
+    .tab-btn { flex: 1; padding: 14px; background: none; border: none; color: #000; font-size: 13px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; border-bottom: 2px solid transparent; transition: all 0.2s; background: #e8e0d5; }
+    .tab-btn.active { color: var(--gold-light); border-bottom-color: var(--gold-light); background: #1a1a1a; }
+    .tab-btn:hover:not(.active) { color: var(--gold); background: #2d2d2d; }
 
     /* Body */
     .admin-body { max-width: 700px; margin: 0 auto; padding: 28px 20px 60px; }
