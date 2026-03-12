@@ -172,7 +172,7 @@ Desktop folder → repo slug mapping:
 - Form URLs are hardcoded in `getGoogleForm()` in `automate.js`
 
 ### Telegram
-- Group: "Parasabha RSVPs" (supergroup, chat ID: `-1003677003826`)
+- Group: "Parasabha RSVPs" (supergroup, chat ID: redacted)
 - Bot sends: RSVP summaries, late RSVP notifications, deploy confirmations
 - Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 
