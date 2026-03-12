@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'dist/**'
 
 jobs:
   build-and-deploy:

@@ -671,7 +671,7 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   run('git config user.name "GitHub Actions"');
   run('git add dist/');
   try {
-    run('git commit -m "deploy: update dist [skip ci]"');
+    run('git commit -m "deploy: update dist"');
     const remote = `https://x-access-token:${process.env.GITHUB_PAT}@github.com/${process.env.GITHUB_REPOSITORY}.git`;
     run(`git push "${remote}" HEAD:main`);
     console.log('✅ dist/ committed and pushed — Netlify CI deploying...');
