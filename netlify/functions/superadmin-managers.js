@@ -1,66 +1,55 @@
 const { createClient } = require('@supabase/supabase-js');
+const bcrypt = require('bcryptjs');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
   'Content-Type': 'application/json'
 };
 
-async function authenticate(event, supabase) {
-  const adminPassword = event.headers['x-admin-password'];
-  if (adminPassword === process.env.ADMIN_PASSWORD) return { ok: true, role: 'superadmin' };
-
-  const token = event.headers['x-manager-token'];
-  if (token) {
-    const { data: session } = await supabase
-      .from('manager_sessions')
-      .select('manager_id, expires_at, managers(username)')
-      .eq('token', token)
-      .single();
-    if (session && new Date(session.expires_at) > new Date()) {
-      return { ok: true, role: 'manager', username: session.managers.username };
-    }
-  }
-
-  return { ok: false };
-}
-
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-  const auth = await authenticate(event, supabase);
-
-  if (!auth.ok) {
+  const adminPassword = event.headers['x-admin-password'];
+  if (adminPassword !== process.env.ADMIN_PASSWORD) {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+  // GET — list all managers
   if (event.httpMethod === 'GET') {
     const { data, error } = await supabase
-      .from('vip_passes')
-      .select('*')
+      .from('managers')
+      .select('id, username, created_at')
       .order('created_at', { ascending: false });
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
+  // POST — create manager
   if (event.httpMethod === 'POST') {
-    const { guest_name, event_name, event_date } = JSON.parse(event.body);
-    if (!guest_name || !event_name || !event_date) {
+    const { username, password } = JSON.parse(event.body);
+    if (!username || !password) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
+    const password_hash = await bcrypt.hash(password, 10);
     const { data, error } = await supabase
-      .from('vip_passes')
-      .insert([{ guest_name, event_name, event_date }])
-      .select()
+      .from('managers')
+      .insert([{ username: username.toLowerCase().trim(), password_hash }])
+      .select('id, username, created_at')
       .single();
-    if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    if (error) {
+      const msg = error.code === '23505' ? 'Username already exists' : error.message;
+      return { statusCode: 400, headers, body: JSON.stringify({ error: msg }) };
+    }
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
+  // DELETE — delete manager by id
   if (event.httpMethod === 'DELETE') {
     const { id } = JSON.parse(event.body);
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
-    const { error } = await supabase.from('vip_passes').delete().eq('id', id);
+    const { error } = await supabase.from('managers').delete().eq('id', id);
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }

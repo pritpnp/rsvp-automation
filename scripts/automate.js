@@ -586,10 +586,11 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   files['/index.html'] = hubSha1;
   fileContents[hubSha1] = { filePath: '/index.html', content: hubContent };
 
-  // Add static pages: VIP pass and admin panel
+  // Add static pages: VIP pass, admin panel, superadmin
   const staticPages = [
     { filePath: '/vip/index.html', diskPath: path.join(__dirname, '..', 'public', 'vip', 'index.html') },
     { filePath: '/admin/index.html', diskPath: path.join(__dirname, '..', 'public', 'admin', 'index.html') },
+    { filePath: '/superadmin/index.html', diskPath: path.join(__dirname, '..', 'public', 'superadmin', 'index.html') },
   ];
   for (const { filePath, diskPath } of staticPages) {
     if (fs.existsSync(diskPath)) {

@@ -2,6 +2,7 @@
   "name": "rsvp-automation",
   "version": "1.0.0",
   "dependencies": {
-    "@supabase/supabase-js": "^2.0.0"
+    "@supabase/supabase-js": "^2.0.0",
+    "bcryptjs": "^2.4.3"
   }
 }
