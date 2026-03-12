@@ -648,29 +648,38 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     fileContents[imgSha1] = { filePath: imgFilePath, content: imgContent };
   }
 
-  // Create deploy
-  const deployRes = await axios.post(
-    `https://api.netlify.com/api/v1/sites/${process.env.NETLIFY_SITE_ID}/deploys`,
-    { files, async: false },
-    { headers: { Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  // Write all files to dist/ for Netlify CI build
+  const repoRoot = path.join(__dirname, '..');
+  const distDir = path.join(repoRoot, 'dist');
 
-  const deployId = deployRes.data.id;
-  const required = deployRes.data.required || [];
+  // Clear and recreate dist/
+  if (fs.existsSync(distDir)) fs.rmSync(distDir, { recursive: true });
+  fs.mkdirSync(distDir, { recursive: true });
 
-  // Upload required files
-  for (const sha1 of required) {
-    const { filePath, content } = fileContents[sha1];
-    console.log(`📤 Uploading ${filePath}...`);
-    await axios.put(
-      `https://api.netlify.com/api/v1/deploys/${deployId}/files${filePath}`,
-      content,
-      { headers: { Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`, 'Content-Type': 'application/octet-stream' } }
-    );
+  for (const [filePath, sha1] of Object.entries(files)) {
+    const { content } = fileContents[sha1];
+    const fullPath = path.join(distDir, filePath);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+    console.log(`📄 Written: ${filePath}`);
   }
 
-  console.log('✅ All pages deployed!');
-  return pages.map(({ zone }) => `https://scparasabha.com/${zone}`);
+  // Commit and push dist/ — Netlify CI will pick it up and deploy (including functions)
+  const { execSync } = require('child_process');
+  const run = cmd => execSync(cmd, { cwd: repoRoot, stdio: 'inherit' });
+  run('git config user.email "actions@github.com"');
+  run('git config user.name "GitHub Actions"');
+  run('git add dist/');
+  try {
+    run('git commit -m "deploy: update dist [skip ci]"');
+    const remote = `https://x-access-token:${process.env.GITHUB_PAT}@github.com/${process.env.GITHUB_REPOSITORY}.git`;
+    run(`git push "${remote}" HEAD:main`);
+    console.log('✅ dist/ committed and pushed — Netlify CI deploying...');
+  } catch (e) {
+    console.log('ℹ️  No changes to dist/, skipping commit');
+  }
+
+  return pages.map(({ zone }) => `https://screvents.com/${zone}`);
 }
 
 async function main() {
