@@ -221,13 +221,25 @@
       const c = document.getElementById('passes-container');
       if (!passes.length) { c.innerHTML = '<div class="empty-state">No passes for this event yet.</div>'; return; }
       const canDelete = sessionPermissions.create_delete_passes;
+      const canEdit = sessionPermissions.edit_passes;
       c.innerHTML = '<div class="item-list">' + passes.map(p => `
-        <div class="item" id="pass-${p.id}">
-          <div class="item-info">
-            <div class="item-name">${p.guest_name}</div>
-            <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank">screvents.com/vip/${p.id} ↗</a>
+        <div class="item" id="pass-${p.id}" style="flex-direction:column;align-items:stretch;gap:8px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="item-info">
+              <div class="item-name">${p.guest_name}</div>
+              <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank">screvents.com/vip/${p.id} ↗</a>
+            </div>
+            ${canEdit ? `<button onclick="toggleEditPass('${p.id}', '${p.guest_name.replace(/'/g, "\'")}')" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0">Edit</button>` : ''}
+            ${canDelete ? `<button class="btn-delete" onclick="deletePass('${p.id}')">Delete</button>` : ''}
           </div>
-          ${canDelete ? `<button class="btn-delete" onclick="deletePass('${p.id}')">Delete</button>` : ''}
+          ${canEdit ? `
+          <div id="pass-edit-${p.id}" style="display:none;background:var(--cream);border-radius:10px;padding:12px">
+            <div class="form-group"><label>Guest Name</label><input type="text" id="pass-edit-name-${p.id}" value="${p.guest_name}" /></div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button onclick="savePass('${p.id}')" style="padding:7px 18px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
+              <button onclick="toggleEditPass('${p.id}')" style="padding:7px 14px;background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">Cancel</button>
+            </div>
+          </div>` : ''}
         </div>`).join('') + '</div>';
     }
 
@@ -256,6 +268,26 @@
       const c = document.getElementById('rsvps-container');
       c.innerHTML = '<div class="spinner"></div>';
       c.innerHTML = '<div class="empty-state">RSVP integration coming soon.</div>';
+    }
+
+    function toggleEditPass(id) {
+      const el = document.getElementById('pass-edit-' + id);
+      if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function savePass(id) {
+      const guest_name = document.getElementById('pass-edit-name-' + id).value.trim();
+      if (!guest_name) return;
+      const res = await fetch(PASSES_API, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ id, guest_name })
+      });
+      if (res.ok) loadPasses();
+      else {
+        const d = await res.json();
+        alert(d.error || 'Failed to save');
+      }
     }
   </script>
 </body>
