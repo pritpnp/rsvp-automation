@@ -22,7 +22,7 @@ exports.handler = async (event) => {
 
     const { data: manager, error } = await supabase
       .from('managers')
-      .select('id, username, password_hash')
+      .select('id, username, password_hash, permissions')
       .eq('username', username.toLowerCase().trim())
       .single();
 
@@ -41,7 +41,7 @@ exports.handler = async (event) => {
 
     await supabase.from('manager_sessions').insert([{ manager_id: manager.id, token, expires_at }]);
 
-    return { statusCode: 200, headers, body: JSON.stringify({ token, username: manager.username }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ token, username: manager.username, permissions: manager.permissions }) };
   }
 
   // POST /logout
@@ -58,7 +58,7 @@ exports.handler = async (event) => {
 
     const { data: session } = await supabase
       .from('manager_sessions')
-      .select('manager_id, expires_at, managers(username)')
+      .select('manager_id, expires_at, managers(username, permissions)')
       .eq('token', token)
       .single();
 
@@ -66,7 +66,7 @@ exports.handler = async (event) => {
       return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session expired' }) };
     }
 
-    return { statusCode: 200, headers, body: JSON.stringify({ valid: true, username: session.managers.username }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ valid: true, username: session.managers.username, permissions: session.managers.permissions }) };
   }
 
   return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };

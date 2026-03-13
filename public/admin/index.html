@@ -97,7 +97,7 @@
         </div>
         <!-- Step 2: Create pass (shown after event selected) -->
         <div id="pass-create-section" style="display:none">
-          <div class="card">
+          <div class="card" id="create-pass-card">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
               <h2 style="margin:0" id="selected-event-title">Create Pass</h2>
               <button onclick="clearEventSelection()" style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);padding:5px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">Change Event</button>
@@ -122,13 +122,15 @@
   </div>
   <script>
     let sessionToken = sessionStorage.getItem('manager_token') || '';
+    let sessionPermissions = JSON.parse(sessionStorage.getItem('manager_permissions') || '{"view_passes":true,"create_delete_passes":false,"edit_passes":false}');
     const PASSES_API = '/.netlify/functions/admin-passes';
     const AUTH_API = '/.netlify/functions/manager-auth';
+    const EVENTS_API = '/.netlify/functions/superadmin-events';
 
     if (sessionToken) {
       fetch(AUTH_API + '/verify?token=' + sessionToken)
         .then(r => r.json())
-        .then(d => { if (d.valid) showAdmin(d.username); else { sessionToken = ''; sessionStorage.clear(); } })
+        .then(d => { if (d.valid) showAdmin(d.username, d.permissions); else { sessionToken = ''; sessionStorage.clear(); } })
         .catch(() => { sessionToken = ''; sessionStorage.clear(); });
     }
 
@@ -142,10 +144,14 @@
       sessionToken = data.token;
       sessionStorage.setItem('manager_token', sessionToken);
       sessionStorage.setItem('manager_username', data.username);
-      showAdmin(data.username);
+      showAdmin(data.username, data.permissions);
     }
 
-    function showAdmin(username) {
+    function showAdmin(username, permissions) {
+      if (permissions) {
+        sessionPermissions = permissions;
+        sessionStorage.setItem('manager_permissions', JSON.stringify(permissions));
+      }
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('admin-screen').style.display = 'block';
       document.getElementById('login-error').style.display = 'none';
@@ -171,7 +177,6 @@
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
 
-    const EVENTS_API = '/.netlify/functions/superadmin-events';
     let selectedEventId = null;
 
     async function loadEventPicker() {
@@ -183,18 +188,20 @@
         <div class="item" style="cursor:pointer" onclick="selectEvent('${e.id}', '${e.event_name.replace(/'/g, "\'")}')">
           <div class="item-info">
             <div class="item-name">${e.event_name}</div>
-            <div class="item-sub">${e.start_date}${e.end_date !== e.start_date ? ' — ' + e.end_date : ''} · Max ${e.max_passes} passes</div>
+            <div class="item-sub">${e.start_date}${e.end_date !== e.start_date ? ' — ' + e.end_date : ''}${e.start_time ? ' · ' + (e.end_time ? e.start_time + ' – ' + e.end_time : e.start_time) : ''} · Max ${e.max_passes} passes</div>
             ${e.notes ? `<div class="item-sub" style="font-style:italic">${e.notes}</div>` : ''}
           </div>
           <span style="color:var(--gold);font-size:13px;font-weight:500">Select →</span>
         </div>`).join('') + '</div>';
     }
 
-    function selectEvent(id, name) {
+        function selectEvent(id, name) {
       selectedEventId = id;
       document.getElementById('event-picker-card').style.display = 'none';
       document.getElementById('pass-create-section').style.display = 'block';
       document.getElementById('selected-event-title').textContent = name;
+      const canCreate = sessionPermissions.create_delete_passes;
+      document.getElementById('create-pass-card').style.display = canCreate ? 'block' : 'none';
       loadPasses();
     }
 
@@ -213,13 +220,14 @@
     function renderPasses(passes) {
       const c = document.getElementById('passes-container');
       if (!passes.length) { c.innerHTML = '<div class="empty-state">No passes for this event yet.</div>'; return; }
+      const canDelete = sessionPermissions.create_delete_passes;
       c.innerHTML = '<div class="item-list">' + passes.map(p => `
         <div class="item" id="pass-${p.id}">
           <div class="item-info">
             <div class="item-name">${p.guest_name}</div>
             <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank">screvents.com/vip/${p.id} ↗</a>
           </div>
-          <button class="btn-delete" onclick="deletePass('${p.id}')">Delete</button>
+          ${canDelete ? `<button class="btn-delete" onclick="deletePass('${p.id}')">Delete</button>` : ''}
         </div>`).join('') + '</div>';
     }
 
