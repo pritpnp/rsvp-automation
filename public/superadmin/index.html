@@ -251,9 +251,7 @@
 
     function logout() {
       adminPassword = '';
-      document.getElementById('login-screen').style.display = 'flex';
-      document.getElementById('admin-screen').style.display = 'none';
-      document.getElementById('password-input').value = '';
+      window.location.reload();
     }
 
     function switchTab(tab) {

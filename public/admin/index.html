@@ -220,9 +220,7 @@
     async function logout() {
       if (sessionToken) await fetch(AUTH_API + '/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sessionToken }) });
       sessionToken = ''; sessionStorage.clear();
-      document.getElementById('login-screen').style.display = 'flex';
-      document.getElementById('admin-screen').style.display = 'none';
-      document.getElementById('password-input').value = '';
+      window.location.reload();
     }
 
     function switchTab(tab, btn) {
