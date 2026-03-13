@@ -63,6 +63,55 @@
     .rsvp-table tr:last-child td { border-bottom: none; }
     .rsvp-table tr:hover td { background: var(--cream); }
     .zone-pill { display: inline-block; background: rgba(200,134,10,0.1); color: var(--gold); border: 1px solid rgba(200,134,10,0.25); font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+
+    /* ── Animations ── */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+    #login-screen { animation: fadeIn 0.4s ease both; }
+    .login-card { animation: slideUp 0.4s ease both; }
+    .admin-header { animation: slideDown 0.35s ease both; }
+    .tabs { animation: slideDown 0.35s 0.05s ease both; opacity: 0; animation-fill-mode: both; }
+    .card { animation: slideUp 0.4s ease both; }
+    .card:nth-child(2) { animation-delay: 0.07s; }
+    .card:nth-child(3) { animation-delay: 0.14s; }
+
+    .item { transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+    .item:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(92,45,10,0.12); }
+
+    .btn-create { transition: opacity 0.2s ease, transform 0.15s ease; }
+    .btn-create:hover { transform: translateY(-1px); }
+    .btn-create:active { transform: translateY(0); }
+
+    .btn-primary { transition: opacity 0.2s ease, transform 0.15s ease; }
+    .btn-primary:hover { transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+
+    .logout-btn { transition: background 0.2s ease, transform 0.15s ease; }
+    .logout-btn:hover { transform: translateY(-1px); background: rgba(255,255,255,0.18); }
+
+    /* Inline edit panels slide open */
+    .edit-panel { overflow: hidden; animation: slideDown 0.2s ease both; }
+
+    /* Pass/manager items fade in when list loads */
+    .item-list .item { animation: slideUp 0.25s ease both; }
+    .item-list .item:nth-child(1) { animation-delay: 0.02s; }
+    .item-list .item:nth-child(2) { animation-delay: 0.06s; }
+    .item-list .item:nth-child(3) { animation-delay: 0.10s; }
+    .item-list .item:nth-child(4) { animation-delay: 0.14s; }
+    .item-list .item:nth-child(5) { animation-delay: 0.18s; }
+
+    /* Tab transition */
+    .tab-panel.active { animation: fadeIn 0.2s ease both; }
+
+    /* Event picker items */
+    #event-picker-list .item { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.2s ease; }
+    #event-picker-list .item:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(92,45,10,0.14); border-color: rgba(200,134,10,0.4); }
+    #event-picker-list .item:active { transform: translateY(0); }
+
+    /* Success message pop */
+    .success-msg { animation: slideDown 0.25s ease both; }
   </style>
 </head>
 <body>
@@ -152,6 +201,15 @@
         sessionPermissions = permissions;
         sessionStorage.setItem('manager_permissions', JSON.stringify(permissions));
       }
+      // Always reset to event selection on login
+      selectedEventId = null;
+      document.getElementById('event-picker-card').style.display = 'block';
+      document.getElementById('pass-create-section').style.display = 'none';
+      // Reset to VIP Passes tab
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-passes').classList.add('active');
+      document.querySelector('.tab-btn').classList.add('active');
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('admin-screen').style.display = 'block';
       document.getElementById('login-error').style.display = 'none';
