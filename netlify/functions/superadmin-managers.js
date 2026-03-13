@@ -20,7 +20,7 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'GET') {
     const { data, error } = await supabase
       .from('managers')
-      .select('id, username, created_at')
+      .select('id, username, permissions, created_at')
       .order('created_at', { ascending: false });
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers, body: JSON.stringify(data) };
@@ -28,15 +28,37 @@ exports.handler = async (event) => {
 
   // POST — create manager
   if (event.httpMethod === 'POST') {
-    const { username, password } = JSON.parse(event.body);
+    const { username, password, permissions } = JSON.parse(event.body);
     if (!username || !password) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
     const password_hash = await bcrypt.hash(password, 10);
+    const perms = permissions || { view_passes: true, create_delete_passes: false, edit_passes: false };
     const { data, error } = await supabase
       .from('managers')
-      .insert([{ username: username.toLowerCase().trim(), password_hash }])
-      .select('id, username, created_at')
+      .insert([{ username: username.toLowerCase().trim(), password_hash, permissions: perms }])
+      .select('id, username, permissions, created_at')
+      .single();
+    if (error) {
+      const msg = error.code === '23505' ? 'Username already exists' : error.message;
+      return { statusCode: 400, headers, body: JSON.stringify({ error: msg }) };
+    }
+    return { statusCode: 200, headers, body: JSON.stringify(data) };
+  }
+
+  // PATCH — update manager (username, password, permissions)
+  if (event.httpMethod === 'PATCH') {
+    const { id, username, password, permissions } = JSON.parse(event.body);
+    if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
+    const updates = {};
+    if (username) updates.username = username.toLowerCase().trim();
+    if (password) updates.password_hash = await bcrypt.hash(password, 10);
+    if (permissions) updates.permissions = permissions;
+    const { data, error } = await supabase
+      .from('managers')
+      .update(updates)
+      .eq('id', id)
+      .select('id, username, permissions, created_at')
       .single();
     if (error) {
       const msg = error.code === '23505' ? 'Username already exists' : error.message;

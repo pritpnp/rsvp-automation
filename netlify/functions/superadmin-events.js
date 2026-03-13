@@ -10,10 +10,8 @@ exports.handler = async (event) => {
 
   const adminPassword = event.headers['x-admin-password'];
   const managerToken = event.headers['x-manager-token'];
-
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-  // Auth: superadmin password OR valid manager token
   let authed = false;
   if (adminPassword === process.env.ADMIN_PASSWORD) {
     authed = true;
@@ -28,7 +26,6 @@ exports.handler = async (event) => {
 
   if (!authed) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
 
-  // GET — list all events
   if (event.httpMethod === 'GET') {
     const { data, error } = await supabase
       .from('events')
@@ -38,33 +35,30 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
-  // Only superadmin can create/update/delete events
   if (adminPassword !== process.env.ADMIN_PASSWORD) {
     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only superadmin can modify events' }) };
   }
 
-  // POST — create event
   if (event.httpMethod === 'POST') {
-    const { event_name, start_date, end_date, max_passes, notes } = JSON.parse(event.body);
+    const { event_name, start_date, end_date, start_time, end_time, max_passes, notes } = JSON.parse(event.body);
     if (!event_name || !start_date || !end_date) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
     const { data, error } = await supabase
       .from('events')
-      .insert([{ event_name, start_date, end_date, max_passes: max_passes || 50, notes: notes || '' }])
+      .insert([{ event_name, start_date, end_date, start_time: start_time || '', end_time: end_time || '', max_passes: max_passes || 50, notes: notes || '' }])
       .select()
       .single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
-  // PATCH — update event
   if (event.httpMethod === 'PATCH') {
-    const { id, event_name, start_date, end_date, max_passes, notes } = JSON.parse(event.body);
+    const { id, event_name, start_date, end_date, start_time, end_time, max_passes, notes } = JSON.parse(event.body);
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
     const { data, error } = await supabase
       .from('events')
-      .update({ event_name, start_date, end_date, max_passes, notes })
+      .update({ event_name, start_date, end_date, start_time: start_time || '', end_time: end_time || '', max_passes, notes })
       .eq('id', id)
       .select()
       .single();
@@ -72,7 +66,6 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
-  // DELETE — delete event
   if (event.httpMethod === 'DELETE') {
     const { id } = JSON.parse(event.body);
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
