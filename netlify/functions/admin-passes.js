@@ -51,15 +51,20 @@ exports.handler = async (event) => {
     }
 
     // Check max_passes limit
-    const { data: evt } = await supabase.from('events').select('max_passes, event_name, start_date').eq('id', event_id).single();
+    const { data: evt } = await supabase.from('events').select('max_passes, event_name, start_date, end_date').eq('id', event_id).single();
     const { count } = await supabase.from('vip_passes').select('*', { count: 'exact', head: true }).eq('event_id', event_id);
     if (evt && count >= evt.max_passes) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: `Max passes (${evt.max_passes}) reached for this event` }) };
     }
 
+    // Single day: use start_date. Multiday: show range.
+    const event_date = evt?.start_date === evt?.end_date
+      ? evt?.start_date
+      : `${evt?.start_date} – ${evt?.end_date}`;
+
     const { data, error } = await supabase
       .from('vip_passes')
-      .insert([{ guest_name, event_id, event_name: evt?.event_name || '', event_date: evt?.start_date || '' }])
+      .insert([{ guest_name, event_id, event_name: evt?.event_name || '', event_date }])
       .select()
       .single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
