@@ -109,34 +109,14 @@
     </div>
 
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('passes')">🎟 VIP Passes</button>
-      <button class="tab-btn" onclick="switchTab('managers')">👤 Managers</button>
+      <button class="tab-btn active" onclick="switchTab('managers')">👤 Managers</button>
       <button class="tab-btn" onclick="switchTab('events')">📅 Events</button>
     </div>
 
     <div class="admin-body">
 
-      <!-- VIP Passes Tab -->
-      <div class="tab-panel active" id="tab-passes">
-        <div class="card">
-          <h2>Create New Pass</h2>
-          <div class="form-row">
-            <div class="form-group"><label>Guest Name</label><input type="text" id="new-guest" placeholder="Full Name" /></div>
-            <div class="form-group"><label>Event Name</label><input type="text" id="new-event" placeholder="Event Name" /></div>
-            <div class="form-group"><label>Event Date</label><input type="text" id="new-date" placeholder="Event Date" /></div>
-          </div>
-          <button class="btn-create" onclick="createPass()">Generate Pass →</button>
-          <div class="success-msg" id="pass-success"></div>
-          <div class="error-msg" id="pass-error"></div>
-        </div>
-        <div class="card">
-          <h2>All Passes</h2>
-          <div id="passes-container"><div class="spinner"></div></div>
-        </div>
-      </div>
-
       <!-- Managers Tab -->
-      <div class="tab-panel" id="tab-managers">
+      <div class="tab-panel active" id="tab-managers">
         <div class="card">
           <h2>Add Manager</h2>
           <div class="form-row">
@@ -167,7 +147,7 @@
             <div class="form-group"><label>Max VIP Passes</label><input type="number" id="new-event-max" placeholder="50" min="1" /></div>
             <div class="form-group" style="flex:3"><label>Additional Notes</label><input type="text" id="new-event-notes" placeholder="Notes" /></div>
           </div>
-          <button class="btn-create" onclick="createEvent()">Add Event →</button>
+          <button class="btn-create" onclick="addEvent()">Add Event →</button>
           <div class="success-msg" id="event-success"></div>
           <div class="error-msg" id="event-error"></div>
         </div>
@@ -190,17 +170,16 @@
       if (!pwd) return;
       adminPassword = pwd;
       // Verify by attempting to load passes
-      fetch(PASSES_API, { headers: { 'x-admin-password': adminPassword } })
+      fetch(MANAGERS_API, { headers: { 'x-admin-password': adminPassword } })
         .then(r => {
           if (!r.ok) throw new Error('Unauthorized');
           return r.json();
         })
-        .then(passes => {
+        .then(managers => {
           document.getElementById('login-screen').style.display = 'none';
           document.getElementById('admin-screen').style.display = 'block';
           document.getElementById('login-error').style.display = 'none';
-          renderPasses(passes);
-          loadManagers();
+          renderManagers(managers);
           loadEvents();
         })
         .catch(() => {
@@ -344,7 +323,7 @@
         </div>`).join('') + '</div>';
     }
 
-    async function createEvent() {
+    async function addEvent() {
       const event_name = document.getElementById('new-event-name').value.trim();
       const start_date = document.getElementById('new-event-start').value.trim();
       const end_date = document.getElementById('new-event-end').value.trim();
