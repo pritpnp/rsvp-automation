@@ -90,19 +90,26 @@
     </div>
     <div class="admin-body">
       <div class="tab-panel active" id="tab-passes">
-        <div class="card">
-          <h2>Create New Pass</h2>
-          <div class="form-row">
-            <div class="form-group"><label>Guest Name</label><input type="text" id="new-guest" placeholder="Full Name" /></div>
-            <div class="form-group"><label>Event Name</label><input type="text" id="new-event" placeholder="Event Name" /></div>
-            <div class="form-group"><label>Event Date</label><input type="text" id="new-date" placeholder="Event Date" /></div>
-          </div>
-          <button class="btn-create" onclick="createPass()">Generate Pass →</button>
-          <div class="success-msg" id="pass-success"></div>
+        <!-- Step 1: Pick event -->
+        <div class="card" id="event-picker-card">
+          <h2>Select Event</h2>
+          <div id="event-picker-list"><div class="spinner"></div></div>
         </div>
-        <div class="card">
-          <h2>All Passes</h2>
-          <div id="passes-container"><div class="spinner"></div></div>
+        <!-- Step 2: Create pass (shown after event selected) -->
+        <div id="pass-create-section" style="display:none">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <h2 style="margin:0" id="selected-event-title">Create Pass</h2>
+              <button onclick="clearEventSelection()" style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);padding:5px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">Change Event</button>
+            </div>
+            <div class="form-group"><label>Guest Name</label><input type="text" id="new-guest" placeholder="Full Name" /></div>
+            <button class="btn-create" style="margin-top:14px" onclick="createPass()">Generate Pass →</button>
+            <div class="success-msg" id="pass-success"></div>
+          </div>
+          <div class="card">
+            <h2>Passes for This Event</h2>
+            <div id="passes-container"><div class="spinner"></div></div>
+          </div>
         </div>
       </div>
       <div class="tab-panel" id="tab-rsvps">
@@ -143,7 +150,7 @@
       document.getElementById('admin-screen').style.display = 'block';
       document.getElementById('login-error').style.display = 'none';
       document.getElementById('welcome-text').textContent = 'Signed in as ' + username;
-      loadPasses();
+      loadEventPicker();
     }
 
     async function logout() {
@@ -164,24 +171,64 @@
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
 
+    const EVENTS_API = '/.netlify/functions/superadmin-events';
+    let selectedEventId = null;
+
+    async function loadEventPicker() {
+      const res = await fetch(EVENTS_API, { headers: { 'x-manager-token': sessionToken } });
+      const events = await res.json();
+      const c = document.getElementById('event-picker-list');
+      if (!events.length) { c.innerHTML = '<div class="empty-state">No events available. Ask your admin to create one.</div>'; return; }
+      c.innerHTML = '<div class="item-list">' + events.map(e => `
+        <div class="item" style="cursor:pointer" onclick="selectEvent('${e.id}', '${e.event_name.replace(/'/g, "\'")}')">
+          <div class="item-info">
+            <div class="item-name">${e.event_name}</div>
+            <div class="item-sub">${e.start_date}${e.end_date !== e.start_date ? ' — ' + e.end_date : ''} · Max ${e.max_passes} passes</div>
+            ${e.notes ? `<div class="item-sub" style="font-style:italic">${e.notes}</div>` : ''}
+          </div>
+          <span style="color:var(--gold);font-size:13px;font-weight:500">Select →</span>
+        </div>`).join('') + '</div>';
+    }
+
+    function selectEvent(id, name) {
+      selectedEventId = id;
+      document.getElementById('event-picker-card').style.display = 'none';
+      document.getElementById('pass-create-section').style.display = 'block';
+      document.getElementById('selected-event-title').textContent = name;
+      loadPasses();
+    }
+
+    function clearEventSelection() {
+      selectedEventId = null;
+      document.getElementById('event-picker-card').style.display = 'block';
+      document.getElementById('pass-create-section').style.display = 'none';
+    }
+
     async function loadPasses() {
-      const res = await fetch(PASSES_API, { headers: { 'x-manager-token': sessionToken } });
+      if (!selectedEventId) return;
+      const res = await fetch(PASSES_API + '?event_id=' + selectedEventId, { headers: { 'x-manager-token': sessionToken } });
       renderPasses(await res.json());
     }
 
     function renderPasses(passes) {
       const c = document.getElementById('passes-container');
-      if (!passes.length) { c.innerHTML = '<div class="empty-state">No passes yet.</div>'; return; }
-      c.innerHTML = '<div class="item-list">' + passes.map(p => `<div class="item" id="pass-${p.id}"><div class="item-info"><div class="item-name">${p.guest_name}</div><div class="item-sub">${p.event_name} · ${p.event_date}</div><a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank">screvents.com/vip/${p.id} ↗</a></div><button class="btn-delete" onclick="deletePass('${p.id}')">Delete</button></div>`).join('') + '</div>';
+      if (!passes.length) { c.innerHTML = '<div class="empty-state">No passes for this event yet.</div>'; return; }
+      c.innerHTML = '<div class="item-list">' + passes.map(p => `
+        <div class="item" id="pass-${p.id}">
+          <div class="item-info">
+            <div class="item-name">${p.guest_name}</div>
+            <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank">screvents.com/vip/${p.id} ↗</a>
+          </div>
+          <button class="btn-delete" onclick="deletePass('${p.id}')">Delete</button>
+        </div>`).join('') + '</div>';
     }
 
     async function createPass() {
       const guest_name = document.getElementById('new-guest').value.trim();
-      const event_name = document.getElementById('new-event').value.trim();
-      const event_date = document.getElementById('new-date').value.trim();
-      if (!guest_name || !event_name || !event_date) { alert('Please fill in all fields'); return; }
-      const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ guest_name, event_name, event_date }) });
+      if (!guest_name || !selectedEventId) { alert('Please enter a guest name'); return; }
+      const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ guest_name, event_id: selectedEventId }) });
       const pass = await res.json();
+      if (!res.ok) { alert(pass.error); return; }
       document.getElementById('new-guest').value = '';
       const link = 'https://screvents.com/vip/' + pass.id;
       const el = document.getElementById('pass-success');

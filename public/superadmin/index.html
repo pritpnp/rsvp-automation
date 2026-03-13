@@ -111,6 +111,7 @@
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('passes')">🎟 VIP Passes</button>
       <button class="tab-btn" onclick="switchTab('managers')">👤 Managers</button>
+      <button class="tab-btn" onclick="switchTab('events')">📅 Events</button>
     </div>
 
     <div class="admin-body">
@@ -152,6 +153,30 @@
         </div>
       </div>
 
+
+      <!-- Events Tab -->
+      <div class="tab-panel" id="tab-events">
+        <div class="card">
+          <h2>Add Event</h2>
+          <div class="form-row">
+            <div class="form-group" style="flex:2;min-width:200px"><label>Event Name</label><input type="text" id="new-event-name" placeholder="Event Name" /></div>
+            <div class="form-group"><label>Start Date</label><input type="text" id="new-event-start" placeholder="e.g. Friday, March 20" /></div>
+            <div class="form-group"><label>End Date</label><input type="text" id="new-event-end" placeholder="e.g. Sunday, March 22" /></div>
+          </div>
+          <div class="form-row" style="margin-top:10px">
+            <div class="form-group"><label>Max VIP Passes</label><input type="number" id="new-event-max" placeholder="50" min="1" /></div>
+            <div class="form-group" style="flex:3"><label>Additional Notes</label><input type="text" id="new-event-notes" placeholder="Notes" /></div>
+          </div>
+          <button class="btn-create" onclick="createEvent()">Add Event →</button>
+          <div class="success-msg" id="event-success"></div>
+          <div class="error-msg" id="event-error"></div>
+        </div>
+        <div class="card">
+          <h2>All Events</h2>
+          <div id="events-container"><div class="spinner"></div></div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -176,6 +201,7 @@
           document.getElementById('login-error').style.display = 'none';
           renderPasses(passes);
           loadManagers();
+          loadEvents();
         })
         .catch(() => {
           document.getElementById('login-error').style.display = 'block';
@@ -293,6 +319,67 @@
         body: JSON.stringify({ id })
       });
       document.getElementById(`mgr-${id}`)?.remove();
+    }
+
+    // ── Events ──
+    const EVENTS_API = '/.netlify/functions/superadmin-events';
+
+    async function loadEvents() {
+      const res = await fetch(EVENTS_API, { headers: { 'x-admin-password': adminPassword } });
+      const events = await res.json();
+      renderEvents(events);
+    }
+
+    function renderEvents(events) {
+      const c = document.getElementById('events-container');
+      if (!events.length) { c.innerHTML = '<div class="empty-state">No events yet.</div>'; return; }
+      c.innerHTML = '<div class="item-list">' + events.map(e => `
+        <div class="item" id="evt-${e.id}">
+          <div class="item-info">
+            <div class="item-name">${e.event_name}</div>
+            <div class="item-sub">${e.start_date}${e.end_date !== e.start_date ? ' — ' + e.end_date : ''} · Max ${e.max_passes} passes</div>
+            ${e.notes ? `<div class="item-sub" style="margin-top:2px;font-style:italic">${e.notes}</div>` : ''}
+          </div>
+          <button class="btn-delete" onclick="deleteEvent('${e.id}')">Delete</button>
+        </div>`).join('') + '</div>';
+    }
+
+    async function createEvent() {
+      const event_name = document.getElementById('new-event-name').value.trim();
+      const start_date = document.getElementById('new-event-start').value.trim();
+      const end_date = document.getElementById('new-event-end').value.trim();
+      const max_passes = parseInt(document.getElementById('new-event-max').value) || 50;
+      const notes = document.getElementById('new-event-notes').value.trim();
+      const errEl = document.getElementById('event-error');
+      const sucEl = document.getElementById('event-success');
+      errEl.style.display = 'none';
+      if (!event_name || !start_date || !end_date) { errEl.textContent = 'Please fill in Event Name, Start Date, and End Date'; errEl.style.display = 'block'; return; }
+      const res = await fetch(EVENTS_API, {
+        method: 'POST',
+        headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_name, start_date, end_date, max_passes, notes })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+      document.getElementById('new-event-name').value = '';
+      document.getElementById('new-event-start').value = '';
+      document.getElementById('new-event-end').value = '';
+      document.getElementById('new-event-max').value = '';
+      document.getElementById('new-event-notes').value = '';
+      sucEl.textContent = `✅ Event "${data.event_name}" created!`;
+      sucEl.style.display = 'block';
+      setTimeout(() => sucEl.style.display = 'none', 5000);
+      loadEvents();
+    }
+
+    async function deleteEvent(id) {
+      if (!confirm('Delete this event? All associated passes will be unlinked.')) return;
+      await fetch(EVENTS_API, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      document.getElementById('evt-' + id)?.remove();
     }
   </script>
 </body>
