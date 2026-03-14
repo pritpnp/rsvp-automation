@@ -192,28 +192,27 @@
     const EVENTS_API = '/.netlify/functions/superadmin-events';
     const MANAGERS_API = '/.netlify/functions/superadmin-managers';
 
-    // Verify after all functions are defined
-    document.addEventListener('DOMContentLoaded', function() {
-      if (!sessionToken) {
-        window.location.replace('/login');
-      } else {
-        fetch(AUTH_API + '/verify?token=' + sessionToken)
-          .then(r => r.json())
-          .then(d => {
-            if (d.valid) {
-              sessionRole = d.role;
-              sessionPermissions = d.permissions;
-              localStorage.setItem('admin_role', d.role);
-              localStorage.setItem('admin_permissions', JSON.stringify(d.permissions));
-              showAdmin(d.username, d.permissions, d.role);
-            } else {
-              localStorage.clear();
-              window.location.replace('/login');
-            }
-          })
-          .catch(() => { localStorage.clear(); window.location.replace('/login'); });
-      }
-    });
+    // Redirect to /login if no token
+    if (!sessionToken) {
+      window.location.replace('/login');
+    } else {
+      fetch(AUTH_API + '/verify?token=' + sessionToken)
+        .then(r => r.json())
+        .then(d => {
+          console.log('VERIFY RESPONSE:', JSON.stringify(d));
+          if (d.valid) {
+            sessionRole = d.role;
+            sessionPermissions = d.permissions;
+            localStorage.setItem('admin_role', d.role);
+            localStorage.setItem('admin_permissions', JSON.stringify(d.permissions));
+            showAdmin(d.username, d.permissions, d.role);
+          } else {
+            console.log('Verify failed, redirecting in 5s...');
+            setTimeout(() => { localStorage.clear(); window.location.replace('/login'); }, 5000);
+          }
+        })
+        .catch(e => { console.log('Verify error:', e); setTimeout(() => { localStorage.clear(); window.location.replace('/login'); }, 5000); });
+    }
 
     function showAdmin(username, permissions, role) {
       if (permissions) {
