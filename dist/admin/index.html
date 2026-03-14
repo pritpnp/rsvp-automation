@@ -352,6 +352,7 @@
         const res = await fetch('/.netlify/functions/get-rsvps', {
           headers: { 'x-manager-token': sessionToken }
         });
+        if (res.status === 403) { c.innerHTML = '<div class="empty-state">You do not have permission to view RSVPs.</div>'; return; }
         if (!res.ok) throw new Error();
         allRsvps = await res.json();
         filterRsvps();
@@ -378,15 +379,18 @@
 
       if (!rsvps.length) { c.innerHTML = '<div class="empty-state">No RSVPs found.</div>'; return; }
 
+      const canEditRsvp = sessionPermissions.edit_rsvps;
+      const canDeleteRsvp = sessionPermissions.delete_rsvps;
+
       c.innerHTML = '<div style="overflow-x:auto"><table class="rsvp-table">' +
-        '<thead><tr><th>Name</th><th>Zone</th><th>Guests</th><th>Submitted</th><th></th></tr></thead>' +
+        '<thead><tr><th>Name</th><th>Zone</th><th>Guests</th><th>Submitted</th>' + (canDeleteRsvp ? '<th></th>' : '') + '</tr></thead>' +
         '<tbody>' + rsvps.map(r => `
           <tr id="rsvp-${r.powerapps_id}">
             <td>${r.name}</td>
             <td><span class="zone-pill">${r.zone}</span></td>
             <td id="guests-display-${r.powerapps_id}">
               <span id="guests-val-${r.powerapps_id}">${r.guests}</span>
-              <button onclick="startEditGuests('${r.powerapps_id}', '${r.guests}')"
+              ${canEditRsvp ? `<button onclick="startEditGuests('${r.powerapps_id}', '${r.guests}')"
                 style="background:none;border:none;color:var(--gold);font-size:11px;cursor:pointer;margin-left:6px;padding:0;font-family:'DM Sans',sans-serif">Edit</button>
               <span id="guests-edit-${r.powerapps_id}" style="display:none">
                 <input type="number" min="1" id="guests-input-${r.powerapps_id}"
@@ -395,10 +399,10 @@
                   style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px">Save</button>
                 <button onclick="cancelEditGuests('${r.powerapps_id}', '${r.guests}')"
                   style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:2px">✕</button>
-              </span>
+              </span>` : ''}
             </td>
             <td>${r.submitted ? new Date(r.submitted).toLocaleDateString() : '—'}</td>
-            <td><button class="btn-delete-sm" onclick="deleteRsvp('${r.powerapps_id}', '${r.name.replace(/'/g, "\'")}')">Remove</button></td>
+            ${canDeleteRsvp ? `<td><button class="btn-delete-sm" onclick="deleteRsvp('${r.powerapps_id}', '${r.name.replace(/'/g, "\'")}')">Remove</button></td>` : ''}
           </tr>`).join('') +
         '</tbody></table></div>';
     }

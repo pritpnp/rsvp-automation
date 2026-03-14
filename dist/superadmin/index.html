@@ -173,11 +173,17 @@
             <div class="form-group"><label>Password</label><input type="password" id="new-manager-password" placeholder="" /></div>
           </div>
           <div style="margin-top:14px">
-            <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">Permissions</div>
-            <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">Pass Permissions</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
               <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="new-perm-view" checked> View passes</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="new-perm-create"> Create &amp; delete passes</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="new-perm-edit"> Edit passes</label>
+            </div>
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">RSVP Permissions</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="new-perm-view-rsvp"> View RSVPs</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="new-perm-edit-rsvp"> Edit number of guests</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="new-perm-delete-rsvp"> Delete RSVPs</label>
             </div>
           </div>
           <button class="btn-create" onclick="createManager()">Add Manager →</button>
@@ -198,7 +204,7 @@
           <div class="form-row">
             <div class="form-group" style="flex:2;min-width:200px"><label>Event Name</label><input type="text" id="new-event-name" placeholder="Event Name" /></div>
             <div class="form-group"><label>Start Date</label><input type="text" id="new-event-start" placeholder="e.g. Friday, March 20" /></div>
-            <div class="form-group"><label>End Date</label><input type="text" id="new-event-end" placeholder="e.g. Sunday, March 22" /></div>
+            <div class="form-group"><label>End Date <span style="font-weight:300;text-transform:none;letter-spacing:0">(optional)</span></label><input type="text" id="new-event-end" placeholder="Same as start" /></div>
           </div>
           <div class="form-row" style="margin-top:10px">
             <div class="form-group"><label>Start Time</label><input type="text" id="new-event-start-time" placeholder="e.g. 6:00 pm" /></div>
@@ -316,9 +322,12 @@
 
     function permLabel(p) {
       const labels = [];
-      if (p?.view_passes) labels.push('View');
-      if (p?.create_delete_passes) labels.push('Create/Delete');
-      if (p?.edit_passes) labels.push('Edit');
+      if (p?.view_passes) labels.push('View Passes');
+      if (p?.create_delete_passes) labels.push('Create/Delete Passes');
+      if (p?.edit_passes) labels.push('Edit Passes');
+      if (p?.view_rsvps) labels.push('View RSVPs');
+      if (p?.edit_rsvps) labels.push('Edit RSVPs');
+      if (p?.delete_rsvps) labels.push('Delete RSVPs');
       return labels.length ? labels.join(', ') : 'No permissions';
     }
 
@@ -343,9 +352,14 @@
             <div style="margin-top:12px">
               <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Permissions</div>
               <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Pass Permissions</div>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-view-${m.id}" ${m.permissions?.view_passes ? 'checked' : ''}> View passes</label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-create-${m.id}" ${m.permissions?.create_delete_passes ? 'checked' : ''}> Create &amp; delete passes</label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-editp-${m.id}" ${m.permissions?.edit_passes ? 'checked' : ''}> Edit passes</label>
+                <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:10px;margin-bottom:6px">RSVP Permissions</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-view-rsvp-${m.id}" ${m.permissions?.view_rsvps ? 'checked' : ''}> View RSVPs</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-edit-rsvp-${m.id}" ${m.permissions?.edit_rsvps ? 'checked' : ''}> Edit number of guests</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-delete-rsvp-${m.id}" ${m.permissions?.delete_rsvps ? 'checked' : ''}> Delete RSVPs</label>
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px">
@@ -367,7 +381,10 @@
       const permissions = {
         view_passes: document.getElementById('new-perm-view').checked,
         create_delete_passes: document.getElementById('new-perm-create').checked,
-        edit_passes: document.getElementById('new-perm-edit').checked
+        edit_passes: document.getElementById('new-perm-edit').checked,
+        view_rsvps: document.getElementById('new-perm-view-rsvp').checked,
+        edit_rsvps: document.getElementById('new-perm-edit-rsvp').checked,
+        delete_rsvps: document.getElementById('new-perm-delete-rsvp').checked
       };
       const res = await fetch(MANAGERS_API, {
         method: 'POST',
@@ -380,6 +397,9 @@
       document.getElementById('new-manager-password').value = '';
       document.getElementById('new-perm-create').checked = false;
       document.getElementById('new-perm-edit').checked = false;
+      document.getElementById('new-perm-view-rsvp').checked = false;
+      document.getElementById('new-perm-edit-rsvp').checked = false;
+      document.getElementById('new-perm-delete-rsvp').checked = false;
       sucEl.textContent = `✅ Manager "${data.username}" added. They can log in at screvents.com/admin`;
       sucEl.style.display = 'block';
       setTimeout(() => sucEl.style.display = 'none', 6000);
@@ -394,6 +414,40 @@
         body: JSON.stringify({ id })
       });
       document.getElementById(`mgr-${id}`)?.remove();
+    }
+
+
+    async function addEvent() {
+      const event_name = document.getElementById('new-event-name').value.trim();
+      const start_date = document.getElementById('new-event-start').value.trim();
+      const end_date = document.getElementById('new-event-end').value.trim();
+      const start_time = document.getElementById('new-event-start-time').value.trim();
+      const end_time = document.getElementById('new-event-end-time').value.trim();
+      const max_passes = parseInt(document.getElementById('new-event-max').value) || 50;
+      const notes = document.getElementById('new-event-notes').value.trim();
+      const errEl = document.getElementById('event-error');
+      const sucEl = document.getElementById('event-success');
+      errEl.style.display = 'none';
+      if (!event_name || !start_date) { errEl.textContent = 'Please fill in Event Name and Start Date'; errEl.style.display = 'block'; return; }
+      const resolved_end_date = end_date || start_date;
+      const res = await fetch(EVENTS_API, {
+        method: 'POST',
+        headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_name, start_date, end_date: resolved_end_date, start_time, end_time, max_passes, notes })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+      document.getElementById('new-event-name').value = '';
+      document.getElementById('new-event-start').value = '';
+      document.getElementById('new-event-end').value = '';
+      document.getElementById('new-event-start-time').value = '';
+      document.getElementById('new-event-end-time').value = '';
+      document.getElementById('new-event-max').value = '';
+      document.getElementById('new-event-notes').value = '';
+      sucEl.textContent = '✅ Event "' + data.event_name + '" created!';
+      sucEl.style.display = 'block';
+      setTimeout(() => sucEl.style.display = 'none', 5000);
+      loadEvents();
     }
 
     // ── Events ──
@@ -465,7 +519,10 @@
       const permissions = {
         view_passes: document.getElementById('mgr-edit-view-' + id).checked,
         create_delete_passes: document.getElementById('mgr-edit-create-' + id).checked,
-        edit_passes: document.getElementById('mgr-edit-editp-' + id).checked
+        edit_passes: document.getElementById('mgr-edit-editp-' + id).checked,
+        view_rsvps: document.getElementById('mgr-edit-view-rsvp-' + id).checked,
+        edit_rsvps: document.getElementById('mgr-edit-edit-rsvp-' + id).checked,
+        delete_rsvps: document.getElementById('mgr-edit-delete-rsvp-' + id).checked
       };
       const errEl = document.getElementById('mgr-edit-err-' + id);
       errEl.style.display = 'none';
@@ -495,12 +552,13 @@
       const max_passes = parseInt(document.getElementById('edit-max-' + id).value) || 50;
       const notes = document.getElementById('edit-notes-' + id).value.trim();
       const errEl = document.getElementById('edit-err-' + id);
-      if (!event_name || !start_date || !end_date) { errEl.textContent = 'Event name, start and end date are required'; errEl.style.display = 'block'; return; }
+      if (!event_name || !start_date) { errEl.textContent = 'Event name and start date are required'; errEl.style.display = 'block'; return; }
       errEl.style.display = 'none';
+      const resolved_end_date = end_date || start_date;
       const res = await fetch(EVENTS_API, {
         method: 'PATCH',
         headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, event_name, start_date, end_date, start_time, end_time, max_passes, notes })
+        body: JSON.stringify({ id, event_name, start_date, end_date: resolved_end_date, start_time, end_time, max_passes, notes })
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
