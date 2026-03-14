@@ -184,6 +184,63 @@
           <div id="rsvps-container"><div class="spinner"></div></div>
         </div>
       </div>
+
+      <div class="tab-panel" id="tab-managers">
+        <div class="card">
+          <h2>Add Manager</h2>
+          <div class="form-row">
+            <div class="form-group"><label>Username</label><input type="text" id="new-manager-username" placeholder="Username" /></div>
+            <div class="form-group"><label>Password</label><input type="password" id="new-manager-password" placeholder="Password" /></div>
+          </div>
+          <div style="margin-top:14px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">Permissions</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">Pass Permissions</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-view" checked> View passes</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-create"> Create &amp; delete passes</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-edit"> Edit passes</label>
+              <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:8px;margin-bottom:4px">RSVP Permissions</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-view-rsvp"> View RSVPs</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-edit-rsvp"> Edit number of guests</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-delete-rsvp"> Delete RSVPs</label>
+            </div>
+          </div>
+          <button class="btn-create" onclick="createManager()">Add Manager →</button>
+          <div id="manager-error" style="display:none;margin-top:10px;padding:10px 14px;background:#fef2f2;border-radius:10px;font-size:13px;color:#991b1b"></div>
+          <div id="manager-success" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border-radius:10px;font-size:13px;color:#166534"></div>
+        </div>
+        <div class="card">
+          <h2>Managers</h2>
+          <div id="managers-container"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-events">
+        <div class="card">
+          <h2>Add Event</h2>
+          <div class="form-row">
+            <div class="form-group" style="flex:2;min-width:180px"><label>Event Name</label><input type="text" id="new-event-name" placeholder="e.g. Swaminarayan Jayanti" /></div>
+            <div class="form-group"><label>Start Date</label><input type="text" id="new-event-start" placeholder="e.g. Sat, April 18, 2026" /></div>
+            <div class="form-group"><label>End Date (optional)</label><input type="text" id="new-event-end" placeholder="Leave blank if same day" /></div>
+          </div>
+          <div class="form-row" style="margin-top:10px">
+            <div class="form-group"><label>Start Time</label><input type="text" id="new-event-start-time" placeholder="e.g. 6:00 pm" /></div>
+            <div class="form-group"><label>End Time (optional)</label><input type="text" id="new-event-end-time" placeholder="e.g. 9:00 pm" /></div>
+            <div class="form-group"><label>Max Passes</label><input type="number" id="new-event-max" placeholder="50" min="1" /></div>
+          </div>
+          <div class="form-row" style="margin-top:10px">
+            <div class="form-group"><label>Notes (optional)</label><input type="text" id="new-event-notes" placeholder="Any additional info" /></div>
+          </div>
+          <button class="btn-create" onclick="addEvent()">Add Event →</button>
+          <div id="event-error" style="display:none;margin-top:10px;padding:10px 14px;background:#fef2f2;border-radius:10px;font-size:13px;color:#991b1b"></div>
+          <div id="event-success" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border-radius:10px;font-size:13px;color:#166534"></div>
+        </div>
+        <div class="card">
+          <h2>Events</h2>
+          <div id="events-container"><div class="spinner"></div></div>
+        </div>
+      </div>
+
     </div>
   </div>
   <script>
