@@ -16,7 +16,7 @@ const SUPERADMIN_PERMISSIONS = {
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
   const path = event.path.replace('/.netlify/functions/manager-auth', '') || '/';
 
   // POST /login

@@ -19,7 +19,7 @@ async function authenticate() {
 }
 
 async function authCheck(event) {
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
   const adminPassword = event.headers['x-admin-password'];
   const managerToken = event.headers['x-manager-token'];
   if (adminPassword === process.env.ADMIN_PASSWORD) {

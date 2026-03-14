@@ -10,7 +10,7 @@ exports.handler = async (event) => {
 
   const adminPassword = event.headers['x-admin-password'];
   const managerToken = event.headers['x-manager-token'];
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 
   // Check if superadmin (password or superadmin session token)
   let isSuperadmin = adminPassword === process.env.ADMIN_PASSWORD;

@@ -15,7 +15,7 @@ exports.handler = async (event) => {
 
   if (!isSuperadmin && managerToken) {
     const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
     const { data: session } = await supabase
       .from('manager_sessions')
       .select('manager_id, expires_at')
@@ -30,7 +30,7 @@ exports.handler = async (event) => {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 
   // GET — list all managers
   if (event.httpMethod === 'GET') {
