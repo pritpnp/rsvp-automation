@@ -37,7 +37,7 @@ exports.handler = async (event) => {
           token,
           expires_at
         }]);
-        if (insertErr) console.error('Session insert error:', insertErr.message); — we'll add it
+        if (insertErr) console.error('Session insert error:', insertErr.message);
         return { statusCode: 200, headers, body: JSON.stringify({
           token, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
         })};
