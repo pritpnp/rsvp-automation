@@ -70,7 +70,7 @@ async function main() {
   console.log('Deadlines loaded:', JSON.stringify(deadlines, null, 2));
 
   // Download responses from Google Sheet as CSV (no auth needed)
-  const SHEET_ID = '1OaLLmNaBQJ8lLSw3Y6qReao6tbHsjC7ADX7fCTDyXCc';
+  const SHEET_ID = process.env.GOOGLE_SHEET_ID;
   const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
   console.log('Downloading responses from Google Sheets...');
   const csvPath = '/tmp/responses.csv';
