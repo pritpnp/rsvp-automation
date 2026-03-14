@@ -591,7 +591,6 @@
     }
 
     // ── Events ──
-    const EVENTS_API = '/.netlify/functions/superadmin-events';
 
     async function loadEvents() {
       const res = await fetch(EVENTS_API, { headers: { 'x-manager-token': sessionToken } });
