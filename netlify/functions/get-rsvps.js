@@ -28,11 +28,13 @@ async function authCheck(event) {
   if (managerToken) {
     const { data: session } = await supabase
       .from('manager_sessions')
-      .select('expires_at, managers(permissions)')
+      .select('expires_at, managers(role, permissions)')
       .eq('token', managerToken)
       .single();
     if (session && new Date(session.expires_at) > new Date()) {
-      return { ok: true, permissions: session.managers.permissions || {} };
+      const isSuperadmin = session.managers?.role === 'superadmin';
+      if (isSuperadmin) return { ok: true, permissions: { view_rsvps: true, edit_rsvps: true, delete_rsvps: true } };
+      return { ok: true, permissions: session.managers?.permissions || {} };
     }
   }
   return { ok: false };
