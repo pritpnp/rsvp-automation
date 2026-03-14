@@ -101,13 +101,25 @@ exports.handler = async (event) => {
     }
 
     // Manager session — fetch manager details
-    const { data: session } = await supabase
+    const { data: session, error: sessionErr } = await supabase
       .from('manager_sessions')
       .select('manager_id, expires_at, managers(username, permissions)')
       .eq('token', token)
       .single();
 
-    if (!session) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session not found' }) };
+    if (sessionErr) console.error('Session fetch error:', sessionErr.message);
+    if (!session || !session.managers) {
+      // Fallback: fetch manager directly
+      const { data: manager } = await supabase
+        .from('managers')
+        .select('username, permissions')
+        .eq('id', rawSession.manager_id)
+        .single();
+      if (!manager) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Manager not found' }) };
+      return { statusCode: 200, headers, body: JSON.stringify({
+        valid: true, username: manager.username, role: 'manager', permissions: manager.permissions
+      })};
+    }
 
     return { statusCode: 200, headers, body: JSON.stringify({
       valid: true,
