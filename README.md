@@ -160,7 +160,7 @@ Desktop folder → repo slug mapping:
 - Secrets: `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`
 
 ### Google Sheets — "Parasabha RSVPs"
-- Sheet ID: `1OaLLmNaBQJ8lLSw3Y6qReao6tbHsjC7ADX7fCTDyXCc`
+- Sheet ID: `redacted`
 - Tab name: `responses`
 - Columns: `zone` | `name` | `guests` | `submitted` | `__PowerAppsId__`
 - Access: Public (fetched as CSV, no auth)

@@ -9,7 +9,7 @@ const SHEET_ID = '1OaLLmNaBQJ8lLSw3Y6qReao6tbHsjC7ADX7fCTDyXCc';
 const SHEET_TAB = 'responses';
 
 async function authenticate() {
-  const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+  const creds = JSON.parse(process.env.GOOG_SA_JSON);
   const auth = new google.auth.GoogleAuth({
     credentials: creds,
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
