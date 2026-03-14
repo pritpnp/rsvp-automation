@@ -140,6 +140,9 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 </head>
 <body>
   <div class="top-border"></div>
+  <a href="https://screvents.com" style="display:block;text-align:right;padding:8px 16px;background:rgba(92,45,10,0.06);border-bottom:1px solid rgba(200,134,10,0.12);text-decoration:none;">
+    <span style="font-size:12px;font-weight:500;color:#8B4513;letter-spacing:0.04em;">← Change Zone</span>
+  </a>
   <div class="header">
     <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneLabel + ' Zone'}</div>
   </div>
@@ -567,6 +570,7 @@ function buildHubPage(allFlyers, deadlines) {
       ? `<img src="data:image/png;base64,${bapsSansthaBase64}" style="max-width:200px;width:100%;display:block;margin:0 auto 8px;" alt="BAPS Swaminarayan Sanstha" />`
       : `<span class="footer-logo">BAPS Swaminarayan Sanstha</span>`}
     <a href="https://www.baps.org/Scranton" target="_blank" style="color:rgba(122,69,32,0.6);text-decoration:none;font-size:12px;letter-spacing:0.04em;">www.baps.org/Scranton</a>
+    <div style="margin-top:16px;"><a href="/admin" style="font-size:11px;color:rgba(122,69,32,0.35);text-decoration:none;letter-spacing:0.06em;border:1px solid rgba(122,69,32,0.15);padding:4px 12px;border-radius:20px;">Admin Portal</a></div>
   </footer>
 </body>
 </html>`;
