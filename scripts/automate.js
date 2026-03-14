@@ -39,16 +39,17 @@ async function extractEventInfo(flyerPath) {
   // Compress image to JPEG under 4MB before sending to Claude API (5MB limit)
   const MAX_BYTES = 4 * 1024 * 1024;
   let imageBuffer = fs.readFileSync(flyerPath);
+  let mediaType = path.extname(flyerPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
   if (imageBuffer.length > MAX_BYTES) {
     console.log(`⚠️  Flyer is ${Math.round(imageBuffer.length/1024/1024*10)/10}MB — compressing for OCR...`);
     imageBuffer = await sharp(flyerPath)
       .resize({ width: 1800, withoutEnlargement: true })
       .jpeg({ quality: 85 })
       .toBuffer();
+    mediaType = 'image/jpeg';
     console.log(`✅ Compressed to ${Math.round(imageBuffer.length/1024)}KB for OCR`);
   }
   const base64Image = imageBuffer.toString('base64');
-  const mediaType = 'image/jpeg';
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 1000,
