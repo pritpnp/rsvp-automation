@@ -772,6 +772,7 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
 
   for (const { zone, html, flyerPath } of pages) {
     const isMandirSlot = MANDIR_SLOTS.includes(zone);
+    const isMandirStyle = isMandirSlot || zone === 'satsang-sabha'; // uses buildMandirPage
     const basePath = isMandirSlot ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
 
     // HTML page
@@ -784,7 +785,7 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     // No-preview version
     const pageData = pages.find(p => p.zone === zone);
     if (pageData) {
-      const npHtml = isMandirSlot
+      const npHtml = isMandirStyle
         ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true)
         : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true);
       const npFilePath = `/np${basePath}/index.html`;
