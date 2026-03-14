@@ -184,9 +184,9 @@
     </div>
   </div>
   <script>
-    let sessionToken = sessionStorage.getItem('admin_token') || '';
-    let sessionRole = sessionStorage.getItem('admin_role') || 'manager';
-    let sessionPermissions = JSON.parse(sessionStorage.getItem('admin_permissions') || '{"view_passes":true,"create_delete_passes":false,"edit_passes":false,"view_rsvps":false,"edit_rsvps":false,"delete_rsvps":false}');
+    let sessionToken = localStorage.getItem('admin_token') || '';
+    let sessionRole = localStorage.getItem('admin_role') || 'manager';
+    let sessionPermissions = JSON.parse(localStorage.getItem('admin_permissions') || '{"view_passes":true,"create_delete_passes":false,"edit_passes":false,"view_rsvps":false,"edit_rsvps":false,"delete_rsvps":false}');
     const PASSES_API = '/.netlify/functions/admin-passes';
     const AUTH_API = '/.netlify/functions/manager-auth';
     const EVENTS_API = '/.netlify/functions/superadmin-events';
@@ -202,20 +202,20 @@
           if (d.valid) {
             sessionRole = d.role;
             sessionPermissions = d.permissions;
-            sessionStorage.setItem('admin_role', d.role);
-            sessionStorage.setItem('admin_permissions', JSON.stringify(d.permissions));
+            localStorage.setItem('admin_role', d.role);
+            localStorage.setItem('admin_permissions', JSON.stringify(d.permissions));
             showAdmin(d.username, d.permissions, d.role);
           } else {
-            sessionStorage.clear();
+            localStorage.clear();
             window.location.replace('/login');
           }
         })
-        .catch(() => { sessionStorage.clear(); window.location.replace('/login'); });
+        .catch(() => { localStorage.clear(); window.location.replace('/login'); });
     }
 
         async function logout() {
       if (sessionToken) await fetch(AUTH_API + '/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sessionToken }) }).catch(() => {});
-      sessionStorage.clear();
+      localStorage.clear();
       window.location.replace('/login');
     }
 
@@ -709,7 +709,7 @@
 </html>    function showAdmin(username, permissions, role) {
       if (permissions) {
         sessionPermissions = permissions;
-        sessionStorage.setItem('admin_permissions', JSON.stringify(permissions));
+        localStorage.setItem('admin_permissions', JSON.stringify(permissions));
       }
       const isSuperadmin = role === 'superadmin';
       selectedEventId = null;
