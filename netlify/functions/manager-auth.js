@@ -82,22 +82,32 @@ exports.handler = async (event) => {
     const token = event.queryStringParameters?.token;
     if (!token) return { statusCode: 401, headers, body: JSON.stringify({ error: 'No token' }) };
 
+    // First check if it's a superadmin session (no manager_id)
+    const { data: rawSession } = await supabase
+      .from('manager_sessions')
+      .select('manager_id, expires_at')
+      .eq('token', token)
+      .single();
+
+    if (!rawSession || new Date(rawSession.expires_at) < new Date()) {
+      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session expired' }) };
+    }
+
+    // Superadmin session — manager_id is null
+    if (!rawSession.manager_id) {
+      return { statusCode: 200, headers, body: JSON.stringify({
+        valid: true, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
+      })};
+    }
+
+    // Manager session — fetch manager details
     const { data: session } = await supabase
       .from('manager_sessions')
       .select('manager_id, expires_at, managers(username, permissions)')
       .eq('token', token)
       .single();
 
-    if (!session || new Date(session.expires_at) < new Date()) {
-      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session expired' }) };
-    }
-
-    // Superadmin session (no manager_id)
-    if (!session.manager_id) {
-      return { statusCode: 200, headers, body: JSON.stringify({
-        valid: true, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
-      })};
-    }
+    if (!session) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session not found' }) };
 
     return { statusCode: 200, headers, body: JSON.stringify({
       valid: true,
