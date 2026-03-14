@@ -214,6 +214,32 @@
         .catch(e => { console.log('Verify error:', e); setTimeout(() => { localStorage.clear(); window.location.replace('/login'); }, 5000); });
     }
 
+    function showAdmin(username, permissions, role) {
+      if (permissions) {
+        sessionPermissions = permissions;
+        localStorage.setItem('admin_permissions', JSON.stringify(permissions));
+      }
+      const isSuperadmin = role === 'superadmin';
+      selectedEventId = null;
+      document.getElementById('event-picker-card').style.display = 'block';
+      document.getElementById('pass-create-section').style.display = 'none';
+      document.getElementById('welcome-text').textContent = 'Signed in as ' + username;
+
+      // Build tabs dynamically based on role/permissions
+      const tabsEl = document.getElementById('admin-tabs');
+      let tabsHtml = '<button class="tab-btn active" onclick="switchTab(\'passes\', this)">🎟 VIP Passes</button>';
+      if (permissions.view_rsvps || isSuperadmin) tabsHtml += '<button class="tab-btn" onclick="switchTab(\'rsvps\', this)">📋 RSVPs</button>';
+      if (isSuperadmin) {
+        tabsHtml += '<button class="tab-btn" onclick="switchTab(\'managers\', this)">👤 Managers</button>';
+        tabsHtml += '<button class="tab-btn" onclick="switchTab(\'events\', this)">📅 Events</button>';
+      }
+      tabsEl.innerHTML = tabsHtml;
+
+      document.getElementById('admin-screen').style.display = 'block';
+      loadEventPicker();
+      if (isSuperadmin) { loadManagers(); loadEvents(); }
+    }
+
         async function logout() {
       if (sessionToken) await fetch(AUTH_API + '/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sessionToken }) }).catch(() => {});
       localStorage.clear();
