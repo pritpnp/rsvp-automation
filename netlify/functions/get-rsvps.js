@@ -22,16 +22,20 @@ async function authCheck(event) {
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
   const adminPassword = event.headers['x-admin-password'];
   const managerToken = event.headers['x-manager-token'];
-  if (adminPassword === process.env.ADMIN_PASSWORD) return true;
+  if (adminPassword === process.env.ADMIN_PASSWORD) {
+    return { ok: true, permissions: { view_rsvps: true, edit_rsvps: true, delete_rsvps: true } };
+  }
   if (managerToken) {
     const { data: session } = await supabase
       .from('manager_sessions')
-      .select('expires_at')
+      .select('expires_at, managers(permissions)')
       .eq('token', managerToken)
       .single();
-    if (session && new Date(session.expires_at) > new Date()) return true;
+    if (session && new Date(session.expires_at) > new Date()) {
+      return { ok: true, permissions: session.managers.permissions || {} };
+    }
   }
-  return false;
+  return { ok: false };
 }
 
 async function getRows(sheets) {
@@ -45,14 +49,16 @@ async function getRows(sheets) {
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
-  const authed = await authCheck(event);
-  if (!authed) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+  const authResult = await authCheck(event);
+  if (!authResult.ok) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+  const perms = authResult.permissions;
 
   const auth = await authenticate();
   const sheets = google.sheets({ version: 'v4', auth });
 
   // GET — fetch all RSVPs
   if (event.httpMethod === 'GET') {
+    if (!perms.view_rsvps) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to view RSVPs' }) };
     const rows = await getRows(sheets);
     const dataRows = rows[0]?.[0]?.toLowerCase() === 'zone' ? rows.slice(1) : rows;
     const rsvps = dataRows
@@ -69,6 +75,7 @@ exports.handler = async (event) => {
 
   // PATCH — update guests count for a row
   if (event.httpMethod === 'PATCH') {
+    if (!perms.edit_rsvps) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to edit RSVPs' }) };
     const { powerapps_id, guests } = JSON.parse(event.body);
     if (!powerapps_id || guests === undefined) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
@@ -87,8 +94,9 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 
-  // DELETE — remove a row
+  // DELETE — update guests count for a row
   if (event.httpMethod === 'DELETE') {
+    if (!perms.edit_rsvps) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to edit RSVPs' }) };
     const { powerapps_id } = JSON.parse(event.body);
     if (!powerapps_id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
     const rows = await getRows(sheets);
