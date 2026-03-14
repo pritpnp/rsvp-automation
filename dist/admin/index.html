@@ -199,6 +199,7 @@
       fetch(AUTH_API + '/verify?token=' + sessionToken)
         .then(r => r.json())
         .then(d => {
+          console.log('VERIFY RESPONSE:', JSON.stringify(d));
           if (d.valid) {
             sessionRole = d.role;
             sessionPermissions = d.permissions;
@@ -206,11 +207,11 @@
             localStorage.setItem('admin_permissions', JSON.stringify(d.permissions));
             showAdmin(d.username, d.permissions, d.role);
           } else {
-            localStorage.clear();
-            window.location.replace('/login');
+            console.log('Verify failed, redirecting in 5s...');
+            setTimeout(() => { localStorage.clear(); window.location.replace('/login'); }, 5000);
           }
         })
-        .catch(() => { localStorage.clear(); window.location.replace('/login'); });
+        .catch(e => { console.log('Verify error:', e); setTimeout(() => { localStorage.clear(); window.location.replace('/login'); }, 5000); });
     }
 
         async function logout() {
