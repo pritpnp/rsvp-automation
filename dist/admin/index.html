@@ -112,6 +112,15 @@
 
     /* Success message pop */
     .success-msg { animation: slideDown 0.25s ease both; }
+
+    .rsvp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .rsvp-table th { text-align: left; font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); padding: 8px 12px; border-bottom: 1px solid var(--cream-dark); }
+    .rsvp-table td { padding: 10px 12px; border-bottom: 1px solid rgba(200,134,10,0.08); color: var(--brown); vertical-align: middle; }
+    .rsvp-table tr:last-child td { border-bottom: none; }
+    .rsvp-table tr:hover td { background: var(--cream); }
+    .zone-pill { display: inline-block; background: rgba(200,134,10,0.1); color: var(--gold); border: 1px solid rgba(200,134,10,0.25); font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+    .btn-delete-sm { background: none; border: 1px solid #fca5a5; color: #dc2626; border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+    .btn-delete-sm:hover { background: #fef2f2; }
   </style>
 </head>
 <body>
@@ -164,6 +173,20 @@
       <div class="tab-panel" id="tab-rsvps">
         <div class="card">
           <h2>RSVP Responses</h2>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+            <input type="text" id="rsvp-search" placeholder="Search by name..." oninput="filterRsvps()"
+              style="flex:2;min-width:160px;padding:9px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream)" />
+            <select id="rsvp-zone-filter" onchange="filterRsvps()"
+              style="flex:1;min-width:130px;padding:9px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
+              <option value="">All Zones</option>
+              <option value="Scranton">Scranton</option>
+              <option value="Mountain Top">Mountain Top</option>
+              <option value="Satsang Sabha">Satsang Sabha</option>
+              <option value="Moosic">Moosic</option>
+              <option value="Bloomsburg">Bloomsburg</option>
+            </select>
+          </div>
+          <div id="rsvp-summary" style="font-size:13px;color:var(--text-muted);margin-bottom:12px"></div>
           <div id="rsvps-container"><div class="spinner"></div></div>
         </div>
       </div>
@@ -320,10 +343,67 @@
       document.getElementById('pass-' + id)?.remove();
     }
 
+    let allRsvps = [];
+
     async function loadRsvps() {
       const c = document.getElementById('rsvps-container');
       c.innerHTML = '<div class="spinner"></div>';
-      c.innerHTML = '<div class="empty-state">RSVP integration coming soon.</div>';
+      try {
+        const res = await fetch('/.netlify/functions/get-rsvps', {
+          headers: { 'x-manager-token': sessionToken }
+        });
+        if (!res.ok) throw new Error();
+        allRsvps = await res.json();
+        filterRsvps();
+      } catch {
+        c.innerHTML = '<div class="empty-state">Failed to load RSVPs.</div>';
+      }
+    }
+
+    function filterRsvps() {
+      const search = document.getElementById('rsvp-search').value.toLowerCase();
+      const zone = document.getElementById('rsvp-zone-filter').value.toLowerCase();
+      const filtered = allRsvps.filter(r =>
+        (!search || r.name.toLowerCase().includes(search)) &&
+        (!zone || r.zone.toLowerCase().includes(zone))
+      );
+      renderRsvps(filtered);
+    }
+
+    function renderRsvps(rsvps) {
+      const c = document.getElementById('rsvps-container');
+      const summary = document.getElementById('rsvp-summary');
+      const total = rsvps.reduce((sum, r) => sum + (parseInt(r.guests) || 1), 0);
+      summary.textContent = `${rsvps.length} response${rsvps.length !== 1 ? 's' : ''} · ${total} guest${total !== 1 ? 's' : ''} total`;
+
+      if (!rsvps.length) { c.innerHTML = '<div class="empty-state">No RSVPs found.</div>'; return; }
+
+      c.innerHTML = '<div style="overflow-x:auto"><table class="rsvp-table">' +
+        '<thead><tr><th>Name</th><th>Zone</th><th>Guests</th><th>Submitted</th><th></th></tr></thead>' +
+        '<tbody>' + rsvps.map(r => `
+          <tr id="rsvp-${r.powerapps_id}">
+            <td>${r.name}</td>
+            <td><span class="zone-pill">${r.zone}</span></td>
+            <td>${r.guests}</td>
+            <td>${r.submitted ? new Date(r.submitted).toLocaleDateString() : '—'}</td>
+            <td><button class="btn-delete-sm" onclick="deleteRsvp('${r.powerapps_id}', '${r.name.replace(/'/g, "\'")}')">Remove</button></td>
+          </tr>`).join('') +
+        '</tbody></table></div>';
+    }
+
+    async function deleteRsvp(id, name) {
+      if (!confirm('Remove RSVP for ' + name + '?')) return;
+      const res = await fetch('/.netlify/functions/get-rsvps', {
+        method: 'DELETE',
+        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ powerapps_id: id })
+      });
+      if (res.ok) {
+        allRsvps = allRsvps.filter(r => r.powerapps_id !== id);
+        filterRsvps();
+      } else {
+        alert('Failed to remove RSVP');
+      }
     }
 
     function toggleEditPass(id) {
