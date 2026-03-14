@@ -384,11 +384,58 @@
           <tr id="rsvp-${r.powerapps_id}">
             <td>${r.name}</td>
             <td><span class="zone-pill">${r.zone}</span></td>
-            <td>${r.guests}</td>
+            <td id="guests-display-${r.powerapps_id}">
+              <span id="guests-val-${r.powerapps_id}">${r.guests}</span>
+              <button onclick="startEditGuests('${r.powerapps_id}', '${r.guests}')"
+                style="background:none;border:none;color:var(--gold);font-size:11px;cursor:pointer;margin-left:6px;padding:0;font-family:'DM Sans',sans-serif">Edit</button>
+              <span id="guests-edit-${r.powerapps_id}" style="display:none">
+                <input type="number" min="1" id="guests-input-${r.powerapps_id}"
+                  style="width:50px;padding:3px 6px;border:1px solid var(--cream-dark);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif" />
+                <button onclick="saveGuests('${r.powerapps_id}')"
+                  style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px">Save</button>
+                <button onclick="cancelEditGuests('${r.powerapps_id}', '${r.guests}')"
+                  style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:2px">✕</button>
+              </span>
+            </td>
             <td>${r.submitted ? new Date(r.submitted).toLocaleDateString() : '—'}</td>
             <td><button class="btn-delete-sm" onclick="deleteRsvp('${r.powerapps_id}', '${r.name.replace(/'/g, "\'")}')">Remove</button></td>
           </tr>`).join('') +
         '</tbody></table></div>';
+    }
+
+    function startEditGuests(id, current) {
+      document.getElementById('guests-val-' + id).style.display = 'none';
+      document.getElementById('guests-edit-' + id).style.display = 'inline';
+      const input = document.getElementById('guests-input-' + id);
+      input.value = current;
+      input.focus();
+    }
+
+    function cancelEditGuests(id, original) {
+      document.getElementById('guests-val-' + id).style.display = 'inline';
+      document.getElementById('guests-edit-' + id).style.display = 'none';
+    }
+
+    async function saveGuests(id) {
+      const guests = document.getElementById('guests-input-' + id).value;
+      if (!guests || parseInt(guests) < 1) return;
+      const res = await fetch('/.netlify/functions/get-rsvps', {
+        method: 'PATCH',
+        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ powerapps_id: id, guests })
+      });
+      if (res.ok) {
+        // Update in local array and re-render
+        const entry = allRsvps.find(r => r.powerapps_id === id);
+        if (entry) entry.guests = guests;
+        document.getElementById('guests-val-' + id).textContent = guests;
+        document.getElementById('guests-val-' + id).style.display = 'inline';
+        document.getElementById('guests-edit-' + id).style.display = 'none';
+        // Update summary
+        filterRsvps();
+      } else {
+        alert('Failed to save');
+      }
     }
 
     async function deleteRsvp(id, name) {
