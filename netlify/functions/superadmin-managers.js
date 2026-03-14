@@ -10,7 +10,23 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
   const adminPassword = event.headers['x-admin-password'];
-  if (adminPassword !== process.env.ADMIN_PASSWORD) {
+  const managerToken = event.headers['x-manager-token'];
+  let isSuperadmin = adminPassword === process.env.ADMIN_PASSWORD;
+
+  if (!isSuperadmin && managerToken) {
+    const { createClient } = require('@supabase/supabase-js');
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const { data: session } = await supabase
+      .from('manager_sessions')
+      .select('manager_id, expires_at')
+      .eq('token', managerToken)
+      .single();
+    if (session && !session.manager_id && new Date(session.expires_at) > new Date()) {
+      isSuperadmin = true;
+    }
+  }
+
+  if (!isSuperadmin) {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 

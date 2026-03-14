@@ -7,6 +7,12 @@ const headers = {
   'Content-Type': 'application/json'
 };
 
+const SUPERADMIN_PERMISSIONS = {
+  view_passes: true, create_delete_passes: true, edit_passes: true,
+  view_rsvps: true, edit_rsvps: true, delete_rsvps: true,
+  manage_managers: true, manage_events: true
+};
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
@@ -20,6 +26,26 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
 
+    // Superadmin check
+    if (username.toLowerCase().trim() === 'admin') {
+      if (password === process.env.ADMIN_PASSWORD) {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        // Store superadmin session in a special way
+        await supabase.from('manager_sessions').insert([{
+          manager_id: null,
+          token,
+          expires_at,
+          is_superadmin: true
+        }]).catch(() => {}); // ignore if is_superadmin column doesn't exist yet — we'll add it
+        return { statusCode: 200, headers, body: JSON.stringify({
+          token, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
+        })};
+      }
+      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid username or password' }) };
+    }
+
+    // Manager check
     const { data: manager, error } = await supabase
       .from('managers')
       .select('id, username, password_hash, permissions')
@@ -35,13 +61,13 @@ exports.handler = async (event) => {
       return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid username or password' }) };
     }
 
-    // Create session token (expires in 24 hours)
     const token = crypto.randomBytes(32).toString('hex');
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
     await supabase.from('manager_sessions').insert([{ manager_id: manager.id, token, expires_at }]);
 
-    return { statusCode: 200, headers, body: JSON.stringify({ token, username: manager.username, permissions: manager.permissions }) };
+    return { statusCode: 200, headers, body: JSON.stringify({
+      token, username: manager.username, role: 'manager', permissions: manager.permissions
+    })};
   }
 
   // POST /logout
@@ -66,7 +92,19 @@ exports.handler = async (event) => {
       return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session expired' }) };
     }
 
-    return { statusCode: 200, headers, body: JSON.stringify({ valid: true, username: session.managers.username, permissions: session.managers.permissions }) };
+    // Superadmin session (no manager_id)
+    if (!session.manager_id) {
+      return { statusCode: 200, headers, body: JSON.stringify({
+        valid: true, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
+      })};
+    }
+
+    return { statusCode: 200, headers, body: JSON.stringify({
+      valid: true,
+      username: session.managers.username,
+      role: 'manager',
+      permissions: session.managers.permissions
+    })};
   }
 
   return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };

@@ -125,16 +125,7 @@
 </head>
 <body>
   <div class="top-border"></div>
-  <div id="login-screen">
-    <div class="login-card">
-      <h1>Admin Portal</h1>
-      <input type="text" id="username-input" placeholder="Username" onkeydown="if(event.key==='Enter')login()" />
-      <input type="password" id="password-input" placeholder="Password" onkeydown="if(event.key==='Enter')login()" />
-      <button class="btn-primary" onclick="login()">Sign In</button>
-      <div class="login-error" id="login-error">Invalid username or password</div>
-    </div>
-  </div>
-  <div id="admin-screen">
+  <div id="admin-screen" style="display:none">
     <div class="admin-header">
       <div>
         <h1>Admin Portal</h1>
@@ -142,7 +133,7 @@
       </div>
       <button class="logout-btn" onclick="logout()">Sign Out</button>
     </div>
-    <div class="tabs">
+    <div class="tabs" id="admin-tabs">
       <button class="tab-btn active" onclick="switchTab('passes', this)">🎟 VIP Passes</button>
       <button class="tab-btn" onclick="switchTab('rsvps', this)">📋 RSVPs</button>
     </div>
@@ -193,57 +184,39 @@
     </div>
   </div>
   <script>
-    let sessionToken = sessionStorage.getItem('manager_token') || '';
-    let sessionPermissions = JSON.parse(sessionStorage.getItem('manager_permissions') || '{"view_passes":true,"create_delete_passes":false,"edit_passes":false}');
+    let sessionToken = sessionStorage.getItem('admin_token') || '';
+    let sessionRole = sessionStorage.getItem('admin_role') || 'manager';
+    let sessionPermissions = JSON.parse(sessionStorage.getItem('admin_permissions') || '{"view_passes":true,"create_delete_passes":false,"edit_passes":false,"view_rsvps":false,"edit_rsvps":false,"delete_rsvps":false}');
     const PASSES_API = '/.netlify/functions/admin-passes';
     const AUTH_API = '/.netlify/functions/manager-auth';
     const EVENTS_API = '/.netlify/functions/superadmin-events';
+    const MANAGERS_API = '/.netlify/functions/superadmin-managers';
 
-    if (sessionToken) {
+    // Redirect to /login if no token
+    if (!sessionToken) {
+      window.location.replace('/login');
+    } else {
       fetch(AUTH_API + '/verify?token=' + sessionToken)
         .then(r => r.json())
-        .then(d => { if (d.valid) showAdmin(d.username, d.permissions); else { sessionToken = ''; sessionStorage.clear(); } })
-        .catch(() => { sessionToken = ''; sessionStorage.clear(); });
+        .then(d => {
+          if (d.valid) {
+            sessionRole = d.role;
+            sessionPermissions = d.permissions;
+            sessionStorage.setItem('admin_role', d.role);
+            sessionStorage.setItem('admin_permissions', JSON.stringify(d.permissions));
+            showAdmin(d.username, d.permissions, d.role);
+          } else {
+            sessionStorage.clear();
+            window.location.replace('/login');
+          }
+        })
+        .catch(() => { sessionStorage.clear(); window.location.replace('/login'); });
     }
 
-    async function login() {
-      const username = document.getElementById('username-input').value.trim();
-      const password = document.getElementById('password-input').value;
-      if (!username || !password) return;
-      const res = await fetch(AUTH_API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-      const data = await res.json();
-      if (!res.ok) { document.getElementById('login-error').style.display = 'block'; return; }
-      sessionToken = data.token;
-      sessionStorage.setItem('manager_token', sessionToken);
-      sessionStorage.setItem('manager_username', data.username);
-      showAdmin(data.username, data.permissions);
-    }
-
-    function showAdmin(username, permissions) {
-      if (permissions) {
-        sessionPermissions = permissions;
-        sessionStorage.setItem('manager_permissions', JSON.stringify(permissions));
-      }
-      // Always reset to event selection on login
-      selectedEventId = null;
-      document.getElementById('event-picker-card').style.display = 'block';
-      document.getElementById('pass-create-section').style.display = 'none';
-      // Reset to VIP Passes tab
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('tab-passes').classList.add('active');
-      document.querySelector('.tab-btn').classList.add('active');
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('admin-screen').style.display = 'block';
-      document.getElementById('login-error').style.display = 'none';
-      document.getElementById('welcome-text').textContent = 'Signed in as ' + username;
-      loadEventPicker();
-    }
-
-    async function logout() {
-      if (sessionToken) await fetch(AUTH_API + '/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sessionToken }) });
-      sessionToken = ''; sessionStorage.clear();
-      window.location.reload();
+        async function logout() {
+      if (sessionToken) await fetch(AUTH_API + '/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sessionToken }) }).catch(() => {});
+      sessionStorage.clear();
+      window.location.replace('/login');
     }
 
     function switchTab(tab, btn) {
@@ -476,6 +449,287 @@
         alert(d.error || 'Failed to save');
       }
     }
+
+    function superadminHeaders() {
+      return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' };
+    }
+    // ── Managers ──
+    async function loadManagers() {
+      const res = await fetch(MANAGERS_API, { headers: { 'x-manager-token': sessionToken } });
+      const managers = await res.json();
+      renderManagers(managers);
+    }
+
+    function permLabel(p) {
+      const labels = [];
+      if (p?.view_passes) labels.push('View Passes');
+      if (p?.create_delete_passes) labels.push('Create/Delete Passes');
+      if (p?.edit_passes) labels.push('Edit Passes');
+      if (p?.view_rsvps) labels.push('View RSVPs');
+      if (p?.edit_rsvps) labels.push('Edit RSVPs');
+      if (p?.delete_rsvps) labels.push('Delete RSVPs');
+      return labels.length ? labels.join(', ') : 'No permissions';
+    }
+
+    function renderManagers(managers) {
+      const c = document.getElementById('managers-container');
+      if (!managers.length) { c.innerHTML = '<div class="empty-state">No managers yet.</div>'; return; }
+      c.innerHTML = '<div class="item-list">' + managers.map(m => `
+        <div class="item" id="mgr-${m.id}" style="flex-direction:column;align-items:stretch;gap:10px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="item-info">
+              <div class="item-name">${m.username} <span class="role-badge">Manager</span></div>
+              <div class="item-sub">Added ${new Date(m.created_at).toLocaleDateString()} · ${permLabel(m.permissions)}</div>
+            </div>
+            <button onclick="toggleEditManager('${m.id}', ${JSON.stringify(m).replace(/"/g, '&quot;')})" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0">Edit</button>
+            <button class="btn-delete" onclick="deleteManager('${m.id}')">Remove</button>
+          </div>
+          <div id="mgr-edit-${m.id}" style="display:none;background:var(--cream);border-radius:10px;padding:14px">
+            <div class="form-row">
+              <div class="form-group"><label>Username</label><input type="text" id="mgr-edit-username-${m.id}" value="${m.username}" /></div>
+              <div class="form-group"><label>New Password</label><input type="password" id="mgr-edit-password-${m.id}" placeholder="Leave blank to keep" /></div>
+            </div>
+            <div style="margin-top:12px">
+              <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Permissions</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Pass Permissions</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-view-${m.id}" ${m.permissions?.view_passes ? 'checked' : ''}> View passes</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-create-${m.id}" ${m.permissions?.create_delete_passes ? 'checked' : ''}> Create &amp; delete passes</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-editp-${m.id}" ${m.permissions?.edit_passes ? 'checked' : ''}> Edit passes</label>
+                <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:10px;margin-bottom:6px">RSVP Permissions</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-view-rsvp-${m.id}" ${m.permissions?.view_rsvps ? 'checked' : ''}> View RSVPs</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-edit-rsvp-${m.id}" ${m.permissions?.edit_rsvps ? 'checked' : ''}> Edit number of guests</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-delete-rsvp-${m.id}" ${m.permissions?.delete_rsvps ? 'checked' : ''}> Delete RSVPs</label>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button onclick="saveManager('${m.id}')" style="padding:8px 20px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
+              <button onclick="toggleEditManager('${m.id}')" style="padding:8px 16px;background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">Cancel</button>
+            </div>
+            <div id="mgr-edit-err-${m.id}" style="display:none;margin-top:8px;color:#991b1b;font-size:12px"></div>
+          </div>
+        </div>`).join('') + '</div>';
+    }
+
+    async function createManager() {
+      const username = document.getElementById('new-manager-username').value.trim();
+      const password = document.getElementById('new-manager-password').value;
+      const errEl = document.getElementById('manager-error');
+      const sucEl = document.getElementById('manager-success');
+      errEl.style.display = 'none';
+      if (!username || !password) { errEl.textContent = 'Please fill in both fields'; errEl.style.display = 'block'; return; }
+      const permissions = {
+        view_passes: document.getElementById('new-perm-view').checked,
+        create_delete_passes: document.getElementById('new-perm-create').checked,
+        edit_passes: document.getElementById('new-perm-edit').checked,
+        view_rsvps: document.getElementById('new-perm-view-rsvp').checked,
+        edit_rsvps: document.getElementById('new-perm-edit-rsvp').checked,
+        delete_rsvps: document.getElementById('new-perm-delete-rsvp').checked
+      };
+      const res = await fetch(MANAGERS_API, {
+        method: 'POST',
+        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, permissions })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+      document.getElementById('new-manager-username').value = '';
+      document.getElementById('new-manager-password').value = '';
+      document.getElementById('new-perm-create').checked = false;
+      document.getElementById('new-perm-edit').checked = false;
+      document.getElementById('new-perm-view-rsvp').checked = false;
+      document.getElementById('new-perm-edit-rsvp').checked = false;
+      document.getElementById('new-perm-delete-rsvp').checked = false;
+      sucEl.textContent = `✅ Manager "${data.username}" added. They can log in at screvents.com/admin`;
+      sucEl.style.display = 'block';
+      setTimeout(() => sucEl.style.display = 'none', 6000);
+      loadManagers();
+    }
+
+    async function deleteManager(id) {
+      if (!confirm('Remove this manager?')) return;
+      await fetch(MANAGERS_API, {
+        method: 'DELETE',
+        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      document.getElementById(`mgr-${id}`)?.remove();
+    }
+
+
+    async function addEvent() {
+      const event_name = document.getElementById('new-event-name').value.trim();
+      const start_date = document.getElementById('new-event-start').value.trim();
+      const end_date = document.getElementById('new-event-end').value.trim();
+      const start_time = document.getElementById('new-event-start-time').value.trim();
+      const end_time = document.getElementById('new-event-end-time').value.trim();
+      const max_passes = parseInt(document.getElementById('new-event-max').value) || 50;
+      const notes = document.getElementById('new-event-notes').value.trim();
+      const errEl = document.getElementById('event-error');
+      const sucEl = document.getElementById('event-success');
+      errEl.style.display = 'none';
+      if (!event_name || !start_date) { errEl.textContent = 'Please fill in Event Name and Start Date'; errEl.style.display = 'block'; return; }
+      const resolved_end_date = end_date || start_date;
+      const res = await fetch(EVENTS_API, {
+        method: 'POST',
+        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_name, start_date, end_date: resolved_end_date, start_time, end_time, max_passes, notes })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+      document.getElementById('new-event-name').value = '';
+      document.getElementById('new-event-start').value = '';
+      document.getElementById('new-event-end').value = '';
+      document.getElementById('new-event-start-time').value = '';
+      document.getElementById('new-event-end-time').value = '';
+      document.getElementById('new-event-max').value = '';
+      document.getElementById('new-event-notes').value = '';
+      sucEl.textContent = '✅ Event "' + data.event_name + '" created!';
+      sucEl.style.display = 'block';
+      setTimeout(() => sucEl.style.display = 'none', 5000);
+      loadEvents();
+    }
+
+    // ── Events ──
+    const EVENTS_API = '/.netlify/functions/superadmin-events';
+
+    async function loadEvents() {
+      const res = await fetch(EVENTS_API, { headers: { 'x-manager-token': sessionToken } });
+      const events = await res.json();
+      renderEvents(events);
+    }
+
+    function renderEvents(events) {
+      const c = document.getElementById('events-container');
+      if (!events.length) { c.innerHTML = '<div class="empty-state">No events yet.</div>'; return; }
+      c.innerHTML = '<div class="item-list">' + events.map(e => `
+        <div class="item" id="evt-${e.id}" style="flex-direction:column;align-items:stretch;gap:10px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="item-info">
+              <div class="item-name">${e.event_name}</div>
+              <div class="item-sub">${e.start_date}${e.end_date !== e.start_date ? ' — ' + e.end_date : ''}${e.start_time ? ' · ' + (e.end_time ? e.start_time + ' – ' + e.end_time : e.start_time) : ''} · Max ${e.max_passes} passes</div>
+              ${e.notes ? `<div class="item-sub" style="margin-top:2px;font-style:italic">${e.notes}</div>` : ''}
+            </div>
+            <button onclick="toggleEditEvent('${e.id}')" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0">Edit</button>
+            <button class="btn-delete" onclick="deleteEvent('${e.id}')">Delete</button>
+          </div>
+          <div id="edit-${e.id}" style="display:none;background:var(--cream);border-radius:10px;padding:14px">
+            <div class="form-row">
+              <div class="form-group" style="flex:2;min-width:160px"><label>Event Name</label><input type="text" id="edit-name-${e.id}" value="${e.event_name}" /></div>
+              <div class="form-group"><label>Start Date</label><input type="text" id="edit-start-${e.id}" value="${e.start_date}" /></div>
+              <div class="form-group"><label>End Date</label><input type="text" id="edit-end-${e.id}" value="${e.end_date}" /></div>
+            </div>
+            <div class="form-row" style="margin-top:8px">
+              <div class="form-group"><label>Start Time</label><input type="text" id="edit-start-time-${e.id}" value="${e.start_time || ''}" placeholder="e.g. 6:00 pm" /></div>
+              <div class="form-group"><label>End Time (optional)</label><input type="text" id="edit-end-time-${e.id}" value="${e.end_time || ''}" placeholder="e.g. 9:00 pm" /></div>
+              <div class="form-group"><label>Max Passes</label><input type="number" id="edit-max-${e.id}" value="${e.max_passes}" min="1" /></div>
+            </div>
+            <div class="form-row" style="margin-top:8px">
+              <div class="form-group"><label>Notes</label><input type="text" id="edit-notes-${e.id}" value="${e.notes || ''}" /></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button onclick="saveEvent('${e.id}')" style="padding:8px 20px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
+              <button onclick="toggleEditEvent('${e.id}')" style="padding:8px 16px;background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">Cancel</button>
+            </div>
+            <div id="edit-err-${e.id}" style="display:none;margin-top:8px;color:#991b1b;font-size:12px"></div>
+          </div>
+        </div>`).join('') + '</div>';
+    }
+
+    
+    async function deleteEvent(id) {
+      if (!confirm('Delete this event? All associated passes will be unlinked.')) return;
+      await fetch(EVENTS_API, {
+        method: 'DELETE',
+        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      document.getElementById('evt-' + id)?.remove();
+    }
+
+
+    function toggleEditManager(id) {
+      const el = document.getElementById('mgr-edit-' + id);
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function saveManager(id) {
+      const username = document.getElementById('mgr-edit-username-' + id).value.trim();
+      const password = document.getElementById('mgr-edit-password-' + id).value;
+      const permissions = {
+        view_passes: document.getElementById('mgr-edit-view-' + id).checked,
+        create_delete_passes: document.getElementById('mgr-edit-create-' + id).checked,
+        edit_passes: document.getElementById('mgr-edit-editp-' + id).checked,
+        view_rsvps: document.getElementById('mgr-edit-view-rsvp-' + id).checked,
+        edit_rsvps: document.getElementById('mgr-edit-edit-rsvp-' + id).checked,
+        delete_rsvps: document.getElementById('mgr-edit-delete-rsvp-' + id).checked
+      };
+      const errEl = document.getElementById('mgr-edit-err-' + id);
+      errEl.style.display = 'none';
+      const body = { id, permissions };
+      if (username) body.username = username;
+      if (password) body.password = password;
+      const res = await fetch(MANAGERS_API, {
+        method: 'PATCH',
+        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+      loadManagers();
+    }
+    function toggleEditEvent(id) {
+      const el = document.getElementById('edit-' + id);
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function saveEvent(id) {
+      const event_name = document.getElementById('edit-name-' + id).value.trim();
+      const start_date = document.getElementById('edit-start-' + id).value.trim();
+      const end_date = document.getElementById('edit-end-' + id).value.trim();
+      const start_time = document.getElementById('edit-start-time-' + id).value.trim();
+      const end_time = document.getElementById('edit-end-time-' + id).value.trim();
+      const max_passes = parseInt(document.getElementById('edit-max-' + id).value) || 50;
+      const notes = document.getElementById('edit-notes-' + id).value.trim();
+      const errEl = document.getElementById('edit-err-' + id);
+      if (!event_name || !start_date) { errEl.textContent = 'Event name and start date are required'; errEl.style.display = 'block'; return; }
+      errEl.style.display = 'none';
+      const resolved_end_date = end_date || start_date;
+      const res = await fetch(EVENTS_API, {
+        method: 'PATCH',
+        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, event_name, start_date, end_date: resolved_end_date, start_time, end_time, max_passes, notes })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+      loadEvents();
+    }
+  
   </script>
 </body>
-</html>
+</html>    function showAdmin(username, permissions, role) {
+      if (permissions) {
+        sessionPermissions = permissions;
+        sessionStorage.setItem('admin_permissions', JSON.stringify(permissions));
+      }
+      const isSuperadmin = role === 'superadmin';
+      selectedEventId = null;
+      document.getElementById('event-picker-card').style.display = 'block';
+      document.getElementById('pass-create-section').style.display = 'none';
+      document.getElementById('welcome-text').textContent = 'Signed in as ' + username;
+
+      // Build tabs dynamically based on role/permissions
+      const tabsEl = document.getElementById('admin-tabs');
+      let tabsHtml = '<button class="tab-btn active" onclick="switchTab(\'passes\', this)">🎟 VIP Passes</button>';
+      if (permissions.view_rsvps || isSuperadmin) tabsHtml += '<button class="tab-btn" onclick="switchTab(\'rsvps\', this)">📋 RSVPs</button>';
+      if (isSuperadmin) {
+        tabsHtml += '<button class="tab-btn" onclick="switchTab(\'managers\', this)">👤 Managers</button>';
+        tabsHtml += '<button class="tab-btn" onclick="switchTab(\'events\', this)">📅 Events</button>';
+      }
+      tabsEl.innerHTML = tabsHtml;
+
+      document.getElementById('admin-screen').style.display = 'block';
+      loadEventPicker();
+      if (isSuperadmin) { loadManagers(); loadEvents(); }
+    }
+

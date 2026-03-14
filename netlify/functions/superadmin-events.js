@@ -12,16 +12,20 @@ exports.handler = async (event) => {
   const managerToken = event.headers['x-manager-token'];
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-  let authed = false;
-  if (adminPassword === process.env.ADMIN_PASSWORD) {
-    authed = true;
-  } else if (managerToken) {
+  // Check if superadmin (password or superadmin session token)
+  let isSuperadmin = adminPassword === process.env.ADMIN_PASSWORD;
+  let authed = isSuperadmin;
+
+  if (!authed && managerToken) {
     const { data: session } = await supabase
       .from('manager_sessions')
-      .select('expires_at')
+      .select('manager_id, expires_at')
       .eq('token', managerToken)
       .single();
-    if (session && new Date(session.expires_at) > new Date()) authed = true;
+    if (session && new Date(session.expires_at) > new Date()) {
+      authed = true;
+      if (!session.manager_id) isSuperadmin = true; // superadmin session
+    }
   }
 
   if (!authed) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
@@ -35,7 +39,7 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
-  if (adminPassword !== process.env.ADMIN_PASSWORD) {
+  if (!isSuperadmin) {
     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only superadmin can modify events' }) };
   }
 

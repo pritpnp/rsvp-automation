@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — BAPS Scranton</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --saffron: #E8650A; --gold: #C8860A; --gold-light: #F5C842;
+      --cream: #FDF6EC; --cream-dark: #F5E6CC;
+      --brown: #5C2D0A; --brown-mid: #8B4513; --text-muted: #8B6040;
+    }
+    body { font-family: 'DM Sans', sans-serif; background: #F7F0E8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+    .top-border { position: fixed; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--brown), var(--saffron), var(--gold-light), var(--saffron), var(--brown)); }
+
+    .login-wrap { width: 100%; max-width: 380px; animation: slideUp 0.4s ease both; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    .login-header { text-align: center; margin-bottom: 32px; }
+    .login-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 32px; font-weight: 700; color: var(--brown); margin-bottom: 4px; }
+    .login-header p { font-size: 13px; color: var(--text-muted); }
+
+    .login-card { background: #fff; border-radius: 20px; padding: 36px 32px; box-shadow: 0 8px 40px rgba(92,45,10,0.12); }
+
+    label { font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 6px; }
+    input { width: 100%; padding: 13px 14px; border: 1px solid var(--cream-dark); border-radius: 12px; font-size: 15px; font-family: 'DM Sans', sans-serif; background: var(--cream); color: var(--brown); margin-bottom: 16px; transition: border-color 0.2s; }
+    input:focus { outline: none; border-color: var(--gold); }
+
+    .btn { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--brown), var(--brown-mid)); color: #fff; border: none; border-radius: 12px; font-size: 15px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: opacity 0.2s, transform 0.15s; margin-top: 4px; }
+    .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .error { color: #991b1b; font-size: 13px; margin-top: 12px; text-align: center; display: none; background: #fef2f2; padding: 10px 14px; border-radius: 10px; }
+
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="top-border"></div>
+  <div class="login-wrap">
+    <div class="login-header">
+      <h1>Admin Portal</h1>
+      <p>BAPS Scranton Mandir — screvents.com</p>
+    </div>
+    <div class="login-card">
+      <label for="username">Username</label>
+      <input type="text" id="username" autocomplete="username" onkeydown="if(event.key==='Enter')login()" />
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()" />
+      <button class="btn" id="login-btn" onclick="login()">Sign In</button>
+      <div class="error" id="error">Invalid username or password</div>
+    </div>
+    <div class="footer">screvents.com</div>
+  </div>
+
+  <script>
+    const AUTH_API = '/.netlify/functions/manager-auth';
+
+    // If already logged in, redirect
+    const token = sessionStorage.getItem('admin_token');
+    if (token) {
+      fetch(AUTH_API + '/verify?token=' + token)
+        .then(r => r.json())
+        .then(d => { if (d.valid) window.location.replace('/admin'); })
+        .catch(() => {});
+    }
+
+    async function login() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = document.getElementById('login-btn');
+      const errEl = document.getElementById('error');
+      if (!username || !password) return;
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Signing in...';
+      errEl.style.display = 'none';
+
+      try {
+        const res = await fetch(AUTH_API + '/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        sessionStorage.setItem('admin_token', data.token);
+        sessionStorage.setItem('admin_username', data.username);
+        sessionStorage.setItem('admin_role', data.role);
+        sessionStorage.setItem('admin_permissions', JSON.stringify(data.permissions));
+        window.location.replace('/admin');
+      } catch (e) {
+        errEl.textContent = e.message || 'Invalid username or password';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    }
+  </script>
+</body>
+</html>
