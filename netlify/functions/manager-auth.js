@@ -32,12 +32,12 @@ exports.handler = async (event) => {
         const token = crypto.randomBytes(32).toString('hex');
         const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         // Store superadmin session in a special way
-        await supabase.from('manager_sessions').insert([{
+        const { error: insertErr } = await supabase.from('manager_sessions').insert([{
           manager_id: null,
           token,
-          expires_at,
-          is_superadmin: true
-        }]).catch(() => {}); // ignore if is_superadmin column doesn't exist yet — we'll add it
+          expires_at
+        }]);
+        if (insertErr) console.error('Session insert error:', insertErr.message); — we'll add it
         return { statusCode: 200, headers, body: JSON.stringify({
           token, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
         })};
