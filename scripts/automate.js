@@ -155,6 +155,9 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 </head>
 <body>
   <div class="top-border"></div>
+  <a href="https://screvents.com" style="display:block;text-align:right;padding:8px 16px;background:rgba(92,45,10,0.06);border-bottom:1px solid rgba(200,134,10,0.12);text-decoration:none;">
+    <span style="font-size:12px;font-weight:500;color:#8B4513;letter-spacing:0.04em;">← Change Zone</span>
+  </a>
   <div class="header">
     <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneLabel + ' Zone'}</div>
   </div>
@@ -253,8 +256,8 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 }
 
 
-function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPreview = false) {
-  const pageUrl = `https://screvents.com/mandir/${slot.replace('mandir-', '')}`;
+function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPreview = false, overrideUrl = null) {
+  const pageUrl = overrideUrl || `https://screvents.com/mandir/${slot.replace('mandir-', '')}`;
   const flyerUrl = `${pageUrl}/flyer.jpg`;
   const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
   const bapsLogoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
@@ -785,8 +788,9 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     // No-preview version
     const pageData = pages.find(p => p.zone === zone);
     if (pageData) {
+      const zoneOverrideUrl = (zone === 'satsang-sabha') ? `https://screvents.com/${zone}` : null;
       const npHtml = isMandirStyle
-        ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true)
+        ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true, zoneOverrideUrl)
         : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true);
       const npFilePath = `/np${basePath}/index.html`;
       const npContent = Buffer.from(npHtml);
@@ -909,7 +913,7 @@ async function main() {
       const forms = getGoogleForm(zone);
       embedUrl = forms.embedUrl;
       formUrl = forms.formUrl;
-      html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
+      html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl, false, `https://screvents.com/${zone}`);
     } else {
       // Parasabha zones: always show form
       const forms = getGoogleForm(zone);
