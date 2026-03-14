@@ -15,15 +15,25 @@ async function authenticate(event, supabase) {
   if (token) {
     const { data: session } = await supabase
       .from('manager_sessions')
-      .select('manager_id, expires_at, managers(username, permissions)')
+      .select('manager_id, expires_at')
       .eq('token', token)
       .single();
     if (session && new Date(session.expires_at) > new Date()) {
+      // Superadmin session — manager_id is null
+      if (!session.manager_id) {
+        return { ok: true, role: 'superadmin', permissions: { view_passes: true, create_delete_passes: true, edit_passes: true } };
+      }
+      // Regular manager — fetch directly
+      const { data: manager } = await supabase
+        .from('managers')
+        .select('username, permissions')
+        .eq('id', session.manager_id)
+        .single();
       return {
         ok: true,
         role: 'manager',
-        username: session.managers.username,
-        permissions: session.managers.permissions || { view_passes: true, create_delete_passes: false, edit_passes: false }
+        username: manager?.username || '',
+        permissions: manager?.permissions || { view_passes: true, create_delete_passes: false, edit_passes: false }
       };
     }
   }
