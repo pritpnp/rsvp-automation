@@ -28,13 +28,21 @@ async function authCheck(event) {
   if (managerToken) {
     const { data: session } = await supabase
       .from('manager_sessions')
-      .select('expires_at, managers(role, permissions)')
+      .select('manager_id, expires_at')
       .eq('token', managerToken)
       .single();
     if (session && new Date(session.expires_at) > new Date()) {
-      const isSuperadmin = session.managers?.role === 'superadmin';
-      if (isSuperadmin) return { ok: true, permissions: { view_rsvps: true, edit_rsvps: true, delete_rsvps: true } };
-      return { ok: true, permissions: session.managers?.permissions || {} };
+      // Superadmin session — manager_id is null
+      if (!session.manager_id) {
+        return { ok: true, permissions: { view_rsvps: true, edit_rsvps: true, delete_rsvps: true } };
+      }
+      // Regular manager — fetch permissions directly
+      const { data: manager } = await supabase
+        .from('managers')
+        .select('permissions')
+        .eq('id', session.manager_id)
+        .single();
+      return { ok: true, permissions: manager?.permissions || {} };
     }
   }
   return { ok: false };
@@ -86,7 +94,6 @@ exports.handler = async (event) => {
     const rowIndex = rows.findIndex(r => r[4] === powerapps_id);
     if (rowIndex === -1) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Row not found' }) };
 
-    // Update guests column (column C = index 2, 1-based row = rowIndex + 1)
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: `${SHEET_TAB}!C${rowIndex + 1}`,
@@ -96,9 +103,9 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 
-  // DELETE — update guests count for a row
+  // DELETE — remove a row
   if (event.httpMethod === 'DELETE') {
-    if (!perms.edit_rsvps) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to edit RSVPs' }) };
+    if (!perms.delete_rsvps) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to delete RSVPs' }) };
     const { powerapps_id } = JSON.parse(event.body);
     if (!powerapps_id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
     const rows = await getRows(sheets);
