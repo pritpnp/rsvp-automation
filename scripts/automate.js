@@ -17,6 +17,10 @@ function zoneName(zoneSlug) {
   return names[zoneSlug] || zoneSlug;
 }
 
+const PARASABHA_ZONES = ['scranton', 'mountain-top', 'moosic', 'bloomsburg'];
+const MANDIR_ZONES = ['satsang-sabha', 'mandir-1', 'mandir-2', 'mandir-3', 'mandir-4', 'mandir-5'];
+const MANDIR_SLOTS = ['mandir-1', 'mandir-2', 'mandir-3', 'mandir-4', 'mandir-5'];
+
 function getGoogleForm(zone) {
   const zoneForms = {
     'mountain-top':  'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNUwxNTFRV0tSVTkyVDBGRVpYRE5QSDVBSi4u',
@@ -140,9 +144,6 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 </head>
 <body>
   <div class="top-border"></div>
-  <a href="https://screvents.com" style="display:block;text-align:right;padding:8px 16px;background:rgba(92,45,10,0.06);border-bottom:1px solid rgba(200,134,10,0.12);text-decoration:none;">
-    <span style="font-size:12px;font-weight:500;color:#8B4513;letter-spacing:0.04em;">← Change Zone</span>
-  </a>
   <div class="header">
     <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneLabel + ' Zone'}</div>
   </div>
@@ -241,6 +242,106 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 }
 
 
+function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPreview = false) {
+  const pageUrl = `https://screvents.com/mandir/${slot.replace('mandir-', '')}`;
+  const flyerUrl = `${pageUrl}/flyer.jpg`;
+  const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
+  const bapsLogoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+  const hasRsvp = !!eventInfo.rsvpDeadline;
+  const embedSrc = hasRsvp && embedUrl ? embedUrl : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>${eventInfo.eventName} — BAPS Scranton Mandir</title>
+  ${bapsLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${bapsLogoBase64}" />` : ''}
+  ${noPreview ? '' : `<meta property="og:title" content="${eventInfo.eventName} — BAPS Scranton Mandir" />
+  <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
+  <meta property="og:image" content="${pageUrl}/og.jpg" />
+  <meta property="og:url" content="${pageUrl}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta name="twitter:card" content="summary_large_image" />`}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --maroon: #7A1F2E; --maroon-mid: #A0304A; --maroon-light: #E8A0B0;
+      --cream: #FDF6EC; --cream-dark: #F5E6CC;
+      --text: #3D1A00; --text-muted: #8B6040;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+    .top-border { height: 5px; background: linear-gradient(90deg, var(--maroon) 0%, var(--maroon-mid) 30%, var(--maroon-light) 50%, var(--maroon-mid) 70%, var(--maroon) 100%); }
+    .change-zone { display:block; text-align:right; padding:8px 16px; background:rgba(122,31,46,0.06); border-bottom:1px solid rgba(122,31,46,0.12); text-decoration:none; }
+    .change-zone span { font-size:12px; font-weight:500; color:var(--maroon-mid); letter-spacing:0.04em; }
+    .header { background: linear-gradient(160deg, var(--maroon) 0%, #4A0F1A 100%); padding: 20px 20px 28px; text-align: center; position: relative; overflow: hidden; }
+    .header::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, rgba(232,160,176,0.2) 0%, transparent 70%); pointer-events: none; }
+    .mandir-label { display: inline-block; background: rgba(232,160,176,0.15); border: 1px solid rgba(232,160,176,0.4); color: var(--maroon-light); font-size: 11px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; padding: 5px 14px; border-radius: 40px; margin-bottom: 12px; }
+    .header h1 { font-family: 'Cormorant Garamond', serif; font-size: clamp(28px, 8vw, 40px); font-weight: 700; color: #fff; line-height: 1.15; margin-bottom: 6px; }
+    .flyer-wrap { background: var(--maroon); display: flex; justify-content: center; }
+    .flyer-wrap img { width: 100%; max-width: 480px; display: block; object-fit: contain; }
+    .details-card { margin: 0 16px; background: #fff; border-radius: 0 0 20px 20px; box-shadow: 0 4px 24px rgba(122,31,46,0.10); padding: 20px 20px 24px; display: flex; flex-direction: column; gap: 12px; }
+    .detail-row { display: flex; align-items: flex-start; gap: 12px; }
+    .detail-icon { width: 36px; height: 36px; background: #fdf0f3; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+    .detail-label { font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+    .detail-value { font-size: 15px; font-weight: 500; color: var(--text); line-height: 1.4; }
+    .section-divider { display: flex; align-items: center; gap: 12px; padding: 24px 16px 8px; }
+    .section-divider::before, .section-divider::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(122,31,46,0.2), transparent); }
+    .section-divider span { font-family: 'Cormorant Garamond', serif; font-size: 18px; font-weight: 600; color: var(--maroon-mid); white-space: nowrap; }
+    .rsvp-section { padding: 0 16px 40px; }
+    .rsvp-note { font-size: 13px; color: var(--text-muted); text-align: center; margin-bottom: 16px; line-height: 1.5; }
+    .form-container { background: #fff; border-radius: 20px; box-shadow: 0 4px 24px rgba(122,31,46,0.10); overflow: hidden; }
+    iframe { width: 100%; border: none; height: 900px; display: block; }
+    .open-form-link { text-align: center; padding: 14px; border-top: 1px solid var(--cream-dark); }
+    .open-form-link a { font-size: 13px; color: var(--maroon-mid); text-decoration: none; font-weight: 500; }
+    .footer { text-align: center; padding: 20px; font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .header { animation: fadeUp 0.5s ease both; }
+    .flyer-wrap { animation: fadeUp 0.5s 0.1s ease both; }
+    .details-card { animation: fadeUp 0.5s 0.2s ease both; }
+    .rsvp-section { animation: fadeUp 0.5s 0.3s ease both; }
+  </style>
+</head>
+<body>
+  <div class="top-border"></div>
+  <a href="https://screvents.com" class="change-zone">
+    <span>← Back to Events</span>
+  </a>
+  <div class="header">
+    <div class="mandir-label">BAPS Scranton Mandir Event</div>
+    <h1>${eventInfo.eventName}</h1>
+  </div>
+  <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
+  <div class="details-card">
+    ${eventInfo.date ? `<div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">${eventInfo.date}${eventInfo.time ? ' at ' + eventInfo.time : ''}</div></div></div>` : ''}
+    ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
+    ${hasRsvp ? `<div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">${new Date(eventInfo.rsvpDeadline + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric'})}</div></div></div>` : ''}
+  </div>
+  ${hasRsvp && embedSrc ? `
+  <div class="section-divider"><span>RSVP</span></div>
+  <div class="rsvp-section">
+    <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
+    <div class="form-container" style="position:relative;">
+      <div id="form-loader" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#fff;z-index:1;min-height:200px;">
+        <div style="width:36px;height:36px;border:3px solid #e0d5c8;border-top-color:#A0304A;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        <span style="font-size:13px;color:#8B6040;">Loading form...</span>
+      </div>
+      <iframe src="${embedSrc}" title="RSVP Form" onload="document.getElementById('form-loader').style.display='none'">Loading…</iframe>
+      <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
+    </div>
+  </div>` : ''}
+  <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
+</body>
+</html>`;
+}
+
 async function buildOgImage(flyerPath, invitationYPercent) {
   const metadata = await sharp(flyerPath).metadata();
   const { width: w, height: h } = metadata;
@@ -313,35 +414,48 @@ function buildHubPage(allFlyers, deadlines) {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Only show zones with a flyer AND upcoming event date
-  const activeZones = allFlyers.filter(({ zone }) => {
+  const isActive = (zone) => {
     const info = deadlines[zone];
     if (!info) return false;
+    // For mandir slots and satsang-sabha, show if event date is upcoming (no deadline required)
     if (info.eventDate && info.eventDate < today) return false;
     return true;
-  });
+  };
 
-  const cards = activeZones.map(({ zone }) => {
+  // Parasabha: scranton, mountain-top, moosic, bloomsburg
+  const activeParasabha = allFlyers.filter(({ zone }) => PARASABHA_ZONES.includes(zone) && isActive(zone));
+  // Mandir: satsang-sabha + mandir-1 to mandir-5
+  const activeMandir = allFlyers.filter(({ zone }) => MANDIR_ZONES.includes(zone) && isActive(zone));
+
+  const makeCard = (zone, href, labelText, accentClass, idx) => {
     const info = deadlines[zone] || {};
-    const label = zoneLabels[zone] || zone;
-    const eventName = info.eventName || 'Para Satsang Sabha';
+    const eventName = info.eventName || 'Upcoming Event';
     const date = info.date || '';
     const time = info.time || '';
     const deadline = info.deadline ? new Date(info.deadline + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
-
     return `
-    <a href="/${zone}" class="card" style="animation-delay: ${activeZones.indexOf(allFlyers.find(f => f.zone === zone))}00ms">
+    <a href="${href}" class="card ${accentClass}" style="animation-delay: ${idx}00ms">
       <div class="card-inner">
-        <div class="card-zone">${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : label + ' Zone'}</div>
+        <div class="card-zone">${labelText}</div>
         <div class="card-event">${eventName}</div>
         ${date ? `<div class="card-detail">📅 ${date}${time ? ' at ' + time : ''}</div>` : ''}
         ${deadline ? `<div class="card-detail">⏳ RSVP by ${deadline}</div>` : ''}
-        <div class="card-cta">View Invitation →</div>
+        <div class="card-cta">View Details →</div>
       </div>
     </a>`;
+  };
+
+  const parasabhaCards = activeParasabha.map(({ zone }, idx) =>
+    makeCard(zone, `/${zone}`, zoneLabels[zone] + ' Zone', 'card-parasabha', idx)
+  ).join('');
+
+  const mandirCards = activeMandir.map(({ zone }, idx) => {
+    const href = MANDIR_SLOTS.includes(zone) ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
+    const label = zone === 'satsang-sabha' ? 'Satsang Sabha' : 'Mandir Event';
+    return makeCard(zone, href, label, 'card-mandir', idx);
   }).join('');
 
-  const noEvents = activeZones.length === 0 ? `
+  const noEvents = (activeParasabha.length + activeMandir.length) === 0 ? `
     <div class="no-events">
       <p>No upcoming events at this time.</p>
       <p>Check back soon!</p>
@@ -463,8 +577,6 @@ function buildHubPage(allFlyers, deadlines) {
     }
 
     .card-inner {
-      background: var(--card-bg);
-      border: 1px solid rgba(200, 134, 10, 0.2);
       border-radius: 16px;
       padding: 28px 24px;
       height: 100%;
@@ -478,27 +590,53 @@ function buildHubPage(allFlyers, deadlines) {
       position: absolute;
       top: 0; left: 0; right: 0;
       height: 3px;
-      background: linear-gradient(90deg, var(--saffron), var(--gold));
       opacity: 0;
       transition: opacity 0.2s ease;
     }
 
     .card:hover .card-inner {
       transform: translateY(-4px);
-      box-shadow: 0 12px 32px rgba(200, 134, 10, 0.12);
-      border-color: rgba(200, 134, 10, 0.4);
     }
 
     .card:hover .card-inner::before {
       opacity: 1;
     }
 
+    /* Parasabha cards — warm saffron/gold */
+    .card-parasabha .card-inner {
+      background: var(--card-bg);
+      border: 1px solid rgba(200, 134, 10, 0.2);
+    }
+    .card-parasabha .card-inner::before {
+      background: linear-gradient(90deg, var(--saffron), var(--gold));
+    }
+    .card-parasabha:hover .card-inner {
+      box-shadow: 0 12px 32px rgba(200, 134, 10, 0.12);
+      border-color: rgba(200, 134, 10, 0.4);
+    }
+    .card-parasabha .card-zone { color: var(--saffron); }
+    .card-parasabha .card-cta { color: var(--saffron); }
+
+    /* Mandir cards — deep maroon/rose */
+    .card-mandir .card-inner {
+      background: #FFF8F9;
+      border: 1px solid rgba(122, 31, 46, 0.18);
+    }
+    .card-mandir .card-inner::before {
+      background: linear-gradient(90deg, #7A1F2E, #C0405A);
+    }
+    .card-mandir:hover .card-inner {
+      box-shadow: 0 12px 32px rgba(122, 31, 46, 0.12);
+      border-color: rgba(122, 31, 46, 0.35);
+    }
+    .card-mandir .card-zone { color: #A0304A; }
+    .card-mandir .card-cta { color: #A0304A; }
+
     .card-zone {
       font-size: 17px;
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      color: var(--saffron);
       margin-bottom: 8px;
     }
 
@@ -522,9 +660,23 @@ function buildHubPage(allFlyers, deadlines) {
       margin-top: 20px;
       font-size: 15px;
       font-weight: 500;
-      color: var(--saffron);
       letter-spacing: 0.02em;
     }
+
+    /* Section headers */
+    .section-header {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+      margin-top: 48px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(200,134,10,0.15);
+    }
+    .section-header.parasabha { color: var(--saffron); border-color: rgba(200,134,10,0.2); }
+    .section-header.mandir { color: #A0304A; border-color: rgba(122,31,46,0.15); margin-top: 48px; }
+    .section-header:first-child { margin-top: 0; }
 
     /* No events */
     .no-events {
@@ -558,10 +710,10 @@ function buildHubPage(allFlyers, deadlines) {
   </header>
 
   <main>
-    ${activeZones.length > 0 ? '<p class="section-label">Select your zone to RSVP</p>' : ''}
-    <div class="grid">
-      ${cards}
-    </div>
+    ${activeParasabha.length > 0 ? '<div class="section-header parasabha">Parasabha Events</div>' : ''}
+    ${activeParasabha.length > 0 ? `<div class="grid">${parasabhaCards}</div>` : ''}
+    ${activeMandir.length > 0 ? '<div class="section-header mandir">Mandir Events</div>' : ''}
+    ${activeMandir.length > 0 ? `<div class="grid">${mandirCards}</div>` : ''}
     ${noEvents}
   </main>
 
@@ -570,7 +722,6 @@ function buildHubPage(allFlyers, deadlines) {
       ? `<img src="data:image/png;base64,${bapsSansthaBase64}" style="max-width:200px;width:100%;display:block;margin:0 auto 8px;" alt="BAPS Swaminarayan Sanstha" />`
       : `<span class="footer-logo">BAPS Swaminarayan Sanstha</span>`}
     <a href="https://www.baps.org/Scranton" target="_blank" style="color:rgba(122,69,32,0.6);text-decoration:none;font-size:12px;letter-spacing:0.04em;">www.baps.org/Scranton</a>
-    <div style="margin-top:16px;"><a href="/admin" style="font-size:11px;color:rgba(122,69,32,0.35);text-decoration:none;letter-spacing:0.06em;border:1px solid rgba(122,69,32,0.15);padding:4px 12px;border-radius:20px;">Admin Portal</a></div>
   </footer>
 </body>
 </html>`;
@@ -609,40 +760,44 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   }
 
   for (const { zone, html, flyerPath } of pages) {
+    const isMandirSlot = MANDIR_SLOTS.includes(zone);
+    const basePath = isMandirSlot ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
+
     // HTML page
-    const htmlFilePath = `/${zone}/index.html`;
+    const htmlFilePath = `${basePath}/index.html`;
     const htmlContent = Buffer.from(html);
     const htmlSha1 = crypto.createHash('sha1').update(htmlContent).digest('hex');
     files[htmlFilePath] = htmlSha1;
     fileContents[htmlSha1] = { filePath: htmlFilePath, content: htmlContent };
 
-    // No-preview version at /np/{zone}/ — same page but OG/Twitter tags stripped
+    // No-preview version
     const pageData = pages.find(p => p.zone === zone);
     if (pageData) {
-      const npHtml = buildHtmlPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true);
-      const npFilePath = `/np/${zone}/index.html`;
+      const npHtml = isMandirSlot
+        ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true)
+        : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true);
+      const npFilePath = `/np${basePath}/index.html`;
       const npContent = Buffer.from(npHtml);
       const npSha1 = crypto.createHash('sha1').update(npContent).digest('hex');
       files[npFilePath] = npSha1;
       fileContents[npSha1] = { filePath: npFilePath, content: npContent };
     }
 
-    // OG image — 1200x630 split preview for WhatsApp/social
-    // Use preview.png/jpg if present in zone folder, otherwise fall back to flyer
+    // OG image
     const zoneDir = path.dirname(flyerPath);
     const previewPath = ['preview.png', 'preview.jpg', 'preview.jpeg']
       .map(f => path.join(zoneDir, f))
       .find(f => fs.existsSync(f)) || flyerPath;
     console.log(`🖼️  OG source: ${path.basename(previewPath)}`);
-    const ogFilePath = `/${zone}/og.jpg`;
+    const ogFilePath = `${basePath}/og.jpg`;
     const ogContent = await buildOgImage(previewPath, eventInfoMap[zone]?.invitationYPercent);
     const ogSha1 = crypto.createHash('sha1').update(ogContent).digest('hex');
     files[ogFilePath] = ogSha1;
     fileContents[ogSha1] = { filePath: ogFilePath, content: ogContent };
     console.log(`🖼️  OG image: ${Math.round(ogContent.length / 1024)}KB`);
 
-    // Flyer image — compress to JPEG under 300KB for WhatsApp preview
-    const imgFilePath = `/${zone}/flyer.jpg`;
+    // Flyer image
+    const imgFilePath = `${basePath}/flyer.jpg`;
     const imgContent = await sharp(flyerPath)
       .resize({ width: 1080, withoutEnlargement: true })
       .jpeg({ quality: 80, mozjpeg: true })
@@ -699,7 +854,7 @@ async function main() {
 
   // Scan ALL zone folders in the repo and collect every flyer
   const REPO_ROOT_PATH = path.join(__dirname, '..');
-  const zones = ['satsang-sabha', 'mountain-top', 'scranton', 'moosic', 'bloomsburg'];
+  const zones = ['satsang-sabha', 'mountain-top', 'scranton', 'moosic', 'bloomsburg', ...MANDIR_SLOTS];
   const allFlyers = [];
 
   for (const zone of zones) {
@@ -730,27 +885,44 @@ async function main() {
     const eventInfo = await extractEventInfo(flyerPath);
     eventInfoMap[zone] = eventInfo;
 
-    const { embedUrl, formUrl } = getGoogleForm(zone);
-    const html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
+    const isMandirSlot = MANDIR_SLOTS.includes(zone);
+    const isSatsangSabha = zone === 'satsang-sabha';
+
+    let html, embedUrl = '', formUrl = '';
+    if (isMandirSlot) {
+      // Mandir pages: no form unless rsvpDeadline present (and no form URL configured yet)
+      html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
+    } else if (isSatsangSabha) {
+      // Satsang Sabha: show form only if rsvpDeadline present
+      const forms = getGoogleForm(zone);
+      embedUrl = forms.embedUrl;
+      formUrl = forms.formUrl;
+      html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
+    } else {
+      // Parasabha zones: always show form
+      const forms = getGoogleForm(zone);
+      embedUrl = forms.embedUrl;
+      formUrl = forms.formUrl;
+      html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
+    }
     pages.push({ zone, html, flyerPath, embedUrl, formUrl });
     console.log(`✅ Page ready for ${zone}`);
 
-    if (eventInfo && eventInfo.rsvpDeadline) {
-      let eventDateISO = '';
-      if (eventInfo.date) {
-        try {
-          const parsed = new Date(eventInfo.date + ', 2026');
-          if (!isNaN(parsed)) eventDateISO = parsed.toISOString().split('T')[0];
-        } catch(e) {}
-      }
-      deadlines[zone] = {
-        deadline: eventInfo.rsvpDeadline,
-        eventName: eventInfo.eventName || 'Para Satsang Sabha',
-        date: eventInfo.date || '',
-        eventDate: eventDateISO,
-        time: eventInfo.time || ''
-      };
+    // Always store deadline info for hub page (even mandir events without RSVP need date for card)
+    let eventDateISO = '';
+    if (eventInfo.date) {
+      try {
+        const parsed = new Date(eventInfo.date + ', 2026');
+        if (!isNaN(parsed)) eventDateISO = parsed.toISOString().split('T')[0];
+      } catch(e) {}
     }
+    deadlines[zone] = {
+      deadline: eventInfo.rsvpDeadline || '',
+      eventName: eventInfo.eventName || (isMandirSlot ? 'Mandir Event' : 'Para Satsang Sabha'),
+      date: eventInfo.date || '',
+      eventDate: eventDateISO,
+      time: eventInfo.time || ''
+    };
   }
 
   // Save deadlines.json
