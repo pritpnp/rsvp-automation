@@ -65,7 +65,7 @@
     const AUTH_API = '/.netlify/functions/manager-auth';
 
     // If already logged in, redirect
-    const token = sessionStorage.getItem('admin_token');
+    const token = localStorage.getItem('admin_token');
     if (token) {
       fetch(AUTH_API + '/verify?token=' + token)
         .then(r => r.json())
@@ -93,10 +93,10 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
 
-        sessionStorage.setItem('admin_token', data.token);
-        sessionStorage.setItem('admin_username', data.username);
-        sessionStorage.setItem('admin_role', data.role);
-        sessionStorage.setItem('admin_permissions', JSON.stringify(data.permissions));
+        localStorage.setItem('admin_token', data.token);
+        localStorage.setItem('admin_username', data.username);
+        localStorage.setItem('admin_role', data.role);
+        localStorage.setItem('admin_permissions', JSON.stringify(data.permissions));
         window.location.replace('/admin');
       } catch (e) {
         errEl.textContent = e.message || 'Invalid username or password';
