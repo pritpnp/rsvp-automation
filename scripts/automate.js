@@ -223,7 +223,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
     (function() {
       var deadline = "${eventInfo.rsvpDeadline || ''}";
       if (!deadline) return;
-      var cutoff = new Date(deadline);
+      var cutoff = new Date(deadline + 'T00:00:00');
       cutoff.setHours(23, 59, 59, 999);
       if (new Date() > cutoff) {
         document.getElementById("rsvp-open").style.display = "none";
