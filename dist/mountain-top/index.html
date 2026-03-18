@@ -144,7 +144,7 @@
       fetch('/.netlify/functions/late-rsvp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, guests: guests, zone: 'Mountain Top Zone', eventName: 'Para Satsang Sabha' })
+        body: JSON.stringify({ name: name, guests: guests, zone: 'mountain-top', eventName: 'Para Satsang Sabha' })
       }).then(function(r) {
         if (r.ok) {
           document.getElementById('late-form').style.display = 'none';
