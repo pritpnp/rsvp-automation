@@ -238,7 +238,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
       fetch('/.netlify/functions/late-rsvp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, guests: guests, zone: '${zoneLabel} Zone', eventName: '${eventInfo.eventName}' })
+        body: JSON.stringify({ name: name, guests: guests, zone: '${zone}', eventName: '${eventInfo.eventName}' })
       }).then(function(r) {
         if (r.ok) {
           document.getElementById('late-form').style.display = 'none';
