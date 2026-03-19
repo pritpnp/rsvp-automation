@@ -11,8 +11,9 @@ exports.handler = async (event) => {
 
   const supabase = createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY  // ← was SUPABASE_ANON_KEY
-  );
+    process.env.SUPABASE_SERVICE_KEY  // ← match the actual env var name
+    );
+å
 
   const { data, error } = await supabase
     .from('vip_passes')
