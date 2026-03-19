@@ -1,0 +1,30 @@
+name: Final RSVP Summary
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # 9:00 PM EDT (UTC-4) daily
+  workflow_dispatch:
+
+jobs:
+  send-final-summary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: cd scripts && npm install
+
+      - name: Send final RSVP summary
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          TEST_MODE: false
+        run: cd scripts && node final-summary.js
