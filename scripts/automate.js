@@ -459,9 +459,16 @@ function buildHubPage(allFlyers, deadlines) {
     </a>`;
   };
 
-  const parasabhaCards = activeParasabha.map(({ zone }, idx) =>
-    makeCard(zone, `/${zone}`, zoneLabels[zone] + ' Zone', 'card-parasabha', idx)
-  ).join('');
+  const parasabhaCards = activeParasabha
+    .slice()
+    .sort((a, b) => {
+      const dateA = (deadlines[a.zone] || {}).eventDate || '';
+      const dateB = (deadlines[b.zone] || {}).eventDate || '';
+      return dateA.localeCompare(dateB);
+    })
+    .map(({ zone }, idx) =>
+      makeCard(zone, `/${zone}`, zoneLabels[zone] + ' Zone', 'card-parasabha', idx)
+    ).join('');
 
   const mandirCards = activeMandir.map(({ zone }, idx) => {
     const href = MANDIR_SLOTS.includes(zone) ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
