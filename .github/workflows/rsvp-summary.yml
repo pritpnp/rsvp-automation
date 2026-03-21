@@ -1,10 +1,18 @@
-name: RSVP Nightly Summary
+name: RSVP Summary
 
 on:
   schedule:
     - cron: '30 18 */3 * *'  # 2:30 PM EDT / 3:00 PM EST every 3 days
   workflow_dispatch:
     inputs:
+      target_zone:
+        description: 'Zone to summarize: scranton / mountain-top / moosic / bloomsburg / mandir / all'
+        required: false
+        default: 'all'
+      trigger_chat_id:
+        description: 'Telegram chat ID that triggered this (for reply routing)'
+        required: false
+        default: ''
       test_mode:
         description: 'Run in test mode (send all zones regardless of deadline)'
         required: false
@@ -25,7 +33,14 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID_SCRANTON: ${{ secrets.TELEGRAM_CHAT_ID_SCRANTON }}
+          TELEGRAM_CHAT_ID_MOUNTAIN_TOP: ${{ secrets.TELEGRAM_CHAT_ID_MOUNTAIN_TOP }}
+          TELEGRAM_CHAT_ID_MOOSIC: ${{ secrets.TELEGRAM_CHAT_ID_MOOSIC }}
+          TELEGRAM_CHAT_ID_BLOOMSBURG: ${{ secrets.TELEGRAM_CHAT_ID_BLOOMSBURG }}
+          TELEGRAM_CHAT_ID_MANDIR: ${{ secrets.TELEGRAM_CHAT_ID_MANDIR }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          TARGET_ZONE: ${{ github.event.inputs.target_zone || 'all' }}
+          TRIGGER_CHAT_ID: ${{ github.event.inputs.trigger_chat_id || '' }}
           TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
         run: node scripts/summary.js

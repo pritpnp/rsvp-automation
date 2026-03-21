@@ -2,143 +2,173 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-function download(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    const handleResponse = (res) => {
-      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
-        file.close();
-        fs.truncate(dest, 0, () => {});
-        const redirectUrl = res.headers.location;
-        const lib = redirectUrl.startsWith('https') ? https : require('http');
-        lib.get(redirectUrl, handleResponse).on('error', reject);
-        return;
-      }
-      if (res.statusCode !== 200) {
-        reject(new Error(`Download failed: HTTP ${res.statusCode}`));
-        return;
-      }
-      const newFile = fs.createWriteStream(dest);
-      res.pipe(newFile);
-      newFile.on('finish', () => newFile.close(resolve));
-    };
-    https.get(url, handleResponse).on('error', err => {
-      fs.unlink(dest, () => {});
-      reject(err);
-    });
-  });
-}
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const TARGET_ZONE = process.env.TARGET_ZONE || 'all';
+const TRIGGER_CHAT_ID = process.env.TRIGGER_CHAT_ID || '';
+const TEST_MODE = process.env.TEST_MODE === 'true';
+const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
-function sendTelegram(token, chatId, message) {
+// Zone → Telegram group chat ID mapping
+const ZONE_CHAT_IDS = {
+  'scranton':     process.env.TELEGRAM_CHAT_ID_SCRANTON,
+  'mountain-top': process.env.TELEGRAM_CHAT_ID_MOUNTAIN_TOP,
+  'moosic':       process.env.TELEGRAM_CHAT_ID_MOOSIC,
+  'bloomsburg':   process.env.TELEGRAM_CHAT_ID_BLOOMSBURG,
+  'satsang-sabha': process.env.TELEGRAM_CHAT_ID_MANDIR,
+  'mandir-1':     process.env.TELEGRAM_CHAT_ID_MANDIR,
+  'mandir-2':     process.env.TELEGRAM_CHAT_ID_MANDIR,
+  'mandir-3':     process.env.TELEGRAM_CHAT_ID_MANDIR,
+  'mandir-4':     process.env.TELEGRAM_CHAT_ID_MANDIR,
+  'mandir-5':     process.env.TELEGRAM_CHAT_ID_MANDIR,
+};
+
+// Zone display names
+const ZONE_NAMES = {
+  'scranton':      'Scranton',
+  'mountain-top':  'Mountain Top',
+  'moosic':        'Moosic',
+  'bloomsburg':    'Bloomsburg',
+  'satsang-sabha': 'Satsang Sabha',
+  'mandir-1':      'Mandir 1',
+  'mandir-2':      'Mandir 2',
+  'mandir-3':      'Mandir 3',
+  'mandir-4':      'Mandir 4',
+  'mandir-5':      'Mandir 5',
+};
+
+function sendTelegram(chatId, text) {
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' });
-    const options = {
+    const body = JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' });
+    const req = https.request({
       hostname: 'api.telegram.org',
-      path: `/bot${token}/sendMessage`,
+      path: `/bot${BOT_TOKEN}/sendMessage`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-    };
-    const req = https.request(options, res => {
+    }, res => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(JSON.parse(data)));
     });
-    req.setTimeout(10000, () => { req.destroy(new Error('Telegram request timed out')); });
     req.on('error', reject);
     req.write(body);
     req.end();
   });
 }
 
-async function main() {
-  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-  const TEST_MODE = process.env.TEST_MODE === 'true';
-
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    console.error('Missing required environment variables');
-    process.exit(1);
-  }
-
-  // Read deadlines.json from repo
-  const deadlinesPath = path.join(__dirname, '..', 'deadlines.json');
-  if (!fs.existsSync(deadlinesPath)) {
-    console.log('No deadlines.json found — nothing to do');
-    process.exit(0);
-  }
-  const deadlines = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8'));
-  console.log('Deadlines loaded:', JSON.stringify(deadlines, null, 2));
-
-  // Download responses from Google Sheet as CSV (no auth needed)
-  const SHEET_ID = process.env.GOOGLE_SHEET_ID;
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-  console.log('Downloading responses from Google Sheets...');
-  const csvPath = '/tmp/responses.csv';
-  await download(csvUrl, csvPath);
-  console.log('Downloaded successfully');
-
-  const csvText = fs.readFileSync(csvPath, 'utf8');
-  const lines = csvText.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-  const responses = lines.slice(1).map(line => {
-    const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-    const row = {};
-    headers.forEach((h, i) => row[h] = vals[i] || '');
-    return row;
+function downloadCSV(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, res => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        return downloadCSV(res.headers.location).then(resolve).catch(reject);
+      }
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve(data));
+    }).on('error', reject);
   });
-  console.log(`${responses.length} responses found`);
-  if (responses.length > 0) console.log('Sample row:', JSON.stringify(responses[0]));
+}
+
+function parseCSV(csv) {
+  const lines = csv.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+  return lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.replace(/"/g, '').trim());
+    const row = {};
+    headers.forEach((h, i) => row[h] = values[i] || '');
+    return row;
+  }).filter(row => row.zone);
+}
+
+function buildMessage(zone, rows, deadlines) {
+  const info = deadlines[zone];
+  if (!info) return null;
+  const zoneName = ZONE_NAMES[zone] || zone;
+  const totalGuests = rows.reduce((sum, r) => sum + (parseInt(r.guests) || 1), 0);
+  let msg = `<b>${zoneName} — ${info.eventName}</b>\n`;
+  msg += `📅 ${info.date} at ${info.time}\n`;
+  msg += `⭐ Total Responses: ${rows.length} | Total Guests: ${totalGuests} ⭐\n\n`;
+  if (rows.length === 0) {
+    msg += 'No RSVPs yet.';
+  } else {
+    rows.forEach(r => {
+      msg += `${r.name} — ${r.guests || 1} guest(s)\n`;
+    });
+  }
+  return msg;
+}
+
+async function main() {
+  const deadlines = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '..', 'deadlines.json'), 'utf8')
+  );
+
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+  const csv = await downloadCSV(csvUrl);
+  const rows = parseCSV(csv);
 
   const today = new Date().toISOString().split('T')[0];
-  console.log(`Today: ${today} | TEST_MODE: ${TEST_MODE}`);
 
-  let summariesSent = 0;
-
-  for (const [zone, info] of Object.entries(deadlines)) {
-    const { deadline, eventName } = info;
-    if (!deadline) continue;
-
-    // Send if TEST_MODE, or if today is between when the flyer was posted and the deadline
-    const pastDeadline = deadline && today > deadline;
-    if (!TEST_MODE && pastDeadline) {
-      console.log(`Skipping ${zone} — deadline ${deadline} has passed`);
-      continue;
-    }
-    if (!TEST_MODE && !deadline) {
-      console.log(`Skipping ${zone} — no deadline set`);
-      continue;
-    }
-
-    console.log(`Building summary for ${zone}...`);
-    const zoneResponses = responses.filter(r => String(r['zone']).trim() === zone);
-    const zoneName = zone.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-    if (zoneResponses.length === 0) {
-      console.log(`No RSVPs for ${zone} — skipping`);
-      continue;
-    }
-
-    let totalGuests = 0;
-    let lines = '';
-    for (const r of zoneResponses) {
-      const guests = parseInt(r['guests']) || 0;
-      totalGuests += guests;
-      lines += `${r['name']} - ${guests}\n`;
-    }
-
-    const message = `<b>${zoneName} Zone - ${eventName}</b>\n\n⭐ <b><u>Total Responses: ${zoneResponses.length} | Total Guests: ${totalGuests}</u></b> ⭐\n\n${lines.trim()}`;
-    console.log(`Sending summary for ${zone}...`);
-    const result = await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, message);
-    if (result.ok) {
-      console.log(`Summary sent for ${zone}`);
-      summariesSent++;
-    } else {
-      console.error(`Failed for ${zone}:`, JSON.stringify(result));
-    }
+  // Determine which zones to process
+  let zonesToProcess;
+  if (TARGET_ZONE === 'all') {
+    zonesToProcess = Object.keys(deadlines);
+  } else if (TARGET_ZONE === 'mandir') {
+    zonesToProcess = ['satsang-sabha', 'mandir-1', 'mandir-2', 'mandir-3', 'mandir-4', 'mandir-5'];
+  } else {
+    zonesToProcess = [TARGET_ZONE];
   }
 
-  if (summariesSent === 0) {
-    console.log('No deadlines matched today - no summaries sent');
+  // Filter to zones with future deadlines (unless TEST_MODE)
+  if (!TEST_MODE) {
+    zonesToProcess = zonesToProcess.filter(zone => {
+      const info = deadlines[zone];
+      return info && info.deadline && info.deadline >= today;
+    });
+  }
+
+  if (zonesToProcess.length === 0) {
+    const noZoneMsg = 'No active zones found for the requested summary.';
+    if (TRIGGER_CHAT_ID) await sendTelegram(TRIGGER_CHAT_ID, noZoneMsg);
+    console.log('No active zones to summarize.');
+    return;
+  }
+
+  // Group rows by zone
+  const rowsByZone = {};
+  rows.forEach(row => {
+    if (!rowsByZone[row.zone]) rowsByZone[row.zone] = [];
+    rowsByZone[row.zone].push(row);
+  });
+
+  const isScheduled = !TRIGGER_CHAT_ID;
+  const triggeredFromAdmin = TRIGGER_CHAT_ID === ADMIN_CHAT_ID;
+  const triggeredFromZone = TRIGGER_CHAT_ID && TRIGGER_CHAT_ID !== ADMIN_CHAT_ID;
+
+  for (const zone of zonesToProcess) {
+    const zoneRows = rowsByZone[zone] || [];
+    const msg = buildMessage(zone, zoneRows, deadlines);
+    if (!msg) continue;
+
+    const zoneChatId = ZONE_CHAT_IDS[zone];
+
+    if (isScheduled) {
+      // Scheduled run: send to each zone's group only
+      if (zoneChatId) {
+        await sendTelegram(zoneChatId, msg);
+        console.log(`Sent summary for ${zone} to zone group.`);
+      }
+    } else if (triggeredFromAdmin) {
+      // Admin triggered: send to admin chat only
+      await sendTelegram(ADMIN_CHAT_ID, msg);
+      console.log(`Sent summary for ${zone} to admin.`);
+    } else if (triggeredFromZone) {
+      // Zone group triggered: send to zone group + admin
+      if (zoneChatId) await sendTelegram(zoneChatId, msg);
+      await sendTelegram(ADMIN_CHAT_ID, msg);
+      console.log(`Sent summary for ${zone} to zone group + admin.`);
+    }
   }
 }
 
