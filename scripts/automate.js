@@ -91,6 +91,8 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   const bapsLogoBase64 = fs.existsSync(logoPath)
     ? fs.readFileSync(logoPath).toString('base64')
     : '';
+  const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
+  const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -98,7 +100,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>${eventInfo.eventName} — ${zoneLabel} Zone</title>
-  ${bapsLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${bapsLogoBase64}" />` : ''}
+  ${tabLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${tabLogoBase64}" />` : ''}
   ${noPreview ? '' : `<meta property="og:title" content="${eventInfo.eventName} — ${zoneLabel} Zone" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
   <meta property="og:image" content="${pageUrl}/og.jpg" />
@@ -261,6 +263,8 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
   const flyerUrl = `${pageUrl}/flyer.jpg`;
   const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
   const bapsLogoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+  const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
+  const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
   const hasRsvp = !!eventInfo.rsvpDeadline;
   const embedSrc = hasRsvp && embedUrl ? embedUrl : '';
 
@@ -270,7 +274,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>${eventInfo.eventName} — BAPS Scranton Mandir</title>
-  ${bapsLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${bapsLogoBase64}" />` : ''}
+  ${tabLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${tabLogoBase64}" />` : ''}
   ${noPreview ? '' : `<meta property="og:title" content="${eventInfo.eventName} — BAPS Scranton Mandir" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
   <meta property="og:image" content="${pageUrl}/og.jpg" />
@@ -418,6 +422,9 @@ function buildHubPage(allFlyers, deadlines) {
     ? fs.readFileSync(sansthaLogoPath).toString('base64')
     : '';
 
+  const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
+  const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
+
   const zoneLabels = {
     'mountain-top': 'Mountain Top',
     'scranton': 'Scranton',
@@ -488,7 +495,7 @@ function buildHubPage(allFlyers, deadlines) {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BAPS SCRANTON MANDIR</title>
-  ${bapsLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${bapsLogoBase64}" />` : ''}
+  ${tabLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${tabLogoBase64}" />` : ''}
   <meta name="description" content="RSVP for upcoming BAPS events in the Scranton region." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
