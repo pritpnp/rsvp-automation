@@ -36,7 +36,7 @@ exports.handler = async (event) => {
   console.log(`ZONE_CHAT_MAP lookup result: ${ZONE_CHAT_MAP[chatId]}`);
 
   // Parse command to determine target zone
-  const cmd = text.toLowerCase().replace(/[@\s]/g, '');
+  const cmd = text.toLowerCase().replace(/@\S+/g, '').replace(/\s/g, '').trim();
   let targetZone = 'all';
 
   if (cmd === '/summary') {
