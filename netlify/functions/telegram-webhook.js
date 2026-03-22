@@ -71,7 +71,7 @@ exports.handler = async (event) => {
       }
     }
 
-    const flyerUrl = `https://screvents.com/${flyerZone}/flyer.jpg`;
+    const flyerUrl = `https://screvents.com/${flyerZone}/flyer.jpg?t=${Date.now()}`;
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
