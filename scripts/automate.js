@@ -779,9 +779,22 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     { filePath: '/login/index.html', diskPath: path.join(__dirname, '..', 'public', 'login', 'index.html') },
     { filePath: '/admin/index.html', diskPath: path.join(__dirname, '..', 'public', 'admin', 'index.html') },
   ];
+  const tabLogoPath = path.join(repoRoot, 'images', 'tab-logo.png');
+  const tabLogoBase64 = fs.existsSync(tabLogoPath)
+    ? fs.readFileSync(tabLogoPath).toString('base64')
+    : '';
+  const faviconTag = tabLogoBase64
+    ? `<link rel="icon" type="image/png" href="data:image/png;base64,${tabLogoBase64}" />`
+    : '';
+
   for (const { filePath, diskPath } of staticPages) {
     if (fs.existsSync(diskPath)) {
-      const content = fs.readFileSync(diskPath);
+      let html = fs.readFileSync(diskPath, 'utf8');
+      if (faviconTag) {
+        html = html.replace(/<link rel="icon"[^>]*\/>/g, '');
+        html = html.replace('</head>', `  ${faviconTag}\n</head>`);
+      }
+      const content = Buffer.from(html);
       const sha1 = crypto.createHash('sha1').update(content).digest('hex');
       files[filePath] = sha1;
       fileContents[sha1] = { filePath, content };
