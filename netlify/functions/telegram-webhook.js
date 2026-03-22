@@ -30,6 +30,11 @@ exports.handler = async (event) => {
     [process.env.TELEGRAM_CHAT_ID_MANDIR]:       'mandir',
   };
 
+  // Debug log
+  console.log(`chatId: "${chatId}"`);
+  console.log(`ZONE_CHAT_MAP keys: ${JSON.stringify(Object.keys(ZONE_CHAT_MAP))}`);
+  console.log(`ZONE_CHAT_MAP lookup result: ${ZONE_CHAT_MAP[chatId]}`);
+
   // Parse command to determine target zone
   const cmd = text.toLowerCase().replace(/[@\s]/g, '');
   let targetZone = 'all';
