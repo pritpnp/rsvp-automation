@@ -185,12 +185,10 @@ async function main() {
       console.log(`Admin send for ${zone}: ${result.ok ? 'OK' : JSON.stringify(result)}`);
       if (result.ok) summariesSent++;
     } else {
-      // Zone group triggered: send to zone group + admin
-      const chatIds = new Set([ADMIN_CHAT_ID]);
-      if (zoneChatId) chatIds.add(zoneChatId);
-      for (const chatId of chatIds) {
-        const result = await sendTelegram(TELEGRAM_BOT_TOKEN, chatId, message);
-        console.log(`Zone-triggered send for ${zone} to ${chatId}: ${result.ok ? 'OK' : JSON.stringify(result)}`);
+      // Zone group triggered: send to zone group only
+      if (zoneChatId) {
+        const result = await sendTelegram(TELEGRAM_BOT_TOKEN, zoneChatId, message);
+        console.log(`Zone-triggered send for ${zone} to zone group: ${result.ok ? 'OK' : JSON.stringify(result)}`);
         if (result.ok) summariesSent++;
       }
     }
