@@ -15,7 +15,10 @@ exports.handler = async (event) => {
   if (!message?.text) return { statusCode: 200, body: 'OK' };
 
   const text = message.text.trim();
-  if (!text.toLowerCase().startsWith('/summary')) return { statusCode: 200, body: 'OK' };
+  const isGetFlyer = text.toLowerCase().startsWith('/getflyer');
+  const isSummary = text.toLowerCase().startsWith('/summary');
+
+  if (!isSummary && !isGetFlyer) return { statusCode: 200, body: 'OK' };
 
   const chatId = String(message.chat.id);
   const GITHUB_PAT          = process.env.GITHUB_PAT;
@@ -30,13 +33,61 @@ exports.handler = async (event) => {
     [process.env.TELEGRAM_CHAT_ID_MANDIR]:       'mandir',
   };
 
+  // Handle /getflyer command
+  if (isGetFlyer) {
+    const cmd = text.toLowerCase().replace(/@\S+/g, '').replace(/\s/g, '').trim();
+    let flyerZone;
+
+    if (cmd === '/getflyer') {
+      // From zone group → that zone's flyer
+      const zone = ZONE_CHAT_MAP[chatId];
+      if (!zone) {
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text: 'This command is only available in zone groups.' })
+        });
+        return { statusCode: 200, body: 'OK' };
+      }
+      flyerZone = zone === 'mandir' ? 'mandir-1' : zone;
+    } else {
+      // From admin → parse suffix
+      const suffixMap = {
+        'scranton':    'scranton',
+        'mountaintop': 'mountain-top',
+        'moosic':      'moosic',
+        'bloomsburg':  'bloomsburg',
+        'mandir':      'mandir-1',
+      };
+      const suffix = cmd.replace('/getflyer', '');
+      flyerZone = suffixMap[suffix];
+      if (!flyerZone) {
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text: 'Unknown zone. Use /getflyerscranton, /getflyermountaintop, /getflyermoosic, /getflyerbloomsburg, or /getflyermandir.' })
+        });
+        return { statusCode: 200, body: 'OK' };
+      }
+    }
+
+    const flyerUrl = `https://screvents.com/${flyerZone}/flyer.jpg`;
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, photo: flyerUrl })
+    });
+
+    return { statusCode: 200, body: 'OK' };
+  }
+
   // Debug log
   console.log(`chatId: "${chatId}"`);
   console.log(`ZONE_CHAT_MAP keys: ${JSON.stringify(Object.keys(ZONE_CHAT_MAP))}`);
   console.log(`ZONE_CHAT_MAP lookup result: ${ZONE_CHAT_MAP[chatId]}`);
 
   // Parse command to determine target zone
-  const cmd = text.toLowerCase().replace(/@\S+/g, '').replace(/\s/g, '').trim();
+  const cmd = text.toLowerCase().replace(/[@\s]/g, '');
   let targetZone = 'all';
 
   if (cmd === '/summary') {
