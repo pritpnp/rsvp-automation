@@ -13,7 +13,6 @@ exports.handler = async (event) => {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_KEY  // ← match the actual env var name
     );
-å
 
   const { data, error } = await supabase
     .from('vip_passes')
