@@ -157,7 +157,13 @@ async function main() {
     console.log(`Zone ${zone}: ${zoneResponses.length} responses`);
 
     if (zoneResponses.length === 0) {
-      console.log(`No RSVPs for ${zone} — skipping`);
+      console.log(`No RSVPs for ${zone}`);
+      // If triggered (not scheduled), still send a "no RSVPs" message
+      if (!isScheduled) {
+        const emptyMsg = `<b>${zoneName} — ${eventName}</b>\n📅 ${date} at ${time}\n\nNo RSVPs yet.`;
+        const targetChatId = triggeredFromAdmin ? ADMIN_CHAT_ID : zoneChatId;
+        if (targetChatId) await sendTelegram(TELEGRAM_BOT_TOKEN, targetChatId, emptyMsg);
+      }
       continue;
     }
 
