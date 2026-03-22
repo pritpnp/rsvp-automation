@@ -779,7 +779,7 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     { filePath: '/login/index.html', diskPath: path.join(__dirname, '..', 'public', 'login', 'index.html') },
     { filePath: '/admin/index.html', diskPath: path.join(__dirname, '..', 'public', 'admin', 'index.html') },
   ];
-  const tabLogoPath = path.join(repoRoot, 'images', 'tab-logo.png');
+  const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
   const tabLogoBase64 = fs.existsSync(tabLogoPath)
     ? fs.readFileSync(tabLogoPath).toString('base64')
     : '';
