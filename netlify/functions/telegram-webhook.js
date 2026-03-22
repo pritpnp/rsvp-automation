@@ -60,7 +60,7 @@ exports.handler = async (event) => {
   });
 
   // Dispatch GitHub Actions workflow
-  await fetch(
+  const ghRes = await fetch(
     'https://api.github.com/repos/pritpnp/rsvp-automation/actions/workflows/rsvp-summary.yml/dispatches',
     {
       method: 'POST',
@@ -79,6 +79,12 @@ exports.handler = async (event) => {
       })
     }
   );
+
+  const ghStatus = ghRes.status;
+  const ghBody = await ghRes.text();
+  console.log(`GitHub dispatch status: ${ghStatus}`);
+  console.log(`GitHub dispatch response: ${ghBody}`);
+  console.log(`target_zone: ${targetZone} | trigger_chat_id: ${chatId}`);
 
   return { statusCode: 200, body: 'OK' };
 };
