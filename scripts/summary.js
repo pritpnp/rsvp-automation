@@ -158,11 +158,9 @@ async function main() {
 
     if (zoneResponses.length === 0) {
       console.log(`No RSVPs for ${zone}`);
-      // If triggered (not scheduled), still send a "no RSVPs" message
       if (!isScheduled) {
         const emptyMsg = `<b>${zoneName} — ${eventName}</b>\n📅 ${date} at ${time}\n\nNo RSVPs yet.`;
-        const targetChatId = triggeredFromAdmin ? ADMIN_CHAT_ID : zoneChatId;
-        if (targetChatId) await sendTelegram(TELEGRAM_BOT_TOKEN, targetChatId, emptyMsg);
+        await sendTelegram(TELEGRAM_BOT_TOKEN, TRIGGER_CHAT_ID, emptyMsg);
       }
       continue;
     }
@@ -185,18 +183,11 @@ async function main() {
         console.log(`Scheduled send for ${zone} to zone group: ${result.ok ? 'OK' : JSON.stringify(result)}`);
         if (result.ok) summariesSent++;
       }
-    } else if (triggeredFromAdmin) {
-      // Admin triggered: send to admin only
-      const result = await sendTelegram(TELEGRAM_BOT_TOKEN, ADMIN_CHAT_ID, message);
-      console.log(`Admin send for ${zone}: ${result.ok ? 'OK' : JSON.stringify(result)}`);
-      if (result.ok) summariesSent++;
     } else {
-      // Zone group triggered: send to zone group only
-      if (zoneChatId) {
-        const result = await sendTelegram(TELEGRAM_BOT_TOKEN, zoneChatId, message);
-        console.log(`Zone-triggered send for ${zone} to zone group: ${result.ok ? 'OK' : JSON.stringify(result)}`);
-        if (result.ok) summariesSent++;
-      }
+      // Triggered: always reply to whoever sent the command
+      const result = await sendTelegram(TELEGRAM_BOT_TOKEN, TRIGGER_CHAT_ID, message);
+      console.log(`Triggered send for ${zone} to ${TRIGGER_CHAT_ID}: ${result.ok ? 'OK' : JSON.stringify(result)}`);
+      if (result.ok) summariesSent++;
     }
   }
 
