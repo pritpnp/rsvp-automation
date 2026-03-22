@@ -92,7 +92,9 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
     ? fs.readFileSync(logoPath).toString('base64')
     : '';
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
-  const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
+  const tabLogoBase64 = fs.existsSync(tabLogoPath)
+    ? fs.readFileSync(tabLogoPath).toString('base64')
+    : bapsLogoBase64;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -416,14 +418,15 @@ function buildHubPage(allFlyers, deadlines) {
   const bapsLogoBase64 = fs.existsSync(logoPath)
     ? fs.readFileSync(logoPath).toString('base64')
     : '';
+  const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
+  const tabLogoBase64 = fs.existsSync(tabLogoPath)
+    ? fs.readFileSync(tabLogoPath).toString('base64')
+    : bapsLogoBase64;
 
   const sansthaLogoPath = path.join(REPO_ROOT, 'images', 'baps-sanstha.png');
   const bapsSansthaBase64 = fs.existsSync(sansthaLogoPath)
     ? fs.readFileSync(sansthaLogoPath).toString('base64')
     : '';
-
-  const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
-  const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
 
   const zoneLabels = {
     'mountain-top': 'Mountain Top',
@@ -853,6 +856,17 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
     fs.writeFileSync(fullPath, content);
     console.log(`📄 Written: ${filePath}`);
+  }
+
+  // Copy images folder to dist/ so static pages can reference /images/tab-logo.png etc.
+  const imagesDir = path.join(repoRoot, 'images');
+  if (fs.existsSync(imagesDir)) {
+    const distImagesDir = path.join(distDir, 'images');
+    fs.mkdirSync(distImagesDir, { recursive: true });
+    for (const file of fs.readdirSync(imagesDir)) {
+      fs.copyFileSync(path.join(imagesDir, file), path.join(distImagesDir, file));
+      console.log(`📁 Copied images/${file} to dist/images/`);
+    }
   }
 
   // Commit and push dist/ — Netlify CI will pick it up and deploy (including functions)
