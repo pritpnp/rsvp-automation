@@ -32,7 +32,17 @@ exports.handler = async (event) => {
     [process.env.TELEGRAM_CHAT_ID_MANDIR]:       'mandir',
   };
 
-  // Suffix map — used for admin commands and Mandir group sub-zone selection
+  // All mandir sub-zones sent when /getflyer is used in the Mandir group
+  const MANDIR_ZONES = [
+    'satsang-sabha',
+    'mandir-1',
+    'mandir-2',
+    'mandir-3',
+    'mandir-4',
+    'mandir-5',
+  ];
+
+  // Suffix map — used for admin commands and explicit zone selection
   const SUFFIX_MAP = {
     'scranton':    'scranton',
     'mountaintop': 'mountain-top',
@@ -54,9 +64,9 @@ exports.handler = async (event) => {
   const buildFlyerUrl = (zone) => {
     const match = zone.match(/^mandir-(\d+)$/);
     if (match) {
-      return `https://screvents.com/mandir/${match[1]}/flyer.jpg?t=${Date.now()}`;
+      return `https://screvents.com/mandir/${match[1]}/flyer.jpg`;
     }
-    return `https://screvents.com/${zone}/flyer.jpg?t=${Date.now()}`;
+    return `https://screvents.com/${zone}/flyer.jpg`;
   };
 
   const sendMessage = (chat_id, msg) =>
@@ -66,11 +76,11 @@ exports.handler = async (event) => {
       body: JSON.stringify({ chat_id, text: msg }),
     });
 
-  const sendPhoto = (chat_id, photo, caption) =>
+  const sendPhoto = (chat_id, photo) =>
     fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id, photo, ...(caption ? { caption } : {}) }),
+      body: JSON.stringify({ chat_id, photo }),
     });
 
   // ─── /getflyer ─────────────────────────────────────────────────────────────
@@ -91,8 +101,16 @@ exports.handler = async (event) => {
       }
 
       if (zone === 'mandir') {
-        // Mandir group covers multiple sub-zones — prompt them to be specific
-        await sendMessage(chatId, 'Which Mandir flyer would you like?\n\n/getflyersatsang\n/getflyermandir1\n/getflyermandir2\n/getflyermandir3\n/getflyermandir4\n/getflyermandir5');
+        // Send all mandir flyers at once
+        for (const mandirZone of MANDIR_ZONES) {
+          const flyerUrl = buildFlyerUrl(mandirZone);
+          console.log(`Sending mandir flyer for zone "${mandirZone}": ${flyerUrl}`);
+          const photoRes  = await sendPhoto(chatId, flyerUrl);
+          const photoBody = await photoRes.json();
+          if (!photoBody.ok) {
+            console.error(`sendPhoto failed for ${mandirZone}: ${JSON.stringify(photoBody)}`);
+          }
+        }
         return { statusCode: 200, body: 'OK' };
       }
 
@@ -111,7 +129,7 @@ exports.handler = async (event) => {
     const flyerUrl = buildFlyerUrl(flyerZone);
     console.log(`Sending flyer for zone "${flyerZone}": ${flyerUrl}`);
 
-    const photoRes  = await sendPhoto(chatId, flyerUrl, `🪷 Flyer for ${flyerZone}`);
+    const photoRes  = await sendPhoto(chatId, flyerUrl);
     const photoBody = await photoRes.json();
 
     if (!photoBody.ok) {
