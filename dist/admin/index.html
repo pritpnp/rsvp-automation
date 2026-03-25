@@ -203,10 +203,20 @@
 
         <!-- Zone Event Names -->
         <div class="card">
-          <h2>Zone Event Names</h2>
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-            Set the event name shown on each zone's page. This overrides what OCR reads from the flyer — useful when your internal name differs from what's printed.
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <h2 style="margin:0">Zone Event Names</h2>
+            <button id="redeploy-btn" onclick="triggerRedeploy()"
+              style="padding:8px 18px;background:linear-gradient(135deg,var(--brown),var(--brown-mid));color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity 0.2s ease">
+              🚀 Redeploy Site
+            </button>
+          </div>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:6px;line-height:1.5">
+            Set the event name shown on each zone's page. This overrides what OCR reads from the flyer.
           </p>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+            After saving a name, press <strong>Redeploy Site</strong> to push the change live (~2 min).
+          </p>
+          <div id="redeploy-status" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:10px;font-size:13px;"></div>
           <div id="zone-names-container"><div class="spinner"></div></div>
         </div>
 
@@ -249,6 +259,7 @@
     const EVENTS_API            = '/.netlify/functions/superadmin-events';
     const MANAGERS_API          = '/.netlify/functions/superadmin-managers';
     const UPDATE_EVENT_NAME_API = '/.netlify/functions/update-event-name';
+    const TRIGGER_REDEPLOY_API  = '/.netlify/functions/trigger-redeploy';
 
     document.addEventListener('DOMContentLoaded', function() {
       if (!sessionToken) {
@@ -383,10 +394,7 @@
       const guest_name = document.getElementById('new-guest').value.trim();
       const sucEl = document.getElementById('pass-success');
       if (!guest_name || !selectedEventId) return;
-      const res = await fetch(PASSES_API, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ guest_name, event_id: selectedEventId })
-      });
+      const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ guest_name, event_id: selectedEventId }) });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Failed to create pass'); return; }
       document.getElementById('new-guest').value = '';
@@ -455,7 +463,7 @@
               <span id="guests-edit-${r.powerapps_id}" style="display:none">
                 <input type="number" min="1" id="guests-input-${r.powerapps_id}" style="width:50px;padding:3px 6px;border:1px solid var(--cream-dark);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif" />
                 <button onclick="saveGuests('${r.powerapps_id}')" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px">Save</button>
-                <button onclick="cancelEditGuests('${r.powerapps_id}', '${r.guests}')" style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:2px">✕</button>
+                <button onclick="cancelEditGuests('${r.powerapps_id}')" style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:2px">✕</button>
               </span>` : ''}
             </td>
             <td>${r.submitted ? new Date(r.submitted).toLocaleDateString() : '—'}</td>
@@ -480,7 +488,7 @@
       const guests = document.getElementById('guests-input-' + id).value;
       if (!guests || parseInt(guests) < 1) return;
       const res = await fetch('/.netlify/functions/get-rsvps', {
-        method: 'PATCH', headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: authHeaders(),
         body: JSON.stringify({ powerapps_id: id, guests })
       });
       if (res.ok) {
@@ -496,7 +504,7 @@
     async function deleteRsvp(id, name) {
       if (!confirm('Remove RSVP for ' + name + '?')) return;
       const res = await fetch('/.netlify/functions/get-rsvps', {
-        method: 'DELETE', headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        method: 'DELETE', headers: authHeaders(),
         body: JSON.stringify({ powerapps_id: id })
       });
       if (res.ok) { allRsvps = allRsvps.filter(r => r.powerapps_id !== id); filterRsvps(); }
@@ -601,12 +609,12 @@
       const username = document.getElementById('mgr-edit-username-' + id).value.trim();
       const password = document.getElementById('mgr-edit-password-' + id).value;
       const permissions = {
-        view_passes:           document.getElementById('mgr-edit-view-' + id).checked,
-        create_delete_passes:  document.getElementById('mgr-edit-create-' + id).checked,
-        edit_passes:           document.getElementById('mgr-edit-editp-' + id).checked,
-        view_rsvps:            document.getElementById('mgr-edit-view-rsvp-' + id).checked,
-        edit_rsvps:            document.getElementById('mgr-edit-edit-rsvp-' + id).checked,
-        delete_rsvps:          document.getElementById('mgr-edit-delete-rsvp-' + id).checked
+        view_passes:          document.getElementById('mgr-edit-view-' + id).checked,
+        create_delete_passes: document.getElementById('mgr-edit-create-' + id).checked,
+        edit_passes:          document.getElementById('mgr-edit-editp-' + id).checked,
+        view_rsvps:           document.getElementById('mgr-edit-view-rsvp-' + id).checked,
+        edit_rsvps:           document.getElementById('mgr-edit-edit-rsvp-' + id).checked,
+        delete_rsvps:         document.getElementById('mgr-edit-delete-rsvp-' + id).checked
       };
       const errEl = document.getElementById('mgr-edit-err-' + id);
       errEl.style.display = 'none';
@@ -783,29 +791,57 @@
       const statusEl  = document.getElementById('zn-status-' + zone);
       const eventName = input.value.trim();
       if (!eventName) { statusEl.textContent = 'Name cannot be empty'; statusEl.style.color = '#991b1b'; return; }
-
       statusEl.textContent = '⏳ Saving...';
       statusEl.style.color = 'var(--text-muted)';
-
       const res = await fetch(UPDATE_EVENT_NAME_API, {
-        method: 'POST',
-        headers: { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' },
+        method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ zone, eventName })
       });
-
       if (res.ok) {
         zoneEventNamesData[zone] = { ...zoneEventNamesData[zone], eventName };
         document.getElementById('zn-current-' + zone).textContent = eventName;
-        statusEl.textContent = '✅ Saved';
+        statusEl.textContent = '✅ Saved — press Redeploy Site to go live';
         statusEl.style.color = '#166534';
         setTimeout(() => {
           document.getElementById('zn-edit-' + zone).style.display = 'none';
           statusEl.textContent = '';
-        }, 2000);
+        }, 4000);
       } else {
         const data = await res.json().catch(() => ({}));
         statusEl.textContent = '❌ ' + (data.error || 'Failed to save');
         statusEl.style.color = '#991b1b';
+      }
+    }
+
+    // ── Redeploy ───────────────────────────────────────────────────────────
+    async function triggerRedeploy() {
+      const btn      = document.getElementById('redeploy-btn');
+      const statusEl = document.getElementById('redeploy-status');
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Triggering...';
+      statusEl.style.display = 'none';
+
+      const res = await fetch(TRIGGER_REDEPLOY_API, { method: 'POST', headers: authHeaders() });
+
+      if (res.ok) {
+        btn.textContent = '✅ Triggered!';
+        statusEl.textContent = '🚀 Redeploy started — site will be live in ~2 minutes.';
+        statusEl.style.background = '#f0fdf4';
+        statusEl.style.color = '#166534';
+        statusEl.style.display = 'block';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '🚀 Redeploy Site';
+        }, 10000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        btn.disabled = false;
+        btn.textContent = '🚀 Redeploy Site';
+        statusEl.textContent = '❌ ' + (data.error || 'Failed to trigger redeploy');
+        statusEl.style.background = '#fef2f2';
+        statusEl.style.color = '#991b1b';
+        statusEl.style.display = 'block';
       }
     }
 
