@@ -104,7 +104,6 @@
   </div>
   <div class="footer"><span class="footer-logo">SC Parasabha</span>scparasabha.com</div>
   <script>
-    // Lock scroll to top until user intentionally scrolls
     if (history.scrollRestoration) history.scrollRestoration = 'manual';
     document.documentElement.style.scrollBehavior = 'auto';
     window.scrollTo(0, 0);
@@ -117,7 +116,6 @@
       document.getElementById('form-loader').style.display = 'none';
       if (!userHasScrolled) {
         window.scrollTo(0, 0);
-        // Keep snapping back for a short window in case of delayed focus steal
         var snaps = 0;
         var interval = setInterval(function() {
           if (!userHasScrolled) window.scrollTo(0, 0);
