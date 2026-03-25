@@ -732,8 +732,8 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
 }
 
 async function main() {
-  const flyerPathsRaw  = process.env.FLYER_PATHS || process.env.FLYER_PATH || '';
-  const changedFlyers  = flyerPathsRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const flyerPathsRaw = process.env.FLYER_PATHS || process.env.FLYER_PATH || '';
+  const changedFlyers = flyerPathsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
   if (changedFlyers.length) {
     console.log(`\n🎉 Changed flyers: ${changedFlyers.join(', ')}`);
@@ -751,12 +751,34 @@ async function main() {
   const zones = ['satsang-sabha', 'mountain-top', 'scranton', 'moosic', 'bloomsburg', ...MANDIR_SLOTS];
   const allFlyers = [];
 
+  // Track which zones have NO flyer — their DB name should be cleared
+  const zonesWithFlyer = new Set();
+
   for (const zone of zones) {
     const zoneDir = path.join(REPO_ROOT_PATH, 'flyers', zone);
     if (!fs.existsSync(zoneDir)) continue;
-    const files = fs.readdirSync(zoneDir).filter(f => /.(png|jpg|jpeg)$/i.test(f));
-    for (const file of files) {
-      allFlyers.push({ zone, flyerRelPath: `flyers/${zone}/${file}`, flyerPath: path.join(zoneDir, file) });
+    const files = fs.readdirSync(zoneDir).filter(f => /\.(png|jpg|jpeg)$/i.test(f));
+    if (files.length > 0) {
+      zonesWithFlyer.add(zone);
+      for (const file of files) {
+        allFlyers.push({ zone, flyerRelPath: `flyers/${zone}/${file}`, flyerPath: path.join(zoneDir, file) });
+      }
+    }
+  }
+
+  // Clear DB name for any zone whose flyer has been removed
+  // This ensures the next upload gets a fresh OCR-based name rather than stale data
+  const zonesWithoutFlyer = zones.filter(z => !zonesWithFlyer.has(z));
+  if (zonesWithoutFlyer.length) {
+    console.log(`\n🗑️  Clearing event names for zones with no flyer: ${zonesWithoutFlyer.join(', ')}`);
+    const { error: clearErr } = await supabase
+      .from('zone_events')
+      .update({ event_name: '', updated_at: new Date().toISOString() })
+      .in('zone', zonesWithoutFlyer);
+    if (clearErr) {
+      console.warn(`⚠️  Could not clear zone_events for empty zones: ${clearErr.message}`);
+    } else {
+      console.log(`✅ Cleared DB names for: ${zonesWithoutFlyer.join(', ')}`);
     }
   }
 
