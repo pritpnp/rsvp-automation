@@ -66,12 +66,59 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
-  // POST — requires create_delete_passes
+  // POST — single pass OR batch
   if (event.httpMethod === 'POST') {
     if (!auth.permissions.create_delete_passes) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to create passes' }) };
     }
-    const { guest_name, event_id } = JSON.parse(event.body);
+
+    const body = JSON.parse(event.body);
+
+    // ── Batch create: { guests: ['Name1', 'Name2', ...], event_id } ──────────
+    if (Array.isArray(body.guests)) {
+      const { guests, event_id } = body;
+      if (!event_id || !guests.length) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
+      }
+
+      const { data: evt } = await supabase
+        .from('events')
+        .select('max_passes, event_name, start_date, end_date')
+        .eq('id', event_id)
+        .single();
+
+      const { count } = await supabase
+        .from('vip_passes')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_id', event_id);
+
+      const remaining = (evt?.max_passes || 0) - (count || 0);
+      if (guests.length > remaining) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: `Only ${remaining} pass slot(s) remaining for this event` }) };
+      }
+
+      const event_date = evt?.start_date === evt?.end_date
+        ? evt?.start_date
+        : `${evt?.start_date} – ${evt?.end_date}`;
+
+      const rows = guests.map(name => ({
+        guest_name: name.trim(),
+        event_id,
+        event_name: evt?.event_name || '',
+        event_date
+      }));
+
+      const { data, error } = await supabase
+        .from('vip_passes')
+        .insert(rows)
+        .select();
+
+      if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ created: data.length, passes: data }) };
+    }
+
+    // ── Single create: { guest_name, event_id } ───────────────────────────
+    const { guest_name, event_id } = body;
     if (!guest_name || !event_id) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
@@ -92,12 +139,24 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
-  // DELETE — requires create_delete_passes
+  // DELETE — single OR batch
   if (event.httpMethod === 'DELETE') {
     if (!auth.permissions.create_delete_passes) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to delete passes' }) };
     }
-    const { id } = JSON.parse(event.body);
+
+    const body = JSON.parse(event.body);
+
+    // ── Batch delete: { ids: ['id1', 'id2', ...] } ────────────────────────
+    if (Array.isArray(body.ids)) {
+      if (!body.ids.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'No ids provided' }) };
+      const { error } = await supabase.from('vip_passes').delete().in('id', body.ids);
+      if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ deleted: body.ids.length }) };
+    }
+
+    // ── Single delete: { id } ──────────────────────────────────────────────
+    const { id } = body;
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
     const { error } = await supabase.from('vip_passes').delete().eq('id', id);
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
