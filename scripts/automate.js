@@ -4,6 +4,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const sharp = require('sharp');
+const { createClient } = require('@supabase/supabase-js');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const REPO_ROOT = path.join(__dirname, '..');
@@ -32,6 +33,44 @@ function getGoogleForm(zone) {
   const formUrl = zoneForms[zone];
   if (!formUrl) throw new Error('No form found for zone: ' + zone);
   return { formUrl, embedUrl: formUrl };
+}
+
+// ── Supabase: resolve canonical event name ────────────────────────────────
+// If a name has been set in zone_events, use it.
+// Otherwise, save the OCR-extracted name as the initial value and return it.
+async function resolveEventName(supabase, zone, ocrName) {
+  try {
+    const { data, error } = await supabase
+      .from('zone_events')
+      .select('event_name')
+      .eq('zone', zone)
+      .single();
+
+    if (error || !data) {
+      // Row missing — upsert OCR name as initial value
+      console.log(`  📝 No DB name for ${zone} — saving OCR name: "${ocrName}"`);
+      await supabase.from('zone_events').upsert({ zone, event_name: ocrName, updated_at: new Date().toISOString() });
+      return ocrName;
+    }
+
+    const stored = (data.event_name || '').trim();
+    if (!stored) {
+      // Row exists but empty — save OCR name
+      console.log(`  📝 Empty DB name for ${zone} — saving OCR name: "${ocrName}"`);
+      await supabase.from('zone_events').update({ event_name: ocrName, updated_at: new Date().toISOString() }).eq('zone', zone);
+      return ocrName;
+    }
+
+    if (stored !== ocrName) {
+      console.log(`  ✏️  Using DB name for ${zone}: "${stored}" (OCR said: "${ocrName}")`);
+    } else {
+      console.log(`  ✅ DB name matches OCR for ${zone}: "${stored}"`);
+    }
+    return stored;
+  } catch (e) {
+    console.warn(`  ⚠️  Supabase lookup failed for ${zone} — falling back to OCR name. Error: ${e.message}`);
+    return ocrName;
+  }
 }
 
 async function extractEventInfo(flyerPath) {
@@ -163,7 +202,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
     <span style="font-size:12px;font-weight:500;color:#8B4513;letter-spacing:0.04em;">← Change Zone</span>
   </a>
   <div class="header">
-    <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneLabel + ' Zone'}</div>
+    <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneName(zone) + ' Zone'}</div>
   </div>
   <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
@@ -202,7 +241,6 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   </div>
   <div class="footer"><span class="footer-logo">SC Parasabha</span>scparasabha.com</div>
   <script>
-    // Lock scroll to top until user intentionally scrolls
     if (history.scrollRestoration) history.scrollRestoration = 'manual';
     document.documentElement.style.scrollBehavior = 'auto';
     window.scrollTo(0, 0);
@@ -215,7 +253,6 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
       document.getElementById('form-loader').style.display = 'none';
       if (!userHasScrolled) {
         window.scrollTo(0, 0);
-        // Keep snapping back for a short window in case of delayed focus steal
         var snaps = 0;
         var interval = setInterval(function() {
           if (!userHasScrolled) window.scrollTo(0, 0);
@@ -369,7 +406,6 @@ async function buildOgImage(flyerPath, invitationYPercent) {
   const TARGET_RATIO = 1.9;
   const VARIATION = 0.20;
 
-  // If flyer is already close to 1.9:1 (within 20%), just resize and use directly
   if (aspectRatio >= TARGET_RATIO * (1 - VARIATION) && aspectRatio <= TARGET_RATIO * (1 + VARIATION)) {
     console.log(`🖼️  Flyer ratio ${aspectRatio.toFixed(2)} is close to 1.9:1 — using directly`);
     return sharp(flyerPath)
@@ -378,7 +414,6 @@ async function buildOgImage(flyerPath, invitationYPercent) {
       .toBuffer();
   }
 
-  // Otherwise do 50/50 split with blurred background
   console.log(`🖼️  Flyer ratio ${aspectRatio.toFixed(2)} — using 50/50 split`);
   const cutY = Math.round(h * 0.50);
 
@@ -413,20 +448,12 @@ async function buildOgImage(flyerPath, invitationYPercent) {
 }
 
 function buildHubPage(allFlyers, deadlines) {
-  // Load BAPS logo from images folder if available
   const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
-  const bapsLogoBase64 = fs.existsSync(logoPath)
-    ? fs.readFileSync(logoPath).toString('base64')
-    : '';
+  const bapsLogoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
-  const tabLogoBase64 = fs.existsSync(tabLogoPath)
-    ? fs.readFileSync(tabLogoPath).toString('base64')
-    : bapsLogoBase64;
-
+  const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
   const sansthaLogoPath = path.join(REPO_ROOT, 'images', 'baps-sanstha.png');
-  const bapsSansthaBase64 = fs.existsSync(sansthaLogoPath)
-    ? fs.readFileSync(sansthaLogoPath).toString('base64')
-    : '';
+  const bapsSansthaBase64 = fs.existsSync(sansthaLogoPath) ? fs.readFileSync(sansthaLogoPath).toString('base64') : '';
 
   const zoneLabels = {
     'mountain-top': 'Mountain Top',
@@ -441,14 +468,11 @@ function buildHubPage(allFlyers, deadlines) {
   const isActive = (zone) => {
     const info = deadlines[zone];
     if (!info) return false;
-    // For mandir slots and satsang-sabha, show if event date is upcoming (no deadline required)
     if (info.eventDate && info.eventDate < today) return false;
     return true;
   };
 
-  // Parasabha: scranton, mountain-top, moosic, bloomsburg
   const activeParasabha = allFlyers.filter(({ zone }) => PARASABHA_ZONES.includes(zone) && isActive(zone));
-  // Mandir: satsang-sabha + mandir-1 to mandir-5
   const activeMandir = allFlyers.filter(({ zone }) => MANDIR_ZONES.includes(zone) && isActive(zone));
 
   const makeCard = (zone, href, labelText, accentClass, idx) => {
@@ -476,9 +500,8 @@ function buildHubPage(allFlyers, deadlines) {
       const dateB = (deadlines[b.zone] || {}).eventDate || '';
       return dateA.localeCompare(dateB);
     })
-    .map(({ zone }, idx) =>
-      makeCard(zone, `/${zone}`, zoneLabels[zone] + ' Zone', 'card-parasabha', idx)
-    ).join('');
+    .map(({ zone }, idx) => makeCard(zone, `/${zone}`, zoneLabels[zone] + ' Zone', 'card-parasabha', idx))
+    .join('');
 
   const mandirCards = activeMandir.map(({ zone }, idx) => {
     const href = MANDIR_SLOTS.includes(zone) ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
@@ -505,241 +528,56 @@ function buildHubPage(allFlyers, deadlines) {
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --saffron: #C8860A;
-      --gold: #E8A020;
-      --cream: #FDF6EC;
-      --brown: #3D1F0A;
-      --light-brown: #7A4520;
-      --card-bg: #FFFAF3;
+      --saffron: #C8860A; --gold: #E8A020; --cream: #FDF6EC;
+      --brown: #3D1F0A; --light-brown: #7A4520; --card-bg: #FFFAF3;
     }
-
-    body {
-      background-color: var(--cream);
-      color: var(--brown);
-      font-family: 'DM Sans', sans-serif;
-      min-height: 100vh;
-    }
-
-    /* Decorative top border */
-    .top-border {
-      height: 5px;
-      background: linear-gradient(90deg, var(--saffron), var(--gold), var(--saffron));
-    }
-
-    /* Header */
-    header {
-      text-align: center;
-      padding: 56px 24px 40px;
-      background: linear-gradient(180deg, #FDF0D8 0%, var(--cream) 100%);
-      border-bottom: 1px solid rgba(200, 134, 10, 0.15);
-    }
-
-    .baps-logo {
-      width: 90px;
-      height: 90px;
-      margin: 0 auto 20px;
-    }
-
-    header h1 {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(34px, 7vw, 48px);
-      font-weight: 700;
-      color: var(--brown);
-      line-height: 1.15;
-      letter-spacing: -0.02em;
-    }
-
-    header h1 span {
-      color: var(--saffron);
-      font-style: italic;
-    }
-
-    header p {
-      margin-top: 12px;
-      font-size: 17px;
-      color: var(--light-brown);
-      font-weight: 300;
-      letter-spacing: 0.04em;
-    }
-
-    .divider {
-      width: 48px;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--gold), transparent);
-      margin: 20px auto 0;
-    }
-
-    /* Grid */
-    main {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 48px 20px 80px;
-    }
-
-    .section-label {
-      font-size: 13px;
-      font-weight: 500;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--saffron);
-      text-align: center;
-      margin-bottom: 28px;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 20px;
-    }
-
-    /* Cards */
-    .card {
-      text-decoration: none;
-      display: block;
-      opacity: 0;
-      animation: fadeUp 0.5s ease forwards;
-    }
-
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .card-inner {
-      border-radius: 16px;
-      padding: 28px 24px;
-      height: 100%;
-      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card-inner::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 3px;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-
-    .card:hover .card-inner {
-      transform: translateY(-4px);
-    }
-
-    .card:hover .card-inner::before {
-      opacity: 1;
-    }
-
-    /* Parasabha cards — warm saffron/gold */
-    .card-parasabha .card-inner {
-      background: var(--card-bg);
-      border: 1px solid rgba(200, 134, 10, 0.2);
-    }
-    .card-parasabha .card-inner::before {
-      background: linear-gradient(90deg, var(--saffron), var(--gold));
-    }
-    .card-parasabha:hover .card-inner {
-      box-shadow: 0 12px 32px rgba(200, 134, 10, 0.12);
-      border-color: rgba(200, 134, 10, 0.4);
-    }
+    body { background-color: var(--cream); color: var(--brown); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+    .top-border { height: 5px; background: linear-gradient(90deg, var(--saffron), var(--gold), var(--saffron)); }
+    header { text-align: center; padding: 56px 24px 40px; background: linear-gradient(180deg, #FDF0D8 0%, var(--cream) 100%); border-bottom: 1px solid rgba(200,134,10,0.15); }
+    .baps-logo { width: 90px; height: 90px; margin: 0 auto 20px; }
+    header h1 { font-family: 'Cormorant Garamond', serif; font-size: clamp(34px, 7vw, 48px); font-weight: 700; color: var(--brown); line-height: 1.15; letter-spacing: -0.02em; }
+    header h1 span { color: var(--saffron); font-style: italic; }
+    header p { margin-top: 12px; font-size: 17px; color: var(--light-brown); font-weight: 300; letter-spacing: 0.04em; }
+    .divider { width: 48px; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin: 20px auto 0; }
+    main { max-width: 900px; margin: 0 auto; padding: 48px 20px 80px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+    .card { text-decoration: none; display: block; opacity: 0; animation: fadeUp 0.5s ease forwards; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .card-inner { border-radius: 16px; padding: 28px 24px; height: 100%; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; position: relative; overflow: hidden; }
+    .card-inner::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; opacity: 0; transition: opacity 0.2s ease; }
+    .card:hover .card-inner { transform: translateY(-4px); }
+    .card:hover .card-inner::before { opacity: 1; }
+    .card-parasabha .card-inner { background: var(--card-bg); border: 1px solid rgba(200,134,10,0.2); }
+    .card-parasabha .card-inner::before { background: linear-gradient(90deg, var(--saffron), var(--gold)); }
+    .card-parasabha:hover .card-inner { box-shadow: 0 12px 32px rgba(200,134,10,0.12); border-color: rgba(200,134,10,0.4); }
     .card-parasabha .card-zone { color: var(--saffron); }
     .card-parasabha .card-cta { color: var(--saffron); }
-
-    /* Mandir cards — deep maroon/rose */
-    .card-mandir .card-inner {
-      background: #FFF8F9;
-      border: 1px solid rgba(122, 31, 46, 0.18);
-    }
-    .card-mandir .card-inner::before {
-      background: linear-gradient(90deg, #7A1F2E, #C0405A);
-    }
-    .card-mandir:hover .card-inner {
-      box-shadow: 0 12px 32px rgba(122, 31, 46, 0.12);
-      border-color: rgba(122, 31, 46, 0.35);
-    }
+    .card-mandir .card-inner { background: #FFF8F9; border: 1px solid rgba(122,31,46,0.18); }
+    .card-mandir .card-inner::before { background: linear-gradient(90deg, #7A1F2E, #C0405A); }
+    .card-mandir:hover .card-inner { box-shadow: 0 12px 32px rgba(122,31,46,0.12); border-color: rgba(122,31,46,0.35); }
     .card-mandir .card-zone { color: #A0304A; }
     .card-mandir .card-cta { color: #A0304A; }
-
-    .card-zone {
-      font-size: 17px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-
-    .card-event {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 30px;
-      font-weight: 700;
-      color: var(--brown);
-      line-height: 1.2;
-      margin-bottom: 14px;
-    }
-
-    .card-detail {
-      font-size: 15px;
-      color: var(--light-brown);
-      margin-bottom: 6px;
-      font-weight: 300;
-    }
-
-    .card-cta {
-      margin-top: 20px;
-      font-size: 15px;
-      font-weight: 500;
-      letter-spacing: 0.02em;
-    }
-
-    /* Section headers */
-    .section-header {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      margin-bottom: 20px;
-      margin-top: 48px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid rgba(200,134,10,0.15);
-    }
+    .card-zone { font-size: 17px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+    .card-event { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 700; color: var(--brown); line-height: 1.2; margin-bottom: 14px; }
+    .card-detail { font-size: 15px; color: var(--light-brown); margin-bottom: 6px; font-weight: 300; }
+    .card-cta { margin-top: 20px; font-size: 15px; font-weight: 500; letter-spacing: 0.02em; }
+    .section-header { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 20px; margin-top: 48px; padding-bottom: 10px; border-bottom: 1px solid rgba(200,134,10,0.15); }
     .section-header.parasabha { color: var(--saffron); border-color: rgba(200,134,10,0.2); }
     .section-header.mandir { color: #A0304A; border-color: rgba(122,31,46,0.15); margin-top: 48px; }
     .section-header:first-child { margin-top: 0; }
-
-    /* No events */
-    .no-events {
-      text-align: center;
-      padding: 60px 20px;
-      color: var(--light-brown);
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 20px;
-      line-height: 1.8;
-    }
-
-    /* Footer */
-    footer {
-      text-align: center;
-      padding: 24px;
-      font-size: 12px;
-      color: rgba(122, 69, 32, 0.5);
-      letter-spacing: 0.04em;
-      border-top: 1px solid rgba(200, 134, 10, 0.1);
-    }
+    .no-events { text-align: center; padding: 60px 20px; color: var(--light-brown); font-family: 'Cormorant Garamond', serif; font-size: 20px; line-height: 1.8; }
+    footer { text-align: center; padding: 24px; font-size: 12px; color: rgba(122,69,32,0.5); letter-spacing: 0.04em; border-top: 1px solid rgba(200,134,10,0.1); }
   </style>
 </head>
 <body>
   <div class="top-border"></div>
-
   <header>
     ${bapsLogoBase64 ? `<div style="width:120px;height:120px;border-radius:50%;border:2px solid rgba(200,134,10,0.4);overflow:hidden;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;"><img src="data:image/png;base64,${bapsLogoBase64}" style="width:100%;height:auto;object-fit:contain;" alt="BAPS" /></div>` : ''}
     <h1>BAPS SCRANTON MANDIR</h1>
     <p>Upcoming Events</p>
     <div class="divider"></div>
   </header>
-
   <main>
     ${activeParasabha.length > 0 ? '<div class="section-header parasabha">Parasabha Events</div>' : ''}
     ${activeParasabha.length > 0 ? `<div class="grid">${parasabhaCards}</div>` : ''}
@@ -747,11 +585,10 @@ function buildHubPage(allFlyers, deadlines) {
     ${activeMandir.length > 0 ? `<div class="grid">${mandirCards}</div>` : ''}
     ${noEvents}
   </main>
-
   <footer>
     ${bapsSansthaBase64
       ? `<img src="data:image/png;base64,${bapsSansthaBase64}" style="max-width:200px;width:100%;display:block;margin:0 auto 8px;" alt="BAPS Swaminarayan Sanstha" />`
-      : `<span class="footer-logo">BAPS Swaminarayan Sanstha</span>`}
+      : `<span style="font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:600;color:#8B4513;display:block;margin-bottom:4px;">BAPS Swaminarayan Sanstha</span>`}
     <a href="https://www.baps.org/Scranton" target="_blank" style="color:rgba(122,69,32,0.6);text-decoration:none;font-size:12px;letter-spacing:0.04em;">www.baps.org/Scranton</a>
     <div style="margin-top:16px;"><a href="/admin" style="font-size:11px;color:rgba(122,69,32,0.35);text-decoration:none;letter-spacing:0.06em;border:1px solid rgba(122,69,32,0.15);padding:4px 12px;border-radius:20px;">Admin Portal</a></div>
   </footer>
@@ -762,7 +599,6 @@ function buildHubPage(allFlyers, deadlines) {
 async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   console.log(`🚀 Deploying ${pages.length} page(s) to Netlify in one deploy...`);
 
-  // Build file manifest
   const files = {};
   const fileContents = {};
 
@@ -775,17 +611,13 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
 
   // Add static pages: VIP pass, login, admin
   const staticPages = [
-    { filePath: '/vip/index.html', diskPath: path.join(__dirname, '..', 'public', 'vip', 'index.html') },
+    { filePath: '/vip/index.html',   diskPath: path.join(__dirname, '..', 'public', 'vip',   'index.html') },
     { filePath: '/login/index.html', diskPath: path.join(__dirname, '..', 'public', 'login', 'index.html') },
     { filePath: '/admin/index.html', diskPath: path.join(__dirname, '..', 'public', 'admin', 'index.html') },
   ];
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
-  const tabLogoBase64 = fs.existsSync(tabLogoPath)
-    ? fs.readFileSync(tabLogoPath).toString('base64')
-    : '';
-  const faviconTag = tabLogoBase64
-    ? `<link rel="icon" type="image/png" href="data:image/png;base64,${tabLogoBase64}" />`
-    : '';
+  const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : '';
+  const faviconTag = tabLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${tabLogoBase64}" />` : '';
 
   for (const { filePath, diskPath } of staticPages) {
     if (fs.existsSync(diskPath)) {
@@ -805,14 +637,14 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   }
 
   for (const { zone, html, flyerPath } of pages) {
-    const isMandirSlot = MANDIR_SLOTS.includes(zone);
-    const isMandirStyle = isMandirSlot || zone === 'satsang-sabha'; // uses buildMandirPage
-    const basePath = isMandirSlot ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
+    const isMandirSlot  = MANDIR_SLOTS.includes(zone);
+    const isMandirStyle = isMandirSlot || zone === 'satsang-sabha';
+    const basePath      = isMandirSlot ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
 
     // HTML page
     const htmlFilePath = `${basePath}/index.html`;
-    const htmlContent = Buffer.from(html);
-    const htmlSha1 = crypto.createHash('sha1').update(htmlContent).digest('hex');
+    const htmlContent  = Buffer.from(html);
+    const htmlSha1     = crypto.createHash('sha1').update(htmlContent).digest('hex');
     files[htmlFilePath] = htmlSha1;
     fileContents[htmlSha1] = { filePath: htmlFilePath, content: htmlContent };
 
@@ -824,28 +656,28 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
         ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true, zoneOverrideUrl)
         : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true);
       const npFilePath = `/np${basePath}/index.html`;
-      const npContent = Buffer.from(npHtml);
-      const npSha1 = crypto.createHash('sha1').update(npContent).digest('hex');
+      const npContent  = Buffer.from(npHtml);
+      const npSha1     = crypto.createHash('sha1').update(npContent).digest('hex');
       files[npFilePath] = npSha1;
       fileContents[npSha1] = { filePath: npFilePath, content: npContent };
     }
 
     // OG image
-    const zoneDir = path.dirname(flyerPath);
+    const zoneDir    = path.dirname(flyerPath);
     const previewPath = ['preview.png', 'preview.jpg', 'preview.jpeg']
       .map(f => path.join(zoneDir, f))
       .find(f => fs.existsSync(f)) || flyerPath;
     console.log(`🖼️  OG source: ${path.basename(previewPath)}`);
     const ogFilePath = `${basePath}/og.jpg`;
-    const ogContent = await buildOgImage(previewPath, eventInfoMap[zone]?.invitationYPercent);
-    const ogSha1 = crypto.createHash('sha1').update(ogContent).digest('hex');
+    const ogContent  = await buildOgImage(previewPath, eventInfoMap[zone]?.invitationYPercent);
+    const ogSha1     = crypto.createHash('sha1').update(ogContent).digest('hex');
     files[ogFilePath] = ogSha1;
     fileContents[ogSha1] = { filePath: ogFilePath, content: ogContent };
     console.log(`🖼️  OG image: ${Math.round(ogContent.length / 1024)}KB`);
 
     // Flyer image
     const imgFilePath = `${basePath}/flyer.jpg`;
-    const imgContent = await sharp(flyerPath)
+    const imgContent  = await sharp(flyerPath)
       .resize({ width: 1080, withoutEnlargement: true })
       .jpeg({ quality: 80, mozjpeg: true })
       .toBuffer();
@@ -857,9 +689,8 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
 
   // Write all files to dist/ for Netlify CI build
   const repoRoot = path.join(__dirname, '..');
-  const distDir = path.join(repoRoot, 'dist');
+  const distDir  = path.join(repoRoot, 'dist');
 
-  // Clear and recreate dist/
   if (fs.existsSync(distDir)) fs.rmSync(distDir, { recursive: true });
   fs.mkdirSync(distDir, { recursive: true });
 
@@ -871,7 +702,7 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     console.log(`📄 Written: ${filePath}`);
   }
 
-  // Copy images folder to dist/ so static pages can reference /images/tab-logo.png etc.
+  // Copy images folder to dist/
   const imagesDir = path.join(repoRoot, 'images');
   if (fs.existsSync(imagesDir)) {
     const distImagesDir = path.join(distDir, 'images');
@@ -882,7 +713,7 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     }
   }
 
-  // Commit and push dist/ — Netlify CI will pick it up and deploy (including functions)
+  // Commit and push dist/
   const { execSync } = require('child_process');
   const run = cmd => execSync(cmd, { cwd: repoRoot, stdio: 'inherit' });
   run('git config user.email "actions@github.com"');
@@ -901,8 +732,8 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
 }
 
 async function main() {
-  const flyerPathsRaw = process.env.FLYER_PATHS || process.env.FLYER_PATH || '';
-  const changedFlyers = flyerPathsRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const flyerPathsRaw  = process.env.FLYER_PATHS || process.env.FLYER_PATH || '';
+  const changedFlyers  = flyerPathsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
   if (changedFlyers.length) {
     console.log(`\n🎉 Changed flyers: ${changedFlyers.join(', ')}`);
@@ -910,7 +741,12 @@ async function main() {
     console.log('\n♻️ No changed flyers detected — redeploying all zones...');
   }
 
-  // Scan ALL zone folders in the repo and collect every flyer
+  // Init Supabase client
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+  );
+
   const REPO_ROOT_PATH = path.join(__dirname, '..');
   const zones = ['satsang-sabha', 'mountain-top', 'scranton', 'moosic', 'bloomsburg', ...MANDIR_SLOTS];
   const allFlyers = [];
@@ -929,44 +765,45 @@ async function main() {
     process.exit(0);
   }
 
-  console.log(`📦 Deploying all ${allFlyers.length} flyer(s) across all zones...
-`);
+  console.log(`📦 Deploying all ${allFlyers.length} flyer(s) across all zones...\n`);
 
-  const pages = [];
+  const pages        = [];
   const eventInfoMap = {};
-  const deadlines = {};
+  const deadlines    = {};
 
   for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
     const isChanged = changedFlyers.includes(flyerRelPath);
     console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'}`);
 
+    // 1. OCR extracts raw info from flyer
     const eventInfo = await extractEventInfo(flyerPath);
+
+    // 2. Resolve canonical event name from Supabase
+    //    If a name has been set by admin, use it. Otherwise save OCR name as initial value.
+    eventInfo.eventName = await resolveEventName(supabase, zone, eventInfo.eventName);
+
     eventInfoMap[zone] = eventInfo;
 
-    const isMandirSlot = MANDIR_SLOTS.includes(zone);
+    const isMandirSlot   = MANDIR_SLOTS.includes(zone);
     const isSatsangSabha = zone === 'satsang-sabha';
 
     let html, embedUrl = '', formUrl = '';
     if (isMandirSlot) {
-      // Mandir pages: no form unless rsvpDeadline present (and no form URL configured yet)
       html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
     } else if (isSatsangSabha) {
-      // Satsang Sabha: show form only if rsvpDeadline present
       const forms = getGoogleForm(zone);
       embedUrl = forms.embedUrl;
-      formUrl = forms.formUrl;
+      formUrl  = forms.formUrl;
       html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl, false, `https://screvents.com/${zone}`);
     } else {
-      // Parasabha zones: always show form
       const forms = getGoogleForm(zone);
       embedUrl = forms.embedUrl;
-      formUrl = forms.formUrl;
+      formUrl  = forms.formUrl;
       html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
     }
     pages.push({ zone, html, flyerPath, embedUrl, formUrl });
     console.log(`✅ Page ready for ${zone}`);
 
-    // Always store deadline info for hub page (even mandir events without RSVP need date for card)
     let eventDateISO = '';
     if (eventInfo.date) {
       try {
@@ -975,11 +812,11 @@ async function main() {
       } catch(e) {}
     }
     deadlines[zone] = {
-      deadline: eventInfo.rsvpDeadline || '',
+      deadline:  eventInfo.rsvpDeadline || '',
       eventName: eventInfo.eventName || (isMandirSlot ? 'Mandir Event' : 'Para Satsang Sabha'),
-      date: eventInfo.date || '',
+      date:      eventInfo.date || '',
       eventDate: eventDateISO,
-      time: eventInfo.time || ''
+      time:      eventInfo.time || ''
     };
   }
 
@@ -996,9 +833,7 @@ async function main() {
   const deployedUrls = await deployAllToNetlify(pages, merged, eventInfoMap);
 
   console.log('\n✨ All done!');
-  for (const url of deployedUrls) {
-    console.log(`🔗 ${url}`);
-  }
+  for (const url of deployedUrls) console.log(`🔗 ${url}`);
   console.log('📲 Share these links on WhatsApp/Telegram!');
 }
 
