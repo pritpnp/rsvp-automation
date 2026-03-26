@@ -565,7 +565,7 @@
     let parsedRows = [];
 
     function downloadTemplate() {
-      const csv = 'Name,Email,Phone,Telegram\nJay Patel,jay@example.com,5705551234,@jaypatel\nAnita Shah,anita@example.com,5705559876,@anitashah\n';
+      const csv = 'Name,Email,Phone,Telegram\n';
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
