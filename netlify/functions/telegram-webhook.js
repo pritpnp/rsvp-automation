@@ -74,7 +74,6 @@ exports.handler = async (event) => {
   // Fetches the image buffer from our server, then uploads it directly to Telegram.
   // This avoids Telegram trying to fetch the URL itself (which gets blocked by the firewall).
   const sendPhotoBuffer = async (chat_id, flyerUrl) => {
-    // Fetch the image from our own server
     const imgRes = await fetch(flyerUrl);
     if (!imgRes.ok) {
       console.log(`⏭ Flyer not found at ${flyerUrl} (${imgRes.status}) — skipping`);
@@ -84,27 +83,21 @@ exports.handler = async (event) => {
     const imgBuffer = await imgRes.arrayBuffer();
     const imgBytes  = new Uint8Array(imgBuffer);
 
-    // Build multipart/form-data manually
     const boundary = '----TelegramBoundary' + Date.now();
     const filename  = flyerUrl.split('/').pop() || 'flyer.jpg';
 
-    // Build the multipart body as a Uint8Array
     const encoder = new TextEncoder();
     const parts = [];
 
-    // chat_id field
     parts.push(encoder.encode(
       `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chat_id}\r\n`
     ));
-
-    // photo field (binary)
     parts.push(encoder.encode(
       `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="${filename}"\r\nContent-Type: image/jpeg\r\n\r\n`
     ));
     parts.push(imgBytes);
     parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
 
-    // Concatenate all parts
     const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
     const multipartBody = new Uint8Array(totalLength);
     let offset = 0;
@@ -138,7 +131,6 @@ exports.handler = async (event) => {
       }
 
       if (zone === 'mandir') {
-        // Send all mandir flyers that exist
         for (const mandirZone of MANDIR_ZONES) {
           const flyerUrl = buildFlyerUrl(mandirZone);
           console.log(`Sending mandir flyer for zone "${mandirZone}": ${flyerUrl}`);
@@ -180,7 +172,8 @@ exports.handler = async (event) => {
   console.log(`ZONE_CHAT_MAP keys: ${JSON.stringify(Object.keys(ZONE_CHAT_MAP))}`);
   console.log(`ZONE_CHAT_MAP lookup result: ${ZONE_CHAT_MAP[chatId]}`);
 
-  const summaryCmd = text.toLowerCase().replace(/[@\s]/g, '');
+  // Strip bot mention (@botname) before parsing — fixes /summary@parasabha_bot being treated as unknown suffix
+  const summaryCmd = text.toLowerCase().replace(/@\S+/g, '').replace(/\s/g, '');
   let targetZone   = 'all';
 
   if (summaryCmd === '/summary') {
