@@ -58,14 +58,9 @@ exports.handler = async (event) => {
   };
 
   // Builds the correct flyer URL based on zone slug
-  // mandir-1 → /mandir/1/flyer.jpg
-  // scranton  → /scranton/flyer.jpg
-  // satsang-sabha → /satsang-sabha/flyer.jpg
   const buildFlyerUrl = (zone) => {
     const match = zone.match(/^mandir-(\d+)$/);
-    if (match) {
-      return `https://screvents.com/mandir/${match[1]}/flyer.jpg`;
-    }
+    if (match) return `https://screvents.com/mandir/${match[1]}/flyer.jpg`;
     return `https://screvents.com/${zone}/flyer.jpg`;
   };
 
@@ -76,23 +71,65 @@ exports.handler = async (event) => {
       body: JSON.stringify({ chat_id, text: msg }),
     });
 
-  const sendPhoto = (chat_id, photo) =>
-    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+  // Fetches the image buffer from our server, then uploads it directly to Telegram.
+  // This avoids Telegram trying to fetch the URL itself (which gets blocked by the firewall).
+  const sendPhotoBuffer = async (chat_id, flyerUrl) => {
+    // Fetch the image from our own server
+    const imgRes = await fetch(flyerUrl);
+    if (!imgRes.ok) {
+      console.log(`⏭ Flyer not found at ${flyerUrl} (${imgRes.status}) — skipping`);
+      return null;
+    }
+
+    const imgBuffer = await imgRes.arrayBuffer();
+    const imgBytes  = new Uint8Array(imgBuffer);
+
+    // Build multipart/form-data manually
+    const boundary = '----TelegramBoundary' + Date.now();
+    const filename  = flyerUrl.split('/').pop() || 'flyer.jpg';
+
+    // Build the multipart body as a Uint8Array
+    const encoder = new TextEncoder();
+    const parts = [];
+
+    // chat_id field
+    parts.push(encoder.encode(
+      `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chat_id}\r\n`
+    ));
+
+    // photo field (binary)
+    parts.push(encoder.encode(
+      `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="${filename}"\r\nContent-Type: image/jpeg\r\n\r\n`
+    ));
+    parts.push(imgBytes);
+    parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
+
+    // Concatenate all parts
+    const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+    const multipartBody = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const part of parts) {
+      multipartBody.set(part, offset);
+      offset += part.length;
+    }
+
+    const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id, photo }),
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body: multipartBody,
     });
+
+    return tgRes.json();
+  };
 
   // ─── /getflyer ─────────────────────────────────────────────────────────────
   if (isGetFlyer) {
-    // Strip bot mention + whitespace: /getflyermandir2@MyBot → /getflyermandir2
     const cmd    = text.toLowerCase().replace(/@\S+/g, '').replace(/\s/g, '');
-    const suffix = cmd.replace('/getflyer', ''); // '' | 'scranton' | 'mandir2' etc.
+    const suffix = cmd.replace('/getflyer', '');
 
     let flyerZone;
 
     if (suffix === '') {
-      // No suffix — determine zone from which group the command was sent in
       const zone = ZONE_CHAT_MAP[chatId];
 
       if (!zone) {
@@ -101,14 +138,13 @@ exports.handler = async (event) => {
       }
 
       if (zone === 'mandir') {
-        // Send all mandir flyers at once
+        // Send all mandir flyers that exist
         for (const mandirZone of MANDIR_ZONES) {
           const flyerUrl = buildFlyerUrl(mandirZone);
           console.log(`Sending mandir flyer for zone "${mandirZone}": ${flyerUrl}`);
-          const photoRes  = await sendPhoto(chatId, flyerUrl);
-          const photoBody = await photoRes.json();
-          if (!photoBody.ok) {
-            console.error(`sendPhoto failed for ${mandirZone}: ${JSON.stringify(photoBody)}`);
+          const result = await sendPhotoBuffer(chatId, flyerUrl);
+          if (result && !result.ok) {
+            console.error(`sendPhoto failed for ${mandirZone}: ${JSON.stringify(result)}`);
           }
         }
         return { statusCode: 200, body: 'OK' };
@@ -117,7 +153,6 @@ exports.handler = async (event) => {
       flyerZone = zone;
 
     } else {
-      // Suffix provided — resolve it
       flyerZone = SUFFIX_MAP[suffix];
 
       if (!flyerZone) {
@@ -129,12 +164,12 @@ exports.handler = async (event) => {
     const flyerUrl = buildFlyerUrl(flyerZone);
     console.log(`Sending flyer for zone "${flyerZone}": ${flyerUrl}`);
 
-    const photoRes  = await sendPhoto(chatId, flyerUrl);
-    const photoBody = await photoRes.json();
-
-    if (!photoBody.ok) {
-      console.error(`sendPhoto failed: ${JSON.stringify(photoBody)}`);
+    const result = await sendPhotoBuffer(chatId, flyerUrl);
+    if (!result) {
       await sendMessage(chatId, `⚠️ Could not retrieve flyer for ${flyerZone}. It may not be uploaded yet.`);
+    } else if (!result.ok) {
+      console.error(`sendPhoto failed: ${JSON.stringify(result)}`);
+      await sendMessage(chatId, `⚠️ Could not send flyer for ${flyerZone}. Please try again.`);
     }
 
     return { statusCode: 200, body: 'OK' };
