@@ -1,5 +1,8 @@
+// In-memory state store for /uploadflyer conversation flow
+// State shape: { [chatId]: { step: 'awaiting_photo' | 'awaiting_zone' | 'awaiting_confirm', photoFileId, zone } }
+const uploadState = {};
+
 exports.handler = async (event) => {
-  // Always respond 200 immediately — prevents Telegram retries
   if (event.httpMethod !== 'POST') {
     return { statusCode: 200, body: 'OK' };
   }
@@ -12,17 +15,12 @@ exports.handler = async (event) => {
   }
 
   const message = body?.message;
-  if (!message?.text) return { statusCode: 200, body: 'OK' };
-
-  const text       = message.text.trim();
-  const isGetFlyer = text.toLowerCase().startsWith('/getflyer');
-  const isSummary  = text.toLowerCase().startsWith('/summary');
-
-  if (!isSummary && !isGetFlyer) return { statusCode: 200, body: 'OK' };
+  if (!message) return { statusCode: 200, body: 'OK' };
 
   const chatId             = String(message.chat.id);
-  const GITHUB_PAT         = process.env.GITHUB_PAT;
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const GITHUB_PAT         = process.env.GITHUB_PAT;
+  const ADMIN_CHAT_ID      = process.env.TELEGRAM_CHAT_ID;
 
   const ZONE_CHAT_MAP = {
     [process.env.TELEGRAM_CHAT_ID_SCRANTON]:     'scranton',
@@ -32,7 +30,6 @@ exports.handler = async (event) => {
     [process.env.TELEGRAM_CHAT_ID_MANDIR]:       'mandir',
   };
 
-  // All mandir sub-zones sent when /getflyer is used in the Mandir group
   const MANDIR_ZONES = [
     'satsang-sabha',
     'mandir-1',
@@ -42,7 +39,6 @@ exports.handler = async (event) => {
     'mandir-5',
   ];
 
-  // Suffix map — used for admin commands and explicit zone selection
   const SUFFIX_MAP = {
     'scranton':    'scranton',
     'mountaintop': 'mountain-top',
@@ -57,22 +53,33 @@ exports.handler = async (event) => {
     'mandir5':     'mandir-5',
   };
 
-  // Builds the correct flyer URL based on zone slug
+  // All selectable zones for /uploadflyer
+  const UPLOAD_ZONES = [
+    { label: 'Scranton',      value: 'scranton' },
+    { label: 'Mountain Top',  value: 'mountain-top' },
+    { label: 'Moosic',        value: 'moosic' },
+    { label: 'Bloomsburg',    value: 'bloomsburg' },
+    { label: 'Satsang Sabha', value: 'satsang-sabha' },
+    { label: 'Mandir 1',      value: 'mandir-1' },
+    { label: 'Mandir 2',      value: 'mandir-2' },
+    { label: 'Mandir 3',      value: 'mandir-3' },
+    { label: 'Mandir 4',      value: 'mandir-4' },
+    { label: 'Mandir 5',      value: 'mandir-5' },
+  ];
+
   const buildFlyerUrl = (zone) => {
     const match = zone.match(/^mandir-(\d+)$/);
     if (match) return `https://screvents.com/mandir/${match[1]}/flyer.jpg`;
     return `https://screvents.com/${zone}/flyer.jpg`;
   };
 
-  const sendMessage = (chat_id, msg) =>
+  const sendMessage = (chat_id, text, extra = {}) =>
     fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id, text: msg }),
+      body: JSON.stringify({ chat_id, text, ...extra }),
     });
 
-  // Fetches the image buffer from our server, then uploads it directly to Telegram.
-  // This avoids Telegram trying to fetch the URL itself (which gets blocked by the firewall).
   const sendPhotoBuffer = async (chat_id, flyerUrl) => {
     const imgRes = await fetch(flyerUrl);
     if (!imgRes.ok) {
@@ -82,12 +89,10 @@ exports.handler = async (event) => {
 
     const imgBuffer = await imgRes.arrayBuffer();
     const imgBytes  = new Uint8Array(imgBuffer);
-
-    const boundary = '----TelegramBoundary' + Date.now();
+    const boundary  = '----TelegramBoundary' + Date.now();
     const filename  = flyerUrl.split('/').pop() || 'flyer.jpg';
-
-    const encoder = new TextEncoder();
-    const parts = [];
+    const encoder   = new TextEncoder();
+    const parts     = [];
 
     parts.push(encoder.encode(
       `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chat_id}\r\n`
@@ -101,10 +106,7 @@ exports.handler = async (event) => {
     const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
     const multipartBody = new Uint8Array(totalLength);
     let offset = 0;
-    for (const part of parts) {
-      multipartBody.set(part, offset);
-      offset += part.length;
-    }
+    for (const part of parts) { multipartBody.set(part, offset); offset += part.length; }
 
     const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
       method: 'POST',
@@ -115,9 +117,213 @@ exports.handler = async (event) => {
     return tgRes.json();
   };
 
+  // Downloads a photo from Telegram by file_id, returns ArrayBuffer
+  const downloadTelegramPhoto = async (fileId) => {
+    const fileRes = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`
+    );
+    const fileData = await fileRes.json();
+    if (!fileData.ok) throw new Error(`getFile failed: ${JSON.stringify(fileData)}`);
+
+    const filePath = fileData.result.file_path;
+    const dlRes = await fetch(
+      `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`
+    );
+    if (!dlRes.ok) throw new Error(`Download failed: ${dlRes.status}`);
+    return dlRes.arrayBuffer();
+  };
+
+  // Uploads a flyer buffer to screvents.com via the existing upload-flyer Netlify function
+  const uploadFlyerToSite = async (imageBuffer, zone) => {
+    const base64 = Buffer.from(imageBuffer).toString('base64');
+
+    const res = await fetch('https://screvents.com/.netlify/functions/upload-flyer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zone, imageBase64: base64 }),
+    });
+
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch { json = { ok: false, error: text }; }
+
+    if (!res.ok) throw new Error(json.error || `upload-flyer returned ${res.status}`);
+    return json;
+  };
+
+  // ─── Inline keyboard helpers ────────────────────────────────────────────────
+
+  const zoneKeyboard = () => ({
+    inline_keyboard: [
+      [
+        { text: 'Scranton',     callback_data: 'zone:scranton' },
+        { text: 'Mountain Top', callback_data: 'zone:mountain-top' },
+      ],
+      [
+        { text: 'Moosic',       callback_data: 'zone:moosic' },
+        { text: 'Bloomsburg',   callback_data: 'zone:bloomsburg' },
+      ],
+      [
+        { text: 'Satsang Sabha', callback_data: 'zone:satsang-sabha' },
+      ],
+      [
+        { text: 'Mandir 1', callback_data: 'zone:mandir-1' },
+        { text: 'Mandir 2', callback_data: 'zone:mandir-2' },
+        { text: 'Mandir 3', callback_data: 'zone:mandir-3' },
+      ],
+      [
+        { text: 'Mandir 4', callback_data: 'zone:mandir-4' },
+        { text: 'Mandir 5', callback_data: 'zone:mandir-5' },
+      ],
+      [
+        { text: '❌ Cancel', callback_data: 'upload:cancel' },
+      ],
+    ],
+  });
+
+  const confirmKeyboard = () => ({
+    inline_keyboard: [
+      [
+        { text: '✅ Yes, upload',  callback_data: 'upload:confirm' },
+        { text: '❌ Cancel',       callback_data: 'upload:cancel' },
+      ],
+    ],
+  });
+
+  const answerCallbackQuery = (callbackQueryId, text = '') =>
+    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    });
+
+  const editMessageText = (chat_id, message_id, text, extra = {}) =>
+    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id, message_id, text, ...extra }),
+    });
+
+  // ─── Handle callback_query (inline button presses) ─────────────────────────
+  const callbackQuery = body?.callback_query;
+  if (callbackQuery) {
+    const cbChatId = String(callbackQuery.message.chat.id);
+    const cbData   = callbackQuery.data;
+    const msgId    = callbackQuery.message.message_id;
+
+    // Only handle callbacks from the admin chat
+    if (cbChatId !== ADMIN_CHAT_ID) {
+      await answerCallbackQuery(callbackQuery.id);
+      return { statusCode: 200, body: 'OK' };
+    }
+
+    const state = uploadState[cbChatId];
+
+    // ── Cancel ──
+    if (cbData === 'upload:cancel') {
+      delete uploadState[cbChatId];
+      await answerCallbackQuery(callbackQuery.id, 'Cancelled');
+      await editMessageText(cbChatId, msgId, '❌ Upload cancelled.');
+      return { statusCode: 200, body: 'OK' };
+    }
+
+    // ── Zone selected ──
+    if (cbData.startsWith('zone:') && state?.step === 'awaiting_zone') {
+      const selectedZone = cbData.replace('zone:', '');
+      const zoneLabel    = UPLOAD_ZONES.find(z => z.value === selectedZone)?.label || selectedZone;
+
+      uploadState[cbChatId] = { ...state, step: 'awaiting_confirm', zone: selectedZone };
+
+      await answerCallbackQuery(callbackQuery.id);
+      await editMessageText(
+        cbChatId, msgId,
+        `📍 Zone selected: *${zoneLabel}*\n\nUpload this flyer to *${zoneLabel}*?`,
+        { parse_mode: 'Markdown', reply_markup: JSON.stringify(confirmKeyboard()) }
+      );
+      return { statusCode: 200, body: 'OK' };
+    }
+
+    // ── Confirm upload ──
+    if (cbData === 'upload:confirm' && state?.step === 'awaiting_confirm') {
+      const { photoFileId, zone } = state;
+      const zoneLabel = UPLOAD_ZONES.find(z => z.value === zone)?.label || zone;
+
+      delete uploadState[cbChatId];
+      await answerCallbackQuery(callbackQuery.id, 'Uploading…');
+      await editMessageText(cbChatId, msgId, `⏳ Uploading flyer to *${zoneLabel}*...`, { parse_mode: 'Markdown' });
+
+      try {
+        const imageBuffer = await downloadTelegramPhoto(photoFileId);
+        await uploadFlyerToSite(imageBuffer, zone);
+        await sendMessage(cbChatId, `✅ Flyer uploaded successfully to *${zoneLabel}*!`, { parse_mode: 'Markdown' });
+      } catch (err) {
+        console.error('Upload error:', err);
+        await sendMessage(cbChatId, `❌ Upload failed: ${err.message}`);
+      }
+
+      return { statusCode: 200, body: 'OK' };
+    }
+
+    // Stale or unexpected callback
+    await answerCallbackQuery(callbackQuery.id, 'Session expired. Use /uploadflyer to start again.');
+    return { statusCode: 200, body: 'OK' };
+  }
+
+  // ─── Handle photo messages (awaiting_photo step) ────────────────────────────
+  if (message.photo) {
+    const state = uploadState[chatId];
+
+    if (chatId === ADMIN_CHAT_ID && state?.step === 'awaiting_photo') {
+      // Use the highest resolution version (last in array)
+      const bestPhoto = message.photo[message.photo.length - 1];
+      uploadState[chatId] = { step: 'awaiting_zone', photoFileId: bestPhoto.file_id };
+
+      await sendMessage(
+        chatId,
+        '📸 Got the flyer! Which zone is this for?',
+        { reply_markup: JSON.stringify(zoneKeyboard()) }
+      );
+    }
+
+    return { statusCode: 200, body: 'OK' };
+  }
+
+  // ─── Handle text commands ───────────────────────────────────────────────────
+  const text = message.text?.trim();
+  if (!text) return { statusCode: 200, body: 'OK' };
+
+  const normalizedText = text.toLowerCase().replace(/@\S+/g, '').trim();
+  const isGetFlyer     = normalizedText.startsWith('/getflyer');
+  const isSummary      = normalizedText.startsWith('/summary');
+  const isUploadFlyer  = normalizedText === '/uploadflyer';
+  const isCancel       = normalizedText === '/cancel';
+
+  // ── /cancel (admin chat only) ──
+  if (isCancel && chatId === ADMIN_CHAT_ID && uploadState[chatId]) {
+    delete uploadState[chatId];
+    await sendMessage(chatId, '❌ Upload cancelled.');
+    return { statusCode: 200, body: 'OK' };
+  }
+
+  // ── /uploadflyer (admin chat only) ──
+  if (isUploadFlyer) {
+    if (chatId !== ADMIN_CHAT_ID) {
+      return { statusCode: 200, body: 'OK' }; // silently ignore in non-admin chats
+    }
+
+    uploadState[chatId] = { step: 'awaiting_photo' };
+    await sendMessage(
+      chatId,
+      '📤 Please send the flyer image now, or type /cancel to abort.'
+    );
+    return { statusCode: 200, body: 'OK' };
+  }
+
+  if (!isSummary && !isGetFlyer) return { statusCode: 200, body: 'OK' };
+
   // ─── /getflyer ─────────────────────────────────────────────────────────────
   if (isGetFlyer) {
-    const cmd    = text.toLowerCase().replace(/@\S+/g, '').replace(/\s/g, '');
+    const cmd    = normalizedText.replace(/\s/g, '');
     const suffix = cmd.replace('/getflyer', '');
 
     let flyerZone;
@@ -172,8 +378,7 @@ exports.handler = async (event) => {
   console.log(`ZONE_CHAT_MAP keys: ${JSON.stringify(Object.keys(ZONE_CHAT_MAP))}`);
   console.log(`ZONE_CHAT_MAP lookup result: ${ZONE_CHAT_MAP[chatId]}`);
 
-  // Strip bot mention (@botname) before parsing — fixes /summary@parasabha_bot being treated as unknown suffix
-  const summaryCmd = text.toLowerCase().replace(/@\S+/g, '').replace(/\s/g, '');
+  const summaryCmd = normalizedText.replace(/\s/g, '');
   let targetZone   = 'all';
 
   if (summaryCmd === '/summary') {
