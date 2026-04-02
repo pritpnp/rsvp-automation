@@ -256,6 +256,7 @@
               <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:8px;margin-bottom:4px">Flyer Permissions</div>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-upload-flyer"> Upload flyers</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-remove-flyer"> Remove flyers</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-refresh-flyer"> Refresh all flyers (force OCR)</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-edit-rsvp"> Edit number of guests</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-delete-rsvp"> Delete RSVPs</label>
             </div>
@@ -373,6 +374,13 @@
           <button id="flyer-remove-btn" class="btn-create" onclick="removeFlyer()" style="background:linear-gradient(135deg,#991b1b,#dc2626)">Remove Flyer →</button>
           <div id="flyer-remove-status" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
         </div>
+
+        <div class="card" id="flyer-refresh-card">
+          <h2>Refresh All Zones</h2>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Force OCR on every zone that has a flyer — regardless of what changed. Use this if event details look wrong or are out of date. This will trigger a full site rebuild (~2 minutes).</p>
+          <button id="flyer-refresh-btn" class="btn-create" onclick="refreshAllFlyers()" style="background:linear-gradient(135deg,var(--brown),var(--brown-mid))">🔄 Refresh All Zones →</button>
+          <div id="flyer-refresh-status" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
+        </div>
       </div>
 
     </div>
@@ -389,6 +397,7 @@
     const MANAGERS_API          = '/.netlify/functions/superadmin-managers';
     const UPDATE_EVENT_NAME_API = '/.netlify/functions/update-event-name';
     const TRIGGER_REDEPLOY_API  = '/.netlify/functions/trigger-redeploy';
+    const REFRESH_FLYERS_API    = '/.netlify/functions/refresh-flyers';
 
     document.addEventListener('DOMContentLoaded', function() {
       if (!sessionToken) {
@@ -430,7 +439,7 @@
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'managers\', this)">👤 Managers</button>';
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'events\', this)">📅 Events</button>';
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'flyers\', this)">🖼 Flyers</button>';
-      } else if (permissions.upload_flyers || permissions.remove_flyers) {
+      } else if (permissions.upload_flyers || permissions.remove_flyers || permissions.refresh_flyers) {
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'flyers\', this)">🖼 Flyers</button>';
       }
       tabsEl.innerHTML = tabsHtml;
@@ -446,6 +455,9 @@
       const removeCard = document.getElementById('flyer-remove-card');
       if (uploadCard) uploadCard.style.display = canUpload ? 'block' : 'none';
       if (removeCard) removeCard.style.display = canRemove ? 'block' : 'none';
+      const canRefresh = isSuperadmin || permissions.refresh_flyers;
+      const refreshCard = document.getElementById('flyer-refresh-card');
+      if (refreshCard) refreshCard.style.display = canRefresh ? 'block' : 'none';
     }
 
     async function logout() {
@@ -872,6 +884,7 @@
       if (p?.delete_rsvps) labels.push('Delete RSVPs');
       if (p?.upload_flyers) labels.push('Upload Flyers');
       if (p?.remove_flyers) labels.push('Remove Flyers');
+      if (p?.refresh_flyers) labels.push('Refresh All Flyers');
       return labels.length ? labels.join(', ') : 'No permissions';
     }
 
@@ -907,6 +920,7 @@
                 <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:10px;margin-bottom:6px">Flyer Permissions</div>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-upload-flyer-${m.id}" ${m.permissions?.upload_flyers ? 'checked' : ''}> Upload flyers</label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-remove-flyer-${m.id}" ${m.permissions?.remove_flyers ? 'checked' : ''}> Remove flyers</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-refresh-flyer-${m.id}" ${m.permissions?.refresh_flyers ? 'checked' : ''}> Refresh all flyers (force OCR)</label>
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px">
@@ -933,13 +947,14 @@
         edit_rsvps: document.getElementById('new-perm-edit-rsvp').checked,
         delete_rsvps: document.getElementById('new-perm-delete-rsvp').checked,
         upload_flyers: document.getElementById('new-perm-upload-flyer').checked,
-        remove_flyers: document.getElementById('new-perm-remove-flyer').checked
+        remove_flyers: document.getElementById('new-perm-remove-flyer').checked,
+        refresh_flyers: document.getElementById('new-perm-refresh-flyer').checked
       };
       const res = await fetch(MANAGERS_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ username, password, permissions }) });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
       ['new-manager-username','new-manager-password'].forEach(id => document.getElementById(id).value = '');
-      ['new-perm-create','new-perm-edit','new-perm-view-rsvp','new-perm-edit-rsvp','new-perm-delete-rsvp','new-perm-upload-flyer','new-perm-remove-flyer'].forEach(id => document.getElementById(id).checked = false);
+      ['new-perm-create','new-perm-edit','new-perm-view-rsvp','new-perm-edit-rsvp','new-perm-delete-rsvp','new-perm-upload-flyer','new-perm-remove-flyer','new-perm-refresh-flyer'].forEach(id => document.getElementById(id).checked = false);
       sucEl.textContent = `✅ Manager "${data.username}" added.`;
       sucEl.style.display = 'block';
       setTimeout(() => sucEl.style.display = 'none', 6000);
@@ -968,7 +983,8 @@
         edit_rsvps:           document.getElementById('mgr-edit-edit-rsvp-' + id).checked,
         delete_rsvps:         document.getElementById('mgr-edit-delete-rsvp-' + id).checked,
         upload_flyers:        document.getElementById('mgr-edit-upload-flyer-' + id).checked,
-        remove_flyers:        document.getElementById('mgr-edit-remove-flyer-' + id).checked
+        remove_flyers:        document.getElementById('mgr-edit-remove-flyer-' + id).checked,
+        refresh_flyers:       document.getElementById('mgr-edit-refresh-flyer-' + id).checked
       };
       const errEl = document.getElementById('mgr-edit-err-' + id);
       errEl.style.display = 'none';
@@ -1304,6 +1320,32 @@
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+    }
+
+    async function refreshAllFlyers() {
+      const btn    = document.getElementById('flyer-refresh-btn');
+      const status = document.getElementById('flyer-refresh-status');
+      if (!confirm('Force OCR on all zones? This will trigger a full site rebuild (~2 minutes).')) return;
+      btn.disabled = true;
+      btn.textContent = '⏳ Triggering...';
+      status.style.display = 'none';
+      try {
+        const res = await fetch(REFRESH_FLYERS_API, { method: 'POST', headers: authHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        status.textContent = '✅ Refresh triggered! GitHub Actions is running OCR on all zones. Site will update in ~2 minutes.';
+        status.style.background = '#f0fdf4';
+        status.style.color = '#166534';
+        status.style.display = 'block';
+        setTimeout(() => { btn.disabled = false; btn.textContent = '🔄 Refresh All Zones →'; }, 15000);
+      } catch (err) {
+        status.textContent = '❌ ' + err.message;
+        status.style.background = '#fef2f2';
+        status.style.color = '#991b1b';
+        status.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '🔄 Refresh All Zones →';
+      }
     }
 
     async function goHome() {
