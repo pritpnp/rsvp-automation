@@ -8,6 +8,7 @@ exports.handler = async (event) => {
   let body;
   try {
     body = JSON.parse(event.body);
+    console.log('RAW BODY:', JSON.stringify(body).slice(0, 500));
   } catch (e) {
     return { statusCode: 200, body: 'OK' };
   }
@@ -474,4 +475,3 @@ exports.handler = async (event) => {
 
   return { statusCode: 200, body: 'OK' };
 };
- 
