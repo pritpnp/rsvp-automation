@@ -321,17 +321,17 @@ exports.handler = async (event) => {
   // ─── Handle photo messages (awaiting_photo step) ────────────────────────────
 
   if (message.photo) {
-    if (chatId === ADMIN_CHAT_ID) {
-      const state = await getSession(chatId);
-      if (state?.step === 'awaiting_photo') {
-        const bestPhoto = message.photo[message.photo.length - 1];
-        await setSession(chatId, 'awaiting_zone', bestPhoto.file_id, null);
-        await sendMessage(
-          chatId,
-          '📸 Got the flyer! Which zone is this for?',
-          { reply_markup: JSON.stringify(zoneKeyboard()) }
-        );
-      }
+    console.log(`Photo received from chatId: "${chatId}", ADMIN_CHAT_ID: "${ADMIN_CHAT_ID}"`);
+    const state = await getSession(chatId);
+    console.log(`Session state: ${JSON.stringify(state)}`);
+    if (state?.step === 'awaiting_photo') {
+      const bestPhoto = message.photo[message.photo.length - 1];
+      await setSession(chatId, 'awaiting_zone', bestPhoto.file_id, null);
+      await sendMessage(
+        chatId,
+        '📸 Got the flyer! Which zone is this for?',
+        { reply_markup: JSON.stringify(zoneKeyboard()) }
+      );
     }
     return { statusCode: 200, body: 'OK' };
   }
