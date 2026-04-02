@@ -1,6 +1,4 @@
-// In-memory state store for /uploadflyer conversation flow
-// State shape: { [chatId]: { step: 'awaiting_photo' | 'awaiting_zone' | 'awaiting_confirm', photoFileId, zone } }
-const uploadState = {};
+const { createClient } = require('@supabase/supabase-js');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -14,13 +12,45 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: 'OK' };
   }
 
-  const message = body?.message;
-  if (!message) return { statusCode: 200, body: 'OK' };
+  const message       = body?.message;
+  const callbackQuery = body?.callback_query;
+  if (!message && !callbackQuery) return { statusCode: 200, body: 'OK' };
 
-  const chatId             = String(message.chat.id);
+  const chatId             = String(message ? message.chat.id : callbackQuery.message.chat.id);
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   const GITHUB_PAT         = process.env.GITHUB_PAT;
   const ADMIN_CHAT_ID      = process.env.TELEGRAM_CHAT_ID;
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+  );
+
+  // ─── Supabase session helpers ───────────────────────────────────────────────
+
+  const getSession = async (chat_id) => {
+    const { data } = await supabase
+      .from('telegram_upload_sessions')
+      .select('*')
+      .eq('chat_id', chat_id)
+      .single();
+    return data || null;
+  };
+
+  const setSession = async (chat_id, step, photo_file_id = null, zone = null) => {
+    await supabase
+      .from('telegram_upload_sessions')
+      .upsert({ chat_id, step, photo_file_id, zone, updated_at: new Date().toISOString() });
+  };
+
+  const clearSession = async (chat_id) => {
+    await supabase
+      .from('telegram_upload_sessions')
+      .delete()
+      .eq('chat_id', chat_id);
+  };
+
+  // ─── Constants ─────────────────────────────────────────────────────────────
 
   const ZONE_CHAT_MAP = {
     [process.env.TELEGRAM_CHAT_ID_SCRANTON]:     'scranton',
@@ -53,7 +83,6 @@ exports.handler = async (event) => {
     'mandir5':     'mandir-5',
   };
 
-  // All selectable zones for /uploadflyer
   const UPLOAD_ZONES = [
     { label: 'Scranton',      value: 'scranton' },
     { label: 'Mountain Top',  value: 'mountain-top' },
@@ -67,6 +96,8 @@ exports.handler = async (event) => {
     { label: 'Mandir 5',      value: 'mandir-5' },
   ];
 
+  // ─── Telegram helpers ───────────────────────────────────────────────────────
+
   const buildFlyerUrl = (zone) => {
     const match = zone.match(/^mandir-(\d+)$/);
     if (match) return `https://screvents.com/mandir/${match[1]}/flyer.jpg`;
@@ -78,6 +109,20 @@ exports.handler = async (event) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id, text, ...extra }),
+    });
+
+  const answerCallbackQuery = (callbackQueryId, text = '') =>
+    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    });
+
+  const editMessageText = (chat_id, message_id, text, extra = {}) =>
+    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id, message_id, text, ...extra }),
     });
 
   const sendPhotoBuffer = async (chat_id, flyerUrl) => {
@@ -117,41 +162,57 @@ exports.handler = async (event) => {
     return tgRes.json();
   };
 
-  // Downloads a photo from Telegram by file_id, returns ArrayBuffer
-  const downloadTelegramPhoto = async (fileId) => {
-    const fileRes = await fetch(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`
-    );
+  // Downloads the highest-res photo from Telegram by file_id, returns base64 string
+  const downloadTelegramPhotoAsBase64 = async (fileId) => {
+    const fileRes  = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
     const fileData = await fileRes.json();
     if (!fileData.ok) throw new Error(`getFile failed: ${JSON.stringify(fileData)}`);
 
     const filePath = fileData.result.file_path;
-    const dlRes = await fetch(
-      `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`
-    );
-    if (!dlRes.ok) throw new Error(`Download failed: ${dlRes.status}`);
-    return dlRes.arrayBuffer();
+    const dlRes    = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`);
+    if (!dlRes.ok) throw new Error(`Telegram download failed: ${dlRes.status}`);
+
+    const buffer = await dlRes.arrayBuffer();
+    return Buffer.from(buffer).toString('base64');
   };
 
-  // Uploads a flyer buffer to screvents.com via the existing upload-flyer Netlify function
-  const uploadFlyerToSite = async (imageBuffer, zone) => {
-    const base64 = Buffer.from(imageBuffer).toString('base64');
+  // Commits flyer.jpg to the repo via GitHub Contents API — same effect as the Mac script push
+  const commitFlyerToGitHub = async (zone, base64Image) => {
+    const path    = `flyers/${zone}/flyer.jpg`;
+    const apiUrl  = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${path}`;
+    const headers = {
+      'Authorization': `Bearer ${GITHUB_PAT}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+    };
 
-    const res = await fetch('https://screvents.com/.netlify/functions/upload-flyer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ zone, imageBase64: base64 }),
+    // Check if file already exists — GitHub requires the current SHA to overwrite
+    let sha;
+    const getRes = await fetch(apiUrl, { headers });
+    if (getRes.ok) {
+      const existing = await getRes.json();
+      sha = existing.sha;
+    }
+
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        message: `Upload flyer for ${zone} via Telegram`,
+        content: base64Image,
+        ...(sha ? { sha } : {}),
+      }),
     });
 
-    const text = await res.text();
-    let json;
-    try { json = JSON.parse(text); } catch { json = { ok: false, error: text }; }
+    if (!putRes.ok) {
+      const err = await putRes.text();
+      throw new Error(`GitHub commit failed (${putRes.status}): ${err}`);
+    }
 
-    if (!res.ok) throw new Error(json.error || `upload-flyer returned ${res.status}`);
-    return json;
+    return putRes.json();
   };
 
-  // ─── Inline keyboard helpers ────────────────────────────────────────────────
+  // ─── Inline keyboard builders ───────────────────────────────────────────────
 
   const zoneKeyboard = () => ({
     inline_keyboard: [
@@ -160,8 +221,8 @@ exports.handler = async (event) => {
         { text: 'Mountain Top', callback_data: 'zone:mountain-top' },
       ],
       [
-        { text: 'Moosic',       callback_data: 'zone:moosic' },
-        { text: 'Bloomsburg',   callback_data: 'zone:bloomsburg' },
+        { text: 'Moosic',     callback_data: 'zone:moosic' },
+        { text: 'Bloomsburg', callback_data: 'zone:bloomsburg' },
       ],
       [
         { text: 'Satsang Sabha', callback_data: 'zone:satsang-sabha' },
@@ -184,44 +245,29 @@ exports.handler = async (event) => {
   const confirmKeyboard = () => ({
     inline_keyboard: [
       [
-        { text: '✅ Yes, upload',  callback_data: 'upload:confirm' },
-        { text: '❌ Cancel',       callback_data: 'upload:cancel' },
+        { text: '✅ Yes, upload', callback_data: 'upload:confirm' },
+        { text: '❌ Cancel',      callback_data: 'upload:cancel' },
       ],
     ],
   });
 
-  const answerCallbackQuery = (callbackQueryId, text = '') =>
-    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
-    });
-
-  const editMessageText = (chat_id, message_id, text, extra = {}) =>
-    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id, message_id, text, ...extra }),
-    });
-
   // ─── Handle callback_query (inline button presses) ─────────────────────────
-  const callbackQuery = body?.callback_query;
+
   if (callbackQuery) {
     const cbChatId = String(callbackQuery.message.chat.id);
     const cbData   = callbackQuery.data;
     const msgId    = callbackQuery.message.message_id;
 
-    // Only handle callbacks from the admin chat
     if (cbChatId !== ADMIN_CHAT_ID) {
       await answerCallbackQuery(callbackQuery.id);
       return { statusCode: 200, body: 'OK' };
     }
 
-    const state = uploadState[cbChatId];
+    const state = await getSession(cbChatId);
 
     // ── Cancel ──
     if (cbData === 'upload:cancel') {
-      delete uploadState[cbChatId];
+      await clearSession(cbChatId);
       await answerCallbackQuery(callbackQuery.id, 'Cancelled');
       await editMessageText(cbChatId, msgId, '❌ Upload cancelled.');
       return { statusCode: 200, body: 'OK' };
@@ -232,8 +278,7 @@ exports.handler = async (event) => {
       const selectedZone = cbData.replace('zone:', '');
       const zoneLabel    = UPLOAD_ZONES.find(z => z.value === selectedZone)?.label || selectedZone;
 
-      uploadState[cbChatId] = { ...state, step: 'awaiting_confirm', zone: selectedZone };
-
+      await setSession(cbChatId, 'awaiting_confirm', state.photo_file_id, selectedZone);
       await answerCallbackQuery(callbackQuery.id);
       await editMessageText(
         cbChatId, msgId,
@@ -245,17 +290,21 @@ exports.handler = async (event) => {
 
     // ── Confirm upload ──
     if (cbData === 'upload:confirm' && state?.step === 'awaiting_confirm') {
-      const { photoFileId, zone } = state;
+      const { photo_file_id, zone } = state;
       const zoneLabel = UPLOAD_ZONES.find(z => z.value === zone)?.label || zone;
 
-      delete uploadState[cbChatId];
+      await clearSession(cbChatId);
       await answerCallbackQuery(callbackQuery.id, 'Uploading…');
       await editMessageText(cbChatId, msgId, `⏳ Uploading flyer to *${zoneLabel}*...`, { parse_mode: 'Markdown' });
 
       try {
-        const imageBuffer = await downloadTelegramPhoto(photoFileId);
-        await uploadFlyerToSite(imageBuffer, zone);
-        await sendMessage(cbChatId, `✅ Flyer uploaded successfully to *${zoneLabel}*!`, { parse_mode: 'Markdown' });
+        const base64Image = await downloadTelegramPhotoAsBase64(photo_file_id);
+        await commitFlyerToGitHub(zone, base64Image);
+        await sendMessage(
+          cbChatId,
+          `✅ Flyer uploaded to *${zoneLabel}*! GitHub Actions will process it now.`,
+          { parse_mode: 'Markdown' }
+        );
       } catch (err) {
         console.error('Upload error:', err);
         await sendMessage(cbChatId, `❌ Upload failed: ${err.message}`);
@@ -270,25 +319,25 @@ exports.handler = async (event) => {
   }
 
   // ─── Handle photo messages (awaiting_photo step) ────────────────────────────
+
   if (message.photo) {
-    const state = uploadState[chatId];
-
-    if (chatId === ADMIN_CHAT_ID && state?.step === 'awaiting_photo') {
-      // Use the highest resolution version (last in array)
-      const bestPhoto = message.photo[message.photo.length - 1];
-      uploadState[chatId] = { step: 'awaiting_zone', photoFileId: bestPhoto.file_id };
-
-      await sendMessage(
-        chatId,
-        '📸 Got the flyer! Which zone is this for?',
-        { reply_markup: JSON.stringify(zoneKeyboard()) }
-      );
+    if (chatId === ADMIN_CHAT_ID) {
+      const state = await getSession(chatId);
+      if (state?.step === 'awaiting_photo') {
+        const bestPhoto = message.photo[message.photo.length - 1];
+        await setSession(chatId, 'awaiting_zone', bestPhoto.file_id, null);
+        await sendMessage(
+          chatId,
+          '📸 Got the flyer! Which zone is this for?',
+          { reply_markup: JSON.stringify(zoneKeyboard()) }
+        );
+      }
     }
-
     return { statusCode: 200, body: 'OK' };
   }
 
   // ─── Handle text commands ───────────────────────────────────────────────────
+
   const text = message.text?.trim();
   if (!text) return { statusCode: 200, body: 'OK' };
 
@@ -299,29 +348,28 @@ exports.handler = async (event) => {
   const isCancel       = normalizedText === '/cancel';
 
   // ── /cancel (admin chat only) ──
-  if (isCancel && chatId === ADMIN_CHAT_ID && uploadState[chatId]) {
-    delete uploadState[chatId];
-    await sendMessage(chatId, '❌ Upload cancelled.');
+  if (isCancel && chatId === ADMIN_CHAT_ID) {
+    const state = await getSession(chatId);
+    if (state) {
+      await clearSession(chatId);
+      await sendMessage(chatId, '❌ Upload cancelled.');
+    }
     return { statusCode: 200, body: 'OK' };
   }
 
   // ── /uploadflyer (admin chat only) ──
   if (isUploadFlyer) {
-    if (chatId !== ADMIN_CHAT_ID) {
-      return { statusCode: 200, body: 'OK' }; // silently ignore in non-admin chats
-    }
+    if (chatId !== ADMIN_CHAT_ID) return { statusCode: 200, body: 'OK' };
 
-    uploadState[chatId] = { step: 'awaiting_photo' };
-    await sendMessage(
-      chatId,
-      '📤 Please send the flyer image now, or type /cancel to abort.'
-    );
+    await setSession(chatId, 'awaiting_photo');
+    await sendMessage(chatId, '📤 Please send the flyer image now, or type /cancel to abort.');
     return { statusCode: 200, body: 'OK' };
   }
 
   if (!isSummary && !isGetFlyer) return { statusCode: 200, body: 'OK' };
 
   // ─── /getflyer ─────────────────────────────────────────────────────────────
+
   if (isGetFlyer) {
     const cmd    = normalizedText.replace(/\s/g, '');
     const suffix = cmd.replace('/getflyer', '');
@@ -374,6 +422,7 @@ exports.handler = async (event) => {
   }
 
   // ─── /summary ──────────────────────────────────────────────────────────────
+
   console.log(`chatId: "${chatId}"`);
   console.log(`ZONE_CHAT_MAP keys: ${JSON.stringify(Object.keys(ZONE_CHAT_MAP))}`);
   console.log(`ZONE_CHAT_MAP lookup result: ${ZONE_CHAT_MAP[chatId]}`);
