@@ -73,21 +73,35 @@ async function resolveEventName(supabase, zone, ocrName) {
   }
 }
 
+function detectMediaType(buffer) {
+  // Detect actual image format from magic bytes — never trust the file extension
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'image/png';
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8) return 'image/jpeg';
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return 'image/gif';
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[6] === 0x57) return 'image/webp';
+  return 'image/jpeg'; // fallback
+}
+
 async function extractEventInfo(flyerPath) {
   console.log('📸 Reading flyer with Claude OCR...');
-  // Compress image to JPEG under 4MB before sending to Claude API (5MB limit)
   const MAX_BYTES = 4 * 1024 * 1024;
   let imageBuffer = fs.readFileSync(flyerPath);
-  let mediaType = path.extname(flyerPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-  if (imageBuffer.length > MAX_BYTES) {
-    console.log(`⚠️  Flyer is ${Math.round(imageBuffer.length/1024/1024*10)/10}MB — compressing for OCR...`);
+  const detectedType = detectMediaType(imageBuffer);
+
+  // Always normalize to JPEG via Sharp — handles PNGs saved as .jpg,
+  // oversized images, and any format mismatches in one step
+  if (imageBuffer.length > MAX_BYTES || detectedType !== 'image/jpeg') {
+    const reason = imageBuffer.length > MAX_BYTES
+      ? `${Math.round(imageBuffer.length/1024/1024*10)/10}MB — too large`
+      : `detected as ${detectedType} — normalizing`;
+    console.log(`Converting flyer (${reason}) to JPEG for OCR...`);
     imageBuffer = await sharp(flyerPath)
       .resize({ width: 1800, withoutEnlargement: true })
       .jpeg({ quality: 85 })
       .toBuffer();
-    mediaType = 'image/jpeg';
-    console.log(`✅ Compressed to ${Math.round(imageBuffer.length/1024)}KB for OCR`);
+    console.log(`Converted to JPEG, ${Math.round(imageBuffer.length/1024)}KB`);
   }
+  const mediaType = 'image/jpeg';
   const base64Image = imageBuffer.toString('base64');
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
