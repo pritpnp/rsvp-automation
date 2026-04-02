@@ -807,16 +807,42 @@ async function main() {
   const eventInfoMap = {};
   const deadlines    = {};
 
+  const forceAll = process.env.FORCE_ALL === 'true';
+  if (forceAll) console.log('\n🔄 FORCE_ALL=true — running OCR on all zones');
+
+  // Load existing deadlines.json so we can reuse data for unchanged zones
+  const deadlinesPath = path.join(REPO_ROOT, 'deadlines.json');
+  let existingDeadlines = {};
+  if (fs.existsSync(deadlinesPath)) {
+    try { existingDeadlines = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
+  }
+
   for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
     const isChanged = changedFlyers.includes(flyerRelPath);
-    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'}`);
+    const needsOcr  = forceAll || isChanged || !existingDeadlines[zone]?.date;
+    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'} ${needsOcr ? '(running OCR)' : '(skipping OCR — using cached data)'}`);
 
-    // 1. OCR extracts raw info from flyer
-    const eventInfo = await extractEventInfo(flyerPath);
+    let eventInfo;
+    if (needsOcr) {
+      // 1. OCR extracts raw info from flyer
+      eventInfo = await extractEventInfo(flyerPath);
 
-    // 2. Resolve canonical event name from Supabase
-    //    If a name has been set by admin, use it. Otherwise save OCR name as initial value.
-    eventInfo.eventName = await resolveEventName(supabase, zone, eventInfo.eventName);
+      // 2. Resolve canonical event name from Supabase
+      eventInfo.eventName = await resolveEventName(supabase, zone, eventInfo.eventName);
+    } else {
+      // Reuse existing deadlines.json data — no OCR needed, saves API cost
+      const cached = existingDeadlines[zone];
+      eventInfo = {
+        eventName:          cached.eventName  || '',
+        date:               cached.date       || '',
+        time:               cached.time       || '',
+        location:           '',
+        description:        '',
+        rsvpDeadline:       cached.deadline   || '',
+        invitationYPercent: 0.55
+      };
+      console.log(`  📋 Using cached: "${eventInfo.eventName}" — ${eventInfo.date}`);
+    }
 
     eventInfoMap[zone] = eventInfo;
 
@@ -857,12 +883,7 @@ async function main() {
   }
 
   // Save deadlines.json
-  const deadlinesPath = path.join(REPO_ROOT, 'deadlines.json');
-  let existing = {};
-  if (fs.existsSync(deadlinesPath)) {
-    try { existing = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
-  }
-  const merged = { ...existing, ...deadlines };
+  const merged = { ...existingDeadlines, ...deadlines };
   fs.writeFileSync(deadlinesPath, JSON.stringify(merged, null, 2));
   console.log('📅 deadlines.json updated:', merged);
 

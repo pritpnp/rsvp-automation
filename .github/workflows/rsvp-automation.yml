@@ -7,6 +7,11 @@ on:
     paths-ignore:
       - 'dist/**'
   workflow_dispatch:
+    inputs:
+      force_all:
+        description: 'Force OCR on all zones regardless of changes'
+        required: false
+        default: 'false'
 
 jobs:
   build-and-deploy:
@@ -45,7 +50,7 @@ jobs:
           cd scripts
           FLYERS=$(git diff --name-only HEAD~1 HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | tr '\n' ',')
           echo "🎯 Flyers to process: $FLYERS"
-          FLYER_PATHS="$FLYERS" node automate.js
+          FLYER_PATHS="$FLYERS" FORCE_ALL="${{ github.event.inputs.force_all || 'false' }}" node automate.js
 
       - name: Commit deadlines.json
         run: |
