@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin — BAPS Scranton</title>
+  <title>Admin — SCREvents</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
@@ -127,7 +127,7 @@
     <div class="admin-header">
       <div>
         <h1>Admin Portal</h1>
-        <p id="welcome-text">BAPS Scranton — screvents.com</p>
+        <p id="welcome-text">SCREvents — screvents.com</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="logout-btn" onclick="goHome()">Home</button>
@@ -253,6 +253,9 @@
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-edit"> Edit passes</label>
               <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:8px;margin-bottom:4px">RSVP Permissions</div>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-view-rsvp"> View RSVPs</label>
+              <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:8px;margin-bottom:4px">Flyer Permissions</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-upload-flyer"> Upload flyers</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-remove-flyer"> Remove flyers</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-edit-rsvp"> Edit number of guests</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-delete-rsvp"> Delete RSVPs</label>
             </div>
@@ -304,6 +307,71 @@
         <div class="card">
           <h2>Events</h2>
           <div id="events-container"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- ── Flyers ── -->
+      <div class="tab-panel" id="tab-flyers">
+        <div class="card" id="flyer-upload-card">
+          <h2>Upload Flyer</h2>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Select a zone, then drag or choose a flyer image. It will be committed to GitHub and GitHub Actions will process it automatically.</p>
+          <div class="form-group" style="margin-bottom:16px">
+            <label>Zone</label>
+            <select id="flyer-upload-zone" style="width:100%;padding:11px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
+              <option value="">— Select a zone —</option>
+              <option value="scranton">Scranton</option>
+              <option value="mountain-top">Mountain Top</option>
+              <option value="moosic">Moosic</option>
+              <option value="bloomsburg">Bloomsburg</option>
+              <option value="satsang-sabha">Satsang Sabha</option>
+              <option value="mandir-1">Mandir 1</option>
+              <option value="mandir-2">Mandir 2</option>
+              <option value="mandir-3">Mandir 3</option>
+              <option value="mandir-4">Mandir 4</option>
+              <option value="mandir-5">Mandir 5</option>
+            </select>
+          </div>
+          <div class="upload-area" id="flyer-upload-area" onclick="document.getElementById('flyer-file-input').click()"
+            ondragover="event.preventDefault();this.classList.add('drag-over')"
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="handleFlyerDrop(event)">
+            <input type="file" id="flyer-file-input" accept=".jpg,.jpeg,.png" onchange="handleFlyerSelect(event)" />
+            <div class="upload-icon">🖼</div>
+            <strong style="font-size:14px;color:var(--brown)">Click to choose flyer or drag &amp; drop</strong>
+            <p>JPG or PNG</p>
+          </div>
+          <div id="flyer-preview-wrap" style="display:none;margin-top:16px;text-align:center">
+            <img id="flyer-preview-img" style="max-width:100%;max-height:320px;border-radius:12px;box-shadow:0 4px 20px rgba(92,45,10,0.15)" />
+            <div style="display:flex;align-items:center;gap:10px;margin-top:12px;justify-content:center">
+              <span id="flyer-preview-name" style="font-size:13px;color:var(--text-muted)"></span>
+              <button onclick="clearFlyerUpload()" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">✕ Clear</button>
+            </div>
+          </div>
+          <button id="flyer-upload-btn" class="btn-create" onclick="uploadFlyer()" style="margin-top:16px">Upload Flyer →</button>
+          <div id="flyer-upload-status" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
+        </div>
+
+        <div class="card" id="flyer-remove-card">
+          <h2>Remove Flyer</h2>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Select a zone to remove its current flyer from the site. This will delete the file from GitHub and trigger a redeploy.</p>
+          <div class="form-group" style="margin-bottom:16px">
+            <label>Zone</label>
+            <select id="flyer-remove-zone" style="width:100%;padding:11px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
+              <option value="">— Select a zone —</option>
+              <option value="scranton">Scranton</option>
+              <option value="mountain-top">Mountain Top</option>
+              <option value="moosic">Moosic</option>
+              <option value="bloomsburg">Bloomsburg</option>
+              <option value="satsang-sabha">Satsang Sabha</option>
+              <option value="mandir-1">Mandir 1</option>
+              <option value="mandir-2">Mandir 2</option>
+              <option value="mandir-3">Mandir 3</option>
+              <option value="mandir-4">Mandir 4</option>
+              <option value="mandir-5">Mandir 5</option>
+            </select>
+          </div>
+          <button id="flyer-remove-btn" class="btn-create" onclick="removeFlyer()" style="background:linear-gradient(135deg,#991b1b,#dc2626)">Remove Flyer →</button>
+          <div id="flyer-remove-status" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
         </div>
       </div>
 
@@ -361,12 +429,23 @@
       if (isSuperadmin) {
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'managers\', this)">👤 Managers</button>';
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'events\', this)">📅 Events</button>';
+        tabsHtml += '<button class="tab-btn" onclick="switchTab(\'flyers\', this)">🖼 Flyers</button>';
+      } else if (permissions.upload_flyers || permissions.remove_flyers) {
+        tabsHtml += '<button class="tab-btn" onclick="switchTab(\'flyers\', this)">🖼 Flyers</button>';
       }
       tabsEl.innerHTML = tabsHtml;
 
       document.getElementById('admin-screen').style.display = 'block';
       loadEventPicker();
       if (isSuperadmin) { loadManagers(); loadEvents(); loadZoneEventNames(); }
+
+      // Flyer tab visibility
+      const canUpload = isSuperadmin || permissions.upload_flyers;
+      const canRemove = isSuperadmin || permissions.remove_flyers;
+      const uploadCard = document.getElementById('flyer-upload-card');
+      const removeCard = document.getElementById('flyer-remove-card');
+      if (uploadCard) uploadCard.style.display = canUpload ? 'block' : 'none';
+      if (removeCard) removeCard.style.display = canRemove ? 'block' : 'none';
     }
 
     async function logout() {
@@ -791,6 +870,8 @@
       if (p?.view_rsvps) labels.push('View RSVPs');
       if (p?.edit_rsvps) labels.push('Edit RSVPs');
       if (p?.delete_rsvps) labels.push('Delete RSVPs');
+      if (p?.upload_flyers) labels.push('Upload Flyers');
+      if (p?.remove_flyers) labels.push('Remove Flyers');
       return labels.length ? labels.join(', ') : 'No permissions';
     }
 
@@ -823,6 +904,9 @@
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-view-rsvp-${m.id}" ${m.permissions?.view_rsvps ? 'checked' : ''}> View RSVPs</label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-edit-rsvp-${m.id}" ${m.permissions?.edit_rsvps ? 'checked' : ''}> Edit number of guests</label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-delete-rsvp-${m.id}" ${m.permissions?.delete_rsvps ? 'checked' : ''}> Delete RSVPs</label>
+                <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:10px;margin-bottom:6px">Flyer Permissions</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-upload-flyer-${m.id}" ${m.permissions?.upload_flyers ? 'checked' : ''}> Upload flyers</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-remove-flyer-${m.id}" ${m.permissions?.remove_flyers ? 'checked' : ''}> Remove flyers</label>
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px">
@@ -847,13 +931,15 @@
         edit_passes: document.getElementById('new-perm-edit').checked,
         view_rsvps: document.getElementById('new-perm-view-rsvp').checked,
         edit_rsvps: document.getElementById('new-perm-edit-rsvp').checked,
-        delete_rsvps: document.getElementById('new-perm-delete-rsvp').checked
+        delete_rsvps: document.getElementById('new-perm-delete-rsvp').checked,
+        upload_flyers: document.getElementById('new-perm-upload-flyer').checked,
+        remove_flyers: document.getElementById('new-perm-remove-flyer').checked
       };
       const res = await fetch(MANAGERS_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ username, password, permissions }) });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
       ['new-manager-username','new-manager-password'].forEach(id => document.getElementById(id).value = '');
-      ['new-perm-create','new-perm-edit','new-perm-view-rsvp','new-perm-edit-rsvp','new-perm-delete-rsvp'].forEach(id => document.getElementById(id).checked = false);
+      ['new-perm-create','new-perm-edit','new-perm-view-rsvp','new-perm-edit-rsvp','new-perm-delete-rsvp','new-perm-upload-flyer','new-perm-remove-flyer'].forEach(id => document.getElementById(id).checked = false);
       sucEl.textContent = `✅ Manager "${data.username}" added.`;
       sucEl.style.display = 'block';
       setTimeout(() => sucEl.style.display = 'none', 6000);
@@ -880,7 +966,9 @@
         edit_passes:          document.getElementById('mgr-edit-editp-' + id).checked,
         view_rsvps:           document.getElementById('mgr-edit-view-rsvp-' + id).checked,
         edit_rsvps:           document.getElementById('mgr-edit-edit-rsvp-' + id).checked,
-        delete_rsvps:         document.getElementById('mgr-edit-delete-rsvp-' + id).checked
+        delete_rsvps:         document.getElementById('mgr-edit-delete-rsvp-' + id).checked,
+        upload_flyers:        document.getElementById('mgr-edit-upload-flyer-' + id).checked,
+        remove_flyers:        document.getElementById('mgr-edit-remove-flyer-' + id).checked
       };
       const errEl = document.getElementById('mgr-edit-err-' + id);
       errEl.style.display = 'none';
@@ -1103,6 +1191,119 @@
         statusEl.style.color = '#991b1b';
         statusEl.style.display = 'block';
       }
+    }
+
+    // ── Flyers ─────────────────────────────────────────────────────────────
+    const GITHUB_REPO    = 'pritpnp/rsvp-automation';
+    const MANAGE_FLYERS_API = '/.netlify/functions/manage-flyers';
+
+    let flyerFile = null;
+
+    function handleFlyerDrop(event) {
+      event.preventDefault();
+      document.getElementById('flyer-upload-area').classList.remove('drag-over');
+      const file = event.dataTransfer.files[0];
+      if (file) setFlyerFile(file);
+    }
+
+    function handleFlyerSelect(event) {
+      const file = event.target.files[0];
+      if (file) setFlyerFile(file);
+    }
+
+    function setFlyerFile(file) {
+      flyerFile = file;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('flyer-preview-img').src = e.target.result;
+        document.getElementById('flyer-preview-name').textContent = file.name;
+        document.getElementById('flyer-preview-wrap').style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearFlyerUpload() {
+      flyerFile = null;
+      document.getElementById('flyer-file-input').value = '';
+      document.getElementById('flyer-preview-wrap').style.display = 'none';
+      document.getElementById('flyer-upload-status').style.display = 'none';
+    }
+
+    async function uploadFlyer() {
+      const zone   = document.getElementById('flyer-upload-zone').value;
+      const btn    = document.getElementById('flyer-upload-btn');
+      const status = document.getElementById('flyer-upload-status');
+
+      if (!zone)      { showFlyerStatus('upload', '⚠️ Please select a zone.', false); return; }
+      if (!flyerFile) { showFlyerStatus('upload', '⚠️ Please choose a flyer image.', false); return; }
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Uploading...';
+      status.style.display = 'none';
+
+      try {
+        const base64 = await fileToBase64(flyerFile);
+        const res = await fetch(MANAGE_FLYERS_API, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ zone, imageBase64: base64 })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        showFlyerStatus('upload', `✅ Flyer uploaded to ${zone}! GitHub Actions will process it now.`, true);
+        clearFlyerUpload();
+        document.getElementById('flyer-upload-zone').value = '';
+      } catch (err) {
+        showFlyerStatus('upload', '❌ ' + err.message, false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Upload Flyer →';
+      }
+    }
+
+    async function removeFlyer() {
+      const zone   = document.getElementById('flyer-remove-zone').value;
+      const btn    = document.getElementById('flyer-remove-btn');
+
+      if (!zone) { showFlyerStatus('remove', '⚠️ Please select a zone.', false); return; }
+      if (!confirm(`Remove the flyer for ${zone}? This will delete it from the site.`)) return;
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Removing...';
+
+      try {
+        const res = await fetch(MANAGE_FLYERS_API, {
+          method: 'DELETE',
+          headers: authHeaders(),
+          body: JSON.stringify({ zone })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Remove failed');
+        showFlyerStatus('remove', `✅ Flyer removed for ${zone}! GitHub Actions will process it now.`, true);
+        document.getElementById('flyer-remove-zone').value = '';
+      } catch (err) {
+        showFlyerStatus('remove', '❌ ' + err.message, false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Remove Flyer →';
+      }
+    }
+
+    function showFlyerStatus(type, msg, success) {
+      const el = document.getElementById(`flyer-${type}-status`);
+      el.textContent = msg;
+      el.style.background = success ? '#f0fdf4' : '#fef2f2';
+      el.style.color      = success ? '#166534' : '#991b1b';
+      el.style.display    = 'block';
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = (e) => resolve(e.target.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
     }
 
     async function goHome() {
