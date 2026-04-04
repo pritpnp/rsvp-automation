@@ -1001,9 +1001,12 @@
         view_rsvps: document.getElementById('new-perm-view-rsvp').checked,
         edit_rsvps: document.getElementById('new-perm-edit-rsvp').checked,
         delete_rsvps: document.getElementById('new-perm-delete-rsvp').checked,
-        upload_flyers: document.getElementById('new-perm-upload-flyer').checked,
-        remove_flyers: document.getElementById('new-perm-remove-flyer').checked,
-        refresh_flyers: document.getElementById('new-perm-refresh-flyer').checked
+        upload_flyers:          document.getElementById('new-perm-upload-flyer').checked,
+        remove_flyers:          document.getElementById('new-perm-remove-flyer').checked,
+        refresh_flyers:         document.getElementById('new-perm-refresh-flyer').checked,
+        flyer_builder:          document.getElementById('new-perm-flyer-builder').checked,
+        flyer_builder_advanced: document.getElementById('new-perm-flyer-builder-advanced').checked,
+        flyer_zones:            (document.getElementById('new-perm-flyer-zones').value || '').split(',').map(s=>s.trim()).filter(Boolean),
       };
       const res = await fetch(MANAGERS_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ username, password, permissions }) });
       const data = await res.json();
@@ -1038,9 +1041,12 @@
         view_rsvps:           document.getElementById('mgr-edit-view-rsvp-' + id).checked,
         edit_rsvps:           document.getElementById('mgr-edit-edit-rsvp-' + id).checked,
         delete_rsvps:         document.getElementById('mgr-edit-delete-rsvp-' + id).checked,
-        upload_flyers:        document.getElementById('mgr-edit-upload-flyer-' + id).checked,
-        remove_flyers:        document.getElementById('mgr-edit-remove-flyer-' + id).checked,
-        refresh_flyers:       document.getElementById('mgr-edit-refresh-flyer-' + id).checked
+        upload_flyers:           document.getElementById('mgr-edit-upload-flyer-' + id).checked,
+        remove_flyers:           document.getElementById('mgr-edit-remove-flyer-' + id).checked,
+        refresh_flyers:          document.getElementById('mgr-edit-refresh-flyer-' + id).checked,
+        flyer_builder:           document.getElementById('mgr-edit-flyer-builder-' + id).checked,
+        flyer_builder_advanced:  document.getElementById('mgr-edit-flyer-builder-adv-' + id).checked,
+        flyer_zones:             (document.getElementById('mgr-edit-flyer-zones-' + id).value || '').split(',').map(s=>s.trim()).filter(Boolean),
       };
       const errEl = document.getElementById('mgr-edit-err-' + id);
       errEl.style.display = 'none';
