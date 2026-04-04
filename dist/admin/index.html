@@ -390,12 +390,14 @@
 
       <!-- ── Flyer Builder ── -->
       <div class="tab-panel" id="tab-flyerbuilder">
-        <div class="card" style="padding:0;overflow:hidden;min-height:85vh">
-          <iframe id="flyer-builder-iframe"
-            src="/flyer-builder/"
-            style="width:100%;height:85vh;border:none;display:block"
-            allow="clipboard-write">
-          </iframe>
+        <div class="card" style="text-align:center;padding:48px 24px">
+          <div style="font-size:48px;margin-bottom:16px">✏️</div>
+          <h2 style="margin-bottom:8px">Flyer Builder</h2>
+          <p style="font-size:14px;color:var(--text-muted);margin-bottom:28px;line-height:1.6">Create a flyer for your zone and send it for review.<br>The builder will open in a new tab with a secure session.</p>
+          <button class="btn-create" id="launch-builder-btn" onclick="launchFlyerBuilder()" style="font-size:15px;padding:14px 32px">
+            Open Flyer Builder →
+          </button>
+          <div id="launch-builder-status" style="display:none;margin-top:16px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
         </div>
       </div>
 
@@ -491,28 +493,34 @@
       document.getElementById('tab-' + tab).classList.add('active');
       btn.classList.add('active');
       if (tab === 'rsvps') loadRsvps();
-      if (tab === 'flyerbuilder') initFlyerBuilder();
+
     }
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
 
-    function initFlyerBuilder() {
-      const iframe = document.getElementById('flyer-builder-iframe');
-      const isSuperadmin = sessionRole === 'superadmin';
-      const send = () => {
-        iframe.contentWindow.postMessage({
-          type: 'ADMIN_AUTH',
-          token: sessionToken,
-          isSuperadmin,
-          allowedZones: isSuperadmin
-            ? ['scranton','mountain-top','moosic','bloomsburg','satsang-sabha']
-            : (sessionPermissions.flyer_zones || []),
-          allowAdvanced: isSuperadmin || !!sessionPermissions.flyer_builder_advanced,
-        }, '*');
-      };
-      // Send immediately if loaded, otherwise wait
-      try { send(); } catch(e) {}
-      iframe.onload = send;
+    async function launchFlyerBuilder() {
+      const btn    = document.getElementById('launch-builder-btn');
+      const status = document.getElementById('launch-builder-status');
+      btn.disabled = true;
+      btn.textContent = '⏳ Generating session...';
+      status.style.display = 'none';
+      try {
+        const res = await fetch('/.netlify/functions/create-builder-session', {
+          method: 'POST',
+          headers: authHeaders(),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to create session');
+        window.open(`/flyer-builder/?session=${data.sessionId}`, '_blank');
+      } catch (err) {
+        status.textContent = '❌ ' + err.message;
+        status.style.background = '#fef2f2';
+        status.style.color = '#991b1b';
+        status.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Open Flyer Builder →';
+      }
     }
 
     let selectedEventId = null;
