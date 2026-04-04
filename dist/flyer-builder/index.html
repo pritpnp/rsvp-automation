@@ -740,6 +740,14 @@ function showSessionError(msg) {
 }
 
 buildTimeOptions();
+
+// Verify session before anything else
+const _sessionParam = new URLSearchParams(window.location.search).get('session');
+if (!_sessionParam) {
+  showReviewStatus('❌ Not authenticated. Please access this from the admin portal.', false);
+}
+verifyBuilderSession();
+
 document.getElementById('template-img').src = TEMPLATES['moosic'];
 document.getElementById('template-img').onload = () => {
   const img = document.getElementById('template-img');
