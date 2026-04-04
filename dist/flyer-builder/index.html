@@ -143,10 +143,41 @@
       <div class="font-size-row"><label>Addr Line Spacing</label><input type="range" min="0.7" max="2.0" step="0.05" value="1.1" id="lh-ss_address" oninput="updateLineHeight('ss_address',this.value)"><span id="lh-ss_address-val">1.1</span></div>
     </div>
 
-    <div class="section-label">Element Positions</div>
-    <div id="pos-list"></div>
+    <!-- Advanced Settings (hidden by default, shown when allowAdvanced=true) -->
+    <button id="advanced-toggle" onclick="toggleAdvanced()" style="display:none;width:100%;margin-top:16px;padding:10px;background:none;border:1px solid var(--cream-dark);border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--text-muted)">
+      ⚙️ Advanced Settings <span id="advanced-arrow">▼</span>
+    </button>
 
-    <button class="btn-dl" id="review-btn" onclick="sendForReview()">📤 Send for Review</button>
+    <div id="advanced-section" style="display:none">
+      <div style="background:rgba(232,101,10,0.06);border:1px solid rgba(232,101,10,0.2);border-radius:10px;padding:12px 14px;margin:10px 0">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer;color:var(--brown);margin-bottom:8px">
+          <input type="checkbox" id="unlock-positions" onchange="togglePositionLock(this.checked)" style="accent-color:var(--saffron);width:15px;height:15px" />
+          Unlock element positions (drag to reposition)
+        </label>
+        <p style="font-size:11px;color:var(--text-muted);line-height:1.5">⚠️ Changes affect all flyers. Only modify if needed.</p>
+      </div>
+
+      <div class="section-label">Font Sizes</div>
+      <div id="fs-para-sliders">
+        <div class="font-size-row"><label>Date/Time</label><input type="range" min="8" max="40" value="28" id="fs-datetime" oninput="updateFontSize('datetime',this.value)"><span id="fs-datetime-val">28px</span></div>
+        <div class="font-size-row"><label>RSVP</label><input type="range" min="6" max="30" value="14" id="fs-rsvp" oninput="updateFontSize('rsvp',this.value)"><span id="fs-rsvp-val">14px</span></div>
+        <div class="font-size-row"><label>Host Name</label><input type="range" min="6" max="30" value="17" id="fs-hostname" oninput="updateFontSize('hostname',this.value)"><span id="fs-hostname-val">17px</span></div>
+        <div class="font-size-row"><label>Address</label><input type="range" min="6" max="30" value="16" id="fs-address" oninput="updateFontSize('address',this.value)"><span id="fs-address-val">16px</span></div>
+        <div class="font-size-row"><label>Addr Spacing</label><input type="range" min="0.7" max="2.0" step="0.05" value="1.15" id="lh-address" oninput="updateLineHeight('address',this.value)"><span id="lh-address-val">1.15</span></div>
+        <div class="font-size-row"><label>Mahaprasad</label><input type="range" min="6" max="22" value="11" id="fs-mahaprasad" oninput="updateFontSize('mahaprasad',this.value)"><span id="fs-mahaprasad-val">11px</span></div>
+      </div>
+      <div id="fs-ss-sliders" style="display:none">
+        <div class="font-size-row"><label>Date/Time</label><input type="range" min="8" max="40" value="26" id="fs-ss_datetime" oninput="updateFontSize('ss_datetime',this.value)"><span id="fs-ss_datetime-val">26px</span></div>
+        <div class="font-size-row"><label>Address</label><input type="range" min="6" max="30" value="17" id="fs-ss_address" oninput="updateFontSize('ss_address',this.value)"><span id="fs-ss_address-val">17px</span></div>
+        <div class="font-size-row"><label>Addr Spacing</label><input type="range" min="0.7" max="2.0" step="0.05" value="1.1" id="lh-ss_address" oninput="updateLineHeight('ss_address',this.value)"><span id="lh-ss_address-val">1.1</span></div>
+      </div>
+
+      <div class="section-label">Element Positions</div>
+      <div id="pos-list"></div>
+      <button class="btn-dl" style="margin-top:10px;background:linear-gradient(135deg,var(--brown),var(--brown-mid));font-size:13px;padding:10px" onclick="saveLog()">💾 Save Position Log</button>
+    </div>
+
+    <button class="btn-dl" id="review-btn" onclick="sendForReview()" style="margin-top:16px">📤 Send for Review</button>
     <div id="review-status" style="display:none;margin-top:10px;padding:10px 12px;border-radius:9px;font-size:13px;"></div>
     <div class="hint">💡 Fill in the event details, then click <strong>Send for Review</strong>. An admin will review the flyer and approve or reject it.</div>
   </div>
@@ -526,17 +557,26 @@ function togglePositionLock(unlock) {
 // ── Read URL params to auto-populate fields ───────────────────────────────────
 function readUrlParams() {
   const p = new URLSearchParams(window.location.search);
-  if (p.get('zone')) {
-    const zoneBtn = document.querySelector(`.zone-btn[onclick*="'${p.get('zone')}'"]`);
-    if (zoneBtn) setZone(p.get('zone'), zoneBtn);
+  // Set zone first so correct template loads
+  const zoneParam = p.get('zone');
+  if (zoneParam) {
+    const zoneKey = zoneParam.replace('-santos','');
+    const zoneBtn = document.querySelector('.zone-btn[onclick*="' + "'" + zoneKey + "'" + '"]');
+    if (zoneBtn) setZone(zoneKey, zoneBtn);
   }
-  if (p.get('date'))       { document.getElementById('f-date').value = p.get('date'); }
-  if (p.get('time'))       { document.getElementById('f-time').value = p.get('time'); }
-  if (p.get('rsvpDate'))   { document.getElementById('f-rsvp-date').value = p.get('rsvpDate'); }
-  if (p.get('host'))       { const el = document.getElementById('f-host'); if (el) el.value = p.get('host'); }
-  if (p.get('addr1'))      { document.getElementById('f-addr1').value = p.get('addr1'); }
-  if (p.get('addr2'))      { document.getElementById('f-addr2').value = p.get('addr2'); }
-  if (p.get('mahaprasad')) { const el = document.getElementById('f-mahaprasad'); if (el) el.value = p.get('mahaprasad'); }
+  if (p.get('date'))       { const el = document.getElementById('f-date'); if(el) el.value = p.get('date'); }
+  if (p.get('time'))       {
+    // Wait for time options to build then set value
+    setTimeout(() => {
+      const el = document.getElementById('f-time');
+      if(el) el.value = p.get('time');
+    }, 100);
+  }
+  if (p.get('rsvpDate'))   { const el = document.getElementById('f-rsvp-date'); if(el) el.value = p.get('rsvpDate'); }
+  if (p.get('host'))       { const el = document.getElementById('f-host'); if(el) el.value = p.get('host'); }
+  if (p.get('addr1'))      { const el = document.getElementById('f-addr1'); if(el) el.value = p.get('addr1'); }
+  if (p.get('addr2'))      { const el = document.getElementById('f-addr2'); if(el) el.value = p.get('addr2'); }
+  if (p.get('mahaprasad')) { const el = document.getElementById('f-mahaprasad'); if(el) el.value = p.get('mahaprasad'); }
   if (p.get('santos') === 'true') {
     const cb = document.getElementById('santos-cb');
     if (cb) { cb.checked = true; toggleSantos(true); }
