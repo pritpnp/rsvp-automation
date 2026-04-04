@@ -23,13 +23,8 @@ exports.handler = async (event) => {
 
   if (!session)
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid session' }) };
-  if (session.used)
-    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session already used' }) };
   if (new Date(session.expires_at) < new Date())
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session expired' }) };
-
-  // Mark session as used — single use only
-  await supabase.from('builder_sessions').update({ used: true }).eq('id', sessionId);
 
   return {
     statusCode: 200,
