@@ -768,9 +768,9 @@ async function main() {
     const files = fs.readdirSync(zoneDir).filter(f => /\.(png|jpg|jpeg)$/i.test(f));
     if (files.length > 0) {
       zonesWithFlyer.add(zone);
-      for (const file of files) {
-        allFlyers.push({ zone, flyerRelPath: `flyers/${zone}/${file}`, flyerPath: path.join(zoneDir, file) });
-      }
+      // Only use the first flyer file per zone — prevents duplicate cards
+      const file = files[0];
+      allFlyers.push({ zone, flyerRelPath: `flyers/${zone}/${file}`, flyerPath: path.join(zoneDir, file) });
     }
   }
 
