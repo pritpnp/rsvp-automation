@@ -555,9 +555,11 @@ async function sendForReview() {
     waited += 100;
   }
   const token = window.ADMIN_TOKEN;
+  console.log('sendForReview token check:', token, 'waited:', waited + 'ms');
 
   if (!token) {
-    showReviewStatus('❌ Not authenticated. Please access this from the admin portal.', false);
+    // Show the actual state for debugging
+    showReviewStatus('❌ Not authenticated. ADMIN_TOKEN=' + String(window.ADMIN_TOKEN) + ' waited=' + waited + 'ms', false);
     return;
   }
 
