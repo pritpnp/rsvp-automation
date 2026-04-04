@@ -506,7 +506,8 @@ async function downloadFlyer() {
 let advancedOpen = false;
 function toggleAdvanced() {
   advancedOpen = !advancedOpen;
-  document.getElementById('advanced-section').style.display = advancedOpen ? 'block' : 'none';
+  const sec = document.getElementById('advanced-section');
+  sec.style.cssText = advancedOpen ? 'display:block' : 'display:none';
   document.getElementById('advanced-arrow').textContent = advancedOpen ? '▲' : '▼';
 }
 
@@ -518,6 +519,7 @@ function togglePositionLock(unlock) {
     el.style.cursor = positionsLocked ? 'default' : 'grab';
     el.style.pointerEvents = positionsLocked ? 'none' : 'auto';
   });
+  renderPosList();
 }
 
 // ── Read URL params to auto-populate fields ───────────────────────────────────
