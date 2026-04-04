@@ -5,35 +5,40 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const token = event.headers['x-manager-token'];
-  if (!token) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+  // ── Auth via builder session ──────────────────────────────────────────────
+  const builderSessionId = event.headers['x-builder-session'];
+  if (!builderSessionId) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-  const { data: session } = await supabase
-    .from('manager_sessions')
-    .select('manager_id, expires_at')
-    .eq('token', token)
-    .single();
-
-  if (!session || new Date(session.expires_at) < new Date())
-    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session expired' }) };
-
-  const isSuperadmin = !session.manager_id;
+  // Standalone mode — superadmin only, no session validation
+  let isSuperadmin = false;
   let managerName = 'Superadmin';
-  let permissions = {};
+  let allowedZones = [];
 
-  if (!isSuperadmin) {
-    const { data: manager } = await supabase
-      .from('managers')
-      .select('username, permissions')
-      .eq('id', session.manager_id)
+  if (builderSessionId === 'standalone') {
+    isSuperadmin = true;
+  } else {
+    const { data: bSession } = await supabase
+      .from('builder_sessions')
+      .select('*')
+      .eq('id', builderSessionId)
       .single();
-    if (!manager?.permissions?.flyer_builder)
-      return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to use flyer builder' }) };
-    permissions = manager.permissions;
-    managerName = manager.username;
+
+    if (!bSession || new Date(bSession.expires_at) < new Date())
+      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Builder session expired. Please reopen from the admin portal.' }) };
+
+    isSuperadmin = bSession.is_superadmin;
+    allowedZones = bSession.allowed_zones || [];
+
+    if (!isSuperadmin && bSession.manager_id) {
+      const { data: manager } = await supabase
+        .from('managers')
+        .select('username')
+        .eq('id', bSession.manager_id)
+        .single();
+      managerName = manager?.username || 'Manager';
+    }
   }
 
   // ── Parse body ────────────────────────────────────────────────────────────
@@ -48,8 +53,7 @@ exports.handler = async (event) => {
   if (!zone || !VALID_ZONES.includes(zone))
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid zone' }) };
 
-  if (!isSuperadmin) {
-    const allowedZones = permissions.flyer_zones || [];
+  if (!isSuperadmin && allowedZones.length) {
     const baseZone = zone.replace('-santos', '');
     if (!allowedZones.includes(baseZone) && !allowedZones.includes(zone))
       return { statusCode: 403, headers, body: JSON.stringify({ error: `Not permitted to submit flyers for ${zone}` }) };

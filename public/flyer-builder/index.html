@@ -611,7 +611,7 @@ async function sendForReview() {
 
     const res = await fetch('/.netlify/functions/review-flyer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-manager-token': token },
+      headers: { 'Content-Type': 'application/json', 'x-builder-session': window.ADMIN_TOKEN },
       body: JSON.stringify({ zone, imageBase64: base64, eventData }),
     });
 
@@ -666,36 +666,76 @@ function saveLog() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-// ── Receive auth from admin portal ───────────────────────────────────────────
+// ── Session verification ─────────────────────────────────────────────────────
 window.ADMIN_TOKEN = null;
-window.addEventListener('message', (e) => {
-  if (e.data?.type !== 'ADMIN_AUTH') return;
-  window.ADMIN_TOKEN = e.data.token;
+window.BUILDER_SESSION_ID = null;
 
-  // Restrict zone buttons to allowed zones
-  const allowed = e.data.allowedZones || [];
-  if (!e.data.isSuperadmin && allowed.length) {
-    document.querySelectorAll('.zone-btn').forEach(btn => {
-      const onclick = btn.getAttribute('onclick') || '';
-      const match = onclick.match(/'([^']+)'/);
-      const zone = match ? match[1] : '';
-      const baseZone = zone.replace('-santos','');
-      if (!allowed.includes(baseZone) && !allowed.includes(zone)) {
-        btn.style.display = 'none';
-      }
-    });
-    // Auto-select first allowed zone
-    const firstAllowed = document.querySelector('.zone-btn:not([style*="display: none"])');
-    if (firstAllowed) firstAllowed.click();
-  }
+async function verifyBuilderSession() {
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('session');
 
-  // Show/hide advanced settings toggle
-  if (e.data.allowAdvanced) {
+  if (!sessionId) {
+    // Standalone mode — show everything for superadmin testing
+    window.ADMIN_TOKEN = 'standalone';
     document.getElementById('advanced-toggle').style.display = 'flex';
-  } else {
-    document.getElementById('advanced-toggle').style.display = 'none';
+    return;
   }
-});
+
+  window.BUILDER_SESSION_ID = sessionId;
+
+  try {
+    const res = await fetch('/.netlify/functions/verify-builder-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showSessionError(data.error || 'Invalid session');
+      return;
+    }
+
+    // Store session id as the auth token for review submissions
+    window.ADMIN_TOKEN = sessionId;
+    window.BUILDER_MANAGER_ID = data.managerId;
+
+    // Restrict zone buttons
+    const allowed = data.allowedZones || [];
+    if (!data.isSuperadmin && allowed.length) {
+      document.querySelectorAll('.zone-btn').forEach(btn => {
+        const match = (btn.getAttribute('onclick') || '').match(/'([^']+)'/);
+        const zone = match ? match[1] : '';
+        const baseZone = zone.replace('-santos','');
+        if (!allowed.includes(baseZone) && !allowed.includes(zone)) {
+          btn.style.display = 'none';
+        }
+      });
+      const firstAllowed = document.querySelector('.zone-btn:not([style*="display: none"])');
+      if (firstAllowed) firstAllowed.click();
+    }
+
+    // Show advanced toggle if permitted
+    if (data.allowAdvanced) {
+      document.getElementById('advanced-toggle').style.display = 'flex';
+    }
+
+  } catch (err) {
+    showSessionError('Could not verify session: ' + err.message);
+  }
+}
+
+function showSessionError(msg) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F7F0E8;font-family:'DM Sans',sans-serif">
+      <div style="background:#fff;border-radius:16px;padding:40px 32px;max-width:400px;text-align:center;box-shadow:0 8px 32px rgba(92,45,10,0.12)">
+        <div style="font-size:40px;margin-bottom:16px">🔒</div>
+        <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#5C2D0A;margin-bottom:12px">Session Invalid</h2>
+        <p style="font-size:14px;color:#8B6040;line-height:1.6;margin-bottom:24px">${msg}</p>
+        <p style="font-size:13px;color:#8B6040">Please go back to the admin portal and click <strong>Open Flyer Builder</strong> again.</p>
+      </div>
+    </div>`;
+}
 
 buildTimeOptions();
 document.getElementById('template-img').src = TEMPLATES['moosic'];
