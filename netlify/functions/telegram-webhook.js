@@ -397,7 +397,6 @@ exports.handler = async (event) => {
       const reviewId = cbData.replace('review:approve:', '');
       await answerCallbackQuery(callbackQuery.id, 'Approving...');
       await clearButtons(cbChatId, msgId);
-      await editMessageText(cbChatId, msgId, '⏳ Approving flyer...');
 
       try {
         // Fetch review record
@@ -519,8 +518,7 @@ GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
         const zone = review.zone.replace('-santos', '');
         const zoneLabel = ZONE_LABELS[zone] || zone;
 
-        // Edit original message to show rejected status
-        await editMessageText(cbChatId, msgId, `❌ Flyer rejected for ${zoneLabel}.`);
+        await editMessageText(cbChatId, msgId, `❌ Rejected — ${zoneLabel} flyer was not approved.`);
 
         // Send a separate message with the link (avoids Markdown URL escaping issues)
         await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
