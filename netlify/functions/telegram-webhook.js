@@ -412,26 +412,40 @@ exports.handler = async (event) => {
         const imgBuffer = await imgRes.arrayBuffer();
         const base64Image = Buffer.from(imgBuffer).toString('base64');
 
-        // Commit to GitHub — same as /uploadflyer
+        // Commit to GitHub — delete any existing flyers first, then upload new one
         const zone = review.zone.replace('-santos', '');
-        const filePath = `flyers/${zone}/flyer.jpg`;
-        const apiUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${filePath}`;
         const ghHeaders = {
           'Authorization': `Bearer ${GITHUB_PAT}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json',
         };
 
-        let sha;
-        const getRes = await fetch(apiUrl, { headers: ghHeaders });
-        if (getRes.ok) { const ex = await getRes.json(); sha = ex.sha; }
+        // Delete any existing flyer files in the zone folder
+        const listUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/flyers/${zone}`;
+        const listRes = await fetch(listUrl, { headers: ghHeaders });
+        if (listRes.ok) {
+          const existing = await listRes.json();
+          for (const file of existing) {
+            if (/\.(jpg|jpeg|png)$/i.test(file.name)) {
+              await fetch(file.url, {
+                method: 'DELETE', headers: ghHeaders,
+                body: JSON.stringify({
+                  message: `Remove old flyer for ${zone} before approved upload`,
+                  sha: file.sha,
+                }),
+              });
+            }
+          }
+        }
 
+        // Commit new flyer
+        const filePath = `flyers/${zone}/flyer.jpg`;
+        const apiUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${filePath}`;
         const putRes = await fetch(apiUrl, {
           method: 'PUT', headers: ghHeaders,
           body: JSON.stringify({
-            message: `Upload flyer for ${zone} via admin portal (approved)`,
+            message: `Upload flyer for ${zone} via flyer builder (approved)`,
             content: base64Image,
-            ...(sha ? { sha } : {}),
           }),
         });
 
