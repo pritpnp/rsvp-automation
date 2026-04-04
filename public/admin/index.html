@@ -256,6 +256,11 @@
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-upload-flyer"> Upload flyers</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-remove-flyer"> Remove flyers</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-refresh-flyer"> Refresh all flyers (force OCR)</label>
+              <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:8px;margin-bottom:4px">Flyer Builder Permissions</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-flyer-builder"> Access Flyer Builder</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-flyer-builder-advanced"> Advanced settings (positions &amp; fonts)</label>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:8px;margin-bottom:4px">Allowed Zones (comma-separated)</div>
+              <input type="text" id="new-perm-flyer-zones" placeholder="e.g. scranton, moosic" style="width:100%;padding:8px 10px;border:1px solid var(--cream-dark);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream)" />
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-edit-rsvp"> Edit number of guests</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-delete-rsvp"> Delete RSVPs</label>
             </div>
@@ -382,6 +387,17 @@
         </div>
       </div>
 
+      <!-- ── Flyer Builder ── -->
+      <div class="tab-panel" id="tab-flyerbuilder">
+        <div class="card" style="padding:0;overflow:hidden;min-height:85vh">
+          <iframe id="flyer-builder-iframe"
+            src="/flyer-builder/"
+            style="width:100%;height:85vh;border:none;display:block"
+            allow="clipboard-write">
+          </iframe>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -441,6 +457,9 @@
       } else if (permissions.upload_flyers || permissions.remove_flyers || permissions.refresh_flyers) {
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'flyers\', this)">🖼 Flyers</button>';
       }
+      if (isSuperadmin || permissions.flyer_builder) {
+        tabsHtml += '<button class="tab-btn" onclick="switchTab(\'flyerbuilder\', this)">✏️ Flyer Builder</button>';
+      }
       tabsEl.innerHTML = tabsHtml;
 
       document.getElementById('admin-screen').style.display = 'block';
@@ -471,9 +490,29 @@
       document.getElementById('tab-' + tab).classList.add('active');
       btn.classList.add('active');
       if (tab === 'rsvps') loadRsvps();
+      if (tab === 'flyerbuilder') initFlyerBuilder();
     }
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
+
+    function initFlyerBuilder() {
+      const iframe = document.getElementById('flyer-builder-iframe');
+      const isSuperadmin = sessionRole === 'superadmin';
+      const send = () => {
+        iframe.contentWindow.postMessage({
+          type: 'ADMIN_AUTH',
+          token: sessionToken,
+          isSuperadmin,
+          allowedZones: isSuperadmin
+            ? ['scranton','mountain-top','moosic','bloomsburg','satsang-sabha']
+            : (sessionPermissions.flyer_zones || []),
+          allowAdvanced: isSuperadmin || !!sessionPermissions.flyer_builder_advanced,
+        }, '*');
+      };
+      // Send immediately if loaded, otherwise wait
+      try { send(); } catch(e) {}
+      iframe.onload = send;
+    }
 
     let selectedEventId = null;
     let selectedPassIds = new Set();
@@ -884,6 +923,9 @@
       if (p?.upload_flyers) labels.push('Upload Flyers');
       if (p?.remove_flyers) labels.push('Remove Flyers');
       if (p?.refresh_flyers) labels.push('Refresh All Flyers');
+      if (p?.flyer_builder) labels.push('Flyer Builder');
+      if (p?.flyer_builder_advanced) labels.push('Flyer Builder Advanced');
+      if (p?.flyer_zones?.length) labels.push('Zones: ' + p.flyer_zones.join(', '));
       return labels.length ? labels.join(', ') : 'No permissions';
     }
 
@@ -920,6 +962,11 @@
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-upload-flyer-${m.id}" ${m.permissions?.upload_flyers ? 'checked' : ''}> Upload flyers</label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-remove-flyer-${m.id}" ${m.permissions?.remove_flyers ? 'checked' : ''}> Remove flyers</label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-refresh-flyer-${m.id}" ${m.permissions?.refresh_flyers ? 'checked' : ''}> Refresh all flyers (force OCR)</label>
+                <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:10px;margin-bottom:6px">Flyer Builder Permissions</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-flyer-builder-${m.id}" ${m.permissions?.flyer_builder ? 'checked' : ''}> Access Flyer Builder</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-flyer-builder-adv-${m.id}" ${m.permissions?.flyer_builder_advanced ? 'checked' : ''}> Advanced settings</label>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;margin-bottom:4px">Allowed Zones</div>
+                <input type="text" id="mgr-edit-flyer-zones-${m.id}" value="${(m.permissions?.flyer_zones||[]).join(', ')}" placeholder="e.g. scranton, moosic" style="width:100%;padding:7px 10px;border:1px solid var(--cream-dark);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream)" />
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px">
@@ -953,7 +1000,8 @@
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
       ['new-manager-username','new-manager-password'].forEach(id => document.getElementById(id).value = '');
-      ['new-perm-create','new-perm-edit','new-perm-view-rsvp','new-perm-edit-rsvp','new-perm-delete-rsvp','new-perm-upload-flyer','new-perm-remove-flyer','new-perm-refresh-flyer'].forEach(id => document.getElementById(id).checked = false);
+      ['new-perm-create','new-perm-edit','new-perm-view-rsvp','new-perm-edit-rsvp','new-perm-delete-rsvp','new-perm-upload-flyer','new-perm-remove-flyer','new-perm-refresh-flyer','new-perm-flyer-builder','new-perm-flyer-builder-advanced'].forEach(id => document.getElementById(id).checked = false);
+      document.getElementById('new-perm-flyer-zones').value = '';
       sucEl.textContent = `✅ Manager "${data.username}" added.`;
       sucEl.style.display = 'block';
       setTimeout(() => sucEl.style.display = 'none', 6000);

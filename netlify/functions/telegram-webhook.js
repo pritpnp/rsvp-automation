@@ -385,6 +385,136 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: 'OK' };
     }
 
+    // ── Review: Approve ──
+    if (cbData.startsWith('review:approve:')) {
+      const reviewId = cbData.replace('review:approve:', '');
+      await answerCallbackQuery(callbackQuery.id, 'Approving...');
+      await editMessageText(cbChatId, msgId, '⏳ Approving flyer...');
+
+      try {
+        // Fetch review record
+        const { data: review } = await supabase
+          .from('flyer_reviews')
+          .select('*')
+          .eq('id', reviewId)
+          .single();
+
+        if (!review) throw new Error('Review not found');
+        if (review.status !== 'pending') throw new Error('Already processed');
+
+        // Download image from Supabase storage
+        const { data: signedData } = await supabase.storage
+          .from('flyer-reviews')
+          .createSignedUrl(review.storage_path, 300);
+
+        const imgRes = await fetch(signedData.signedUrl);
+        if (!imgRes.ok) throw new Error('Could not download flyer from storage');
+        const imgBuffer = await imgRes.arrayBuffer();
+        const base64Image = Buffer.from(imgBuffer).toString('base64');
+
+        // Commit to GitHub — same as /uploadflyer
+        const zone = review.zone.replace('-santos', '');
+        const filePath = `flyers/${zone}/flyer.jpg`;
+        const apiUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${filePath}`;
+        const ghHeaders = {
+          'Authorization': `Bearer ${GITHUB_PAT}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        };
+
+        let sha;
+        const getRes = await fetch(apiUrl, { headers: ghHeaders });
+        if (getRes.ok) { const ex = await getRes.json(); sha = ex.sha; }
+
+        const putRes = await fetch(apiUrl, {
+          method: 'PUT', headers: ghHeaders,
+          body: JSON.stringify({
+            message: `Upload flyer for ${zone} via admin portal (approved)`,
+            content: base64Image,
+            ...(sha ? { sha } : {}),
+          }),
+        });
+
+        if (!putRes.ok) {
+          const err = await putRes.text();
+          throw new Error(`GitHub commit failed: ${err}`);
+        }
+
+        // Mark review as approved
+        await supabase.from('flyer_reviews').update({ status: 'approved' }).eq('id', reviewId);
+
+        // Clean up storage
+        await supabase.storage.from('flyer-reviews').remove([review.storage_path]);
+
+        const ZONE_LABELS = {
+          'scranton': 'Scranton', 'mountain-top': 'Mountain Top',
+          'moosic': 'Moosic', 'bloomsburg': 'Bloomsburg',
+          'satsang-sabha': 'Satsang Sabha',
+        };
+        const zoneLabel = ZONE_LABELS[zone] || zone;
+        await editMessageText(cbChatId, msgId, `✅ *Flyer approved and uploaded for ${zoneLabel}!*
+GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
+
+        // TODO: When zone chats are ready, also notify the zone chat here:
+        // const zoneChatId = ZONE_CHAT_IDS[zone];
+        // if (zoneChatId) await sendMessage(zoneChatId, `✅ Your flyer for ${zoneLabel} has been approved and is being processed!`);
+
+      } catch (err) {
+        console.error('Review approve error:', err);
+        await editMessageText(cbChatId, msgId, `❌ Approval failed: ${err.message}`);
+      }
+
+      return { statusCode: 200, body: 'OK' };
+    }
+
+    // ── Review: Reject ──
+    if (cbData.startsWith('review:reject:')) {
+      const reviewId = cbData.replace('review:reject:', '');
+      await answerCallbackQuery(callbackQuery.id, 'Rejected');
+
+      try {
+        const { data: review } = await supabase
+          .from('flyer_reviews')
+          .select('*')
+          .eq('id', reviewId)
+          .single();
+
+        if (!review) throw new Error('Review not found');
+
+        // Mark as rejected
+        await supabase.from('flyer_reviews').update({ status: 'rejected' }).eq('id', reviewId);
+
+        // Clean up storage
+        await supabase.storage.from('flyer-reviews').remove([review.storage_path]);
+
+        const rejectUrl = review.event_data?.rejectUrl || 'https://screvents.com/flyer-builder/';
+        const ZONE_LABELS = {
+          'scranton': 'Scranton', 'mountain-top': 'Mountain Top',
+          'moosic': 'Moosic', 'bloomsburg': 'Bloomsburg',
+          'satsang-sabha': 'Satsang Sabha',
+        };
+        const zone = review.zone.replace('-santos', '');
+        const zoneLabel = ZONE_LABELS[zone] || zone;
+
+        await editMessageText(
+          cbChatId, msgId,
+          `❌ *Flyer rejected for ${zoneLabel}.*
+
+Use the link below to fix and resubmit:
+${rejectUrl}`,
+          { parse_mode: 'Markdown' }
+        );
+
+        // TODO: When zone chats are ready, send the link directly to the manager here
+
+      } catch (err) {
+        console.error('Review reject error:', err);
+        await editMessageText(cbChatId, msgId, `❌ Reject failed: ${err.message}`);
+      }
+
+      return { statusCode: 200, body: 'OK' };
+    }
+
     // Stale or unexpected callback
     await answerCallbackQuery(callbackQuery.id, 'Session expired. Try your command again.');
     return { statusCode: 200, body: 'OK' };
