@@ -531,6 +531,10 @@
       btn.disabled = true;
       btn.textContent = '⏳ Generating session...';
       status.style.display = 'none';
+
+      // Open window immediately (before any async) to avoid popup blocker on mobile
+      const newTab = window.open('/flyer-builder/', '_blank');
+
       try {
         const res = await fetch('/.netlify/functions/create-builder-session', {
           method: 'POST',
@@ -538,8 +542,15 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to create session');
-        window.open(`/flyer-builder/?session=${data.sessionId}`, '_blank');
+        // Navigate the already-open tab to the session URL
+        if (newTab) {
+          newTab.location.href = `/flyer-builder/?session=${data.sessionId}`;
+        } else {
+          // Fallback if popup was blocked anyway
+          window.location.href = `/flyer-builder/?session=${data.sessionId}`;
+        }
       } catch (err) {
+        if (newTab) newTab.close();
         status.textContent = '❌ ' + err.message;
         status.style.background = '#fef2f2';
         status.style.color = '#991b1b';
