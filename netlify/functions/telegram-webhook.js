@@ -122,7 +122,7 @@ exports.handler = async (event) => {
     fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id, message_id, text, ...extra }),
+      body: JSON.stringify({ chat_id, message_id, text, reply_markup: JSON.stringify({ inline_keyboard: [] }), ...extra }),
     });
 
   const sendPhotoBuffer = async (chat_id, flyerUrl) => {
