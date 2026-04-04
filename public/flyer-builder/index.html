@@ -635,10 +635,22 @@ async function sendForReview() {
       zone:       zone,
     };
 
-    // Store in sessionStorage for review-sent page to upload
-    sessionStorage.setItem('pendingReview', JSON.stringify({ zone, imageBase64: base64, eventData, token }));
+    // Show loading state while uploading
+    btn.textContent = '⏳ Sending...';
 
-    // Redirect immediately
+    // Upload first, then redirect
+    const res = await fetch('/.netlify/functions/review-flyer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-builder-session': token },
+      body: JSON.stringify({ zone, imageBase64: base64, eventData }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Submission failed');
+    }
+
+    // Only redirect after successful upload
     window.location.href = '/flyer-builder/review-sent/';
 
   } catch (err) {
