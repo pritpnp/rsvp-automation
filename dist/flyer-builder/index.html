@@ -681,6 +681,7 @@ async function verifyBuilderSession() {
   }
 
   window.BUILDER_SESSION_ID = sessionId;
+  console.log('Verifying session:', sessionId);
 
   try {
     const res = await fetch('/.netlify/functions/verify-builder-session', {
@@ -689,6 +690,7 @@ async function verifyBuilderSession() {
       body: JSON.stringify({ sessionId }),
     });
     const data = await res.json();
+    console.log('Session verify response:', res.status, data);
 
     if (!res.ok) {
       showSessionError(data.error || 'Invalid session');
@@ -697,6 +699,7 @@ async function verifyBuilderSession() {
 
     // Store session id as the auth token for review submissions
     window.ADMIN_TOKEN = sessionId;
+    console.log('ADMIN_TOKEN set to:', sessionId);
     window.BUILDER_MANAGER_ID = data.managerId;
 
     // Restrict zone buttons
