@@ -540,9 +540,11 @@ function togglePositionLock(unlock) {
 }
 
 // ── Read URL params to auto-populate fields ───────────────────────────────────
+let _urlParamsRead = false;
 function readUrlParams() {
+  if (_urlParamsRead) return;
+  _urlParamsRead = true;
   const p = new URLSearchParams(window.location.search);
-  console.log('readUrlParams called, params:', Object.fromEntries(p.entries()));
 
   // Set zone first
   const zoneParam = p.get('zone');
