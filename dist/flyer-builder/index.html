@@ -542,31 +542,45 @@ function togglePositionLock(unlock) {
 // ── Read URL params to auto-populate fields ───────────────────────────────────
 function readUrlParams() {
   const p = new URLSearchParams(window.location.search);
-  // Set zone first so correct template loads
+  console.log('readUrlParams called, params:', Object.fromEntries(p.entries()));
+
+  // Set zone first
   const zoneParam = p.get('zone');
   if (zoneParam) {
     const zoneKey = zoneParam.replace('-santos','');
+    console.log('Setting zone:', zoneKey);
     const zoneBtn = document.querySelector('.zone-btn[onclick*="' + "'" + zoneKey + "'" + '"]');
+    console.log('Zone button found:', !!zoneBtn);
     if (zoneBtn) setZone(zoneKey, zoneBtn);
   }
-  if (p.get('date'))       { const el = document.getElementById('f-date'); if(el) el.value = p.get('date'); }
-  if (p.get('time'))       {
-    // Wait for time options to build then set value
+
+  const setField = (id, val) => {
+    const el = document.getElementById(id);
+    console.log('Setting', id, '=', val, '| el found:', !!el);
+    if (el) el.value = val;
+  };
+
+  if (p.get('date'))       setField('f-date', p.get('date'));
+  if (p.get('rsvpDate'))   setField('f-rsvp-date', p.get('rsvpDate'));
+  if (p.get('host'))       setField('f-host', p.get('host'));
+  if (p.get('addr1'))      setField('f-addr1', p.get('addr1'));
+  if (p.get('addr2'))      setField('f-addr2', p.get('addr2'));
+  if (p.get('mahaprasad')) setField('f-mahaprasad', p.get('mahaprasad'));
+
+  if (p.get('time')) {
+    // Time dropdown needs to be built first
     setTimeout(() => {
-      const el = document.getElementById('f-time');
-      if(el) el.value = p.get('time');
-    }, 100);
+      setField('f-time', p.get('time'));
+      updateDatetime();
+      renderDragItems();
+    }, 200);
   }
-  if (p.get('rsvpDate'))   { const el = document.getElementById('f-rsvp-date'); if(el) el.value = p.get('rsvpDate'); }
-  if (p.get('host'))       { const el = document.getElementById('f-host'); if(el) el.value = p.get('host'); }
-  if (p.get('addr1'))      { const el = document.getElementById('f-addr1'); if(el) el.value = p.get('addr1'); }
-  if (p.get('addr2'))      { const el = document.getElementById('f-addr2'); if(el) el.value = p.get('addr2'); }
-  if (p.get('mahaprasad')) { const el = document.getElementById('f-mahaprasad'); if(el) el.value = p.get('mahaprasad'); }
+
   if (p.get('santos') === 'true') {
     const cb = document.getElementById('santos-cb');
     if (cb) { cb.checked = true; toggleSantos(true); }
   }
-  // Trigger updates
+
   updateDatetime();
   updateRsvp();
   renderDragItems();
@@ -754,14 +768,26 @@ function showSessionError(msg) {
     </div>`;
 }
 
+// ── Standalone mode (no ?session param) ──────────────────────────────────────
+const _urlParams = new URLSearchParams(window.location.search);
+if (!_urlParams.get('session')) {
+  window.ADMIN_TOKEN = 'standalone';
+  setTimeout(() => {
+    const adv = document.getElementById('advanced-toggle');
+    if (adv) adv.style.display = 'flex';
+  }, 100);
+}
+
+// ── Start ─────────────────────────────────────────────────────────────────────
 buildTimeOptions();
+verifyBuilderSession();
+
 document.getElementById('template-img').src = TEMPLATES['moosic'];
 document.getElementById('template-img').onload = () => {
-  const img = document.getElementById('template-img');
-  document.getElementById('debug-size').textContent =
-    'Preview: ' + img.offsetWidth + 'x' + img.offsetHeight + 'px | Canvas: 923x2000px | Scale: ' + (923/img.offsetWidth).toFixed(3) + 'x';
   renderDragItems();
   renderPosList();
+  // Delay readUrlParams slightly so time dropdown is built
+  setTimeout(readUrlParams, 150);
 };
 </script>
 </body>
