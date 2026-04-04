@@ -28,3 +28,13 @@
   from = "/superadmin"
   to = "/admin/index.html"
   status = 302
+
+[[redirects]]
+  from = "/flyer-builder"
+  to = "/flyer-builder/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/flyer-builder/*"
+  to = "/flyer-builder/index.html"
+  status = 200
