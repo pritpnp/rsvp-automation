@@ -551,20 +551,8 @@ function readUrlParams() {
 async function sendForReview() {
   const btn = document.getElementById('review-btn');
   const status = document.getElementById('review-status');
-  // Wait up to 5 seconds for session verification to complete
-  let waited = 0;
-  while (!window.ADMIN_TOKEN && waited < 5000) {
-    await new Promise(r => setTimeout(r, 100));
-    waited += 100;
-  }
-  const token = window.ADMIN_TOKEN;
-  console.log('sendForReview token check:', token, 'waited:', waited + 'ms');
-
-  if (!token) {
-    // Show the actual state for debugging
-    showReviewStatus('❌ Not authenticated. ADMIN_TOKEN=' + String(window.ADMIN_TOKEN) + ' waited=' + waited + 'ms', false);
-    return;
-  }
+  // Get session from URL directly
+  const token = new URLSearchParams(window.location.search).get('session') || 'standalone';
 
   // Validate fields
   const date = document.getElementById('f-date')?.value;
@@ -622,7 +610,7 @@ async function sendForReview() {
 
     const res = await fetch('/.netlify/functions/review-flyer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-builder-session': window.ADMIN_TOKEN },
+      headers: { 'Content-Type': 'application/json', 'x-builder-session': token },
       body: JSON.stringify({ zone, imageBase64: base64, eventData }),
     });
 
