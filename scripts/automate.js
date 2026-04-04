@@ -78,15 +78,22 @@ async function extractEventInfo(flyerPath) {
   // Compress image to JPEG under 4MB before sending to Claude API (5MB limit)
   const MAX_BYTES = 4 * 1024 * 1024;
   let imageBuffer = fs.readFileSync(flyerPath);
-  let mediaType = path.extname(flyerPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-  if (imageBuffer.length > MAX_BYTES) {
-    console.log(`⚠️  Flyer is ${Math.round(imageBuffer.length/1024/1024*10)/10}MB — compressing for OCR...`);
-    imageBuffer = await sharp(flyerPath)
+  // Detect actual media type from magic bytes, not file extension
+  const isPng = imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47;
+  let mediaType = isPng ? 'image/png' : 'image/jpeg';
+  // Always normalize to JPEG for Claude API (handles PNG-saved-as-jpg and large files)
+  if (isPng || imageBuffer.length > MAX_BYTES) {
+    if (imageBuffer.length > MAX_BYTES) {
+      console.log(`⚠️  Flyer is ${Math.round(imageBuffer.length/1024/1024*10)/10}MB — compressing for OCR...`);
+    } else if (isPng) {
+      console.log(`⚠️  Flyer is PNG — converting to JPEG for OCR...`);
+    }
+    imageBuffer = await sharp(imageBuffer)
       .resize({ width: 1800, withoutEnlargement: true })
       .jpeg({ quality: 85 })
       .toBuffer();
     mediaType = 'image/jpeg';
-    console.log(`✅ Compressed to ${Math.round(imageBuffer.length/1024)}KB for OCR`);
+    console.log(`✅ Converted to ${Math.round(imageBuffer.length/1024)}KB JPEG for OCR`);
   }
   const base64Image = imageBuffer.toString('base64');
   const response = await anthropic.messages.create({
