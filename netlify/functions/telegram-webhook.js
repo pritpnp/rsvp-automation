@@ -581,7 +581,7 @@ GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
         }
       );
       if (res.ok || res.status === 204) {
-        await sendMessage(chatId, '✅ Full refresh triggered! All zones will be re-OCR'd and redeployed (~2 minutes).');
+        await sendMessage(chatId, '✅ Full refresh triggered! All zones will be re-OCRd and redeployed (~2 minutes).');
       } else {
         await sendMessage(chatId, `❌ Failed to trigger refresh: ${res.status}`);
       }
