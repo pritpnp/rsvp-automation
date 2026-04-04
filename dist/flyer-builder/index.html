@@ -115,15 +115,20 @@
     </div>
 
     <div class="section-label">Event Details</div>
-    <div class="form-group"><label>Event Date</label><input type="date" id="f-date" oninput="updateDatetime()"/></div>
-    <div class="form-group"><label>Time</label>
-      <select id="f-time" onchange="updateDatetime()" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
-        <option value="">— Select time —</option>
-      </select>
+    <div class="form-group"><label>Event Date</label><input type="date" id="f-date" oninput="updateDatetime();this.blur()" onchange="updateDatetime();this.blur()" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)" /></div>
+    <div class="form-group"><label>Time (PM)</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="f-hour" min="1" max="12" placeholder="HH" oninput="updateDatetime()"
+          style="width:70px;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown);text-align:center" />
+        <span style="font-size:16px;color:var(--brown);font-weight:500">:</span>
+        <input type="number" id="f-minute" min="0" max="59" placeholder="MM" oninput="updateDatetime()"
+          style="width:70px;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown);text-align:center" />
+        <span style="font-size:13px;color:var(--text-muted);font-weight:500">PM</span>
+      </div>
     </div>
     <div id="para-fields">
-      <div class="form-group"><label>RSVP By Date</label><input type="date" id="f-rsvp-date" oninput="updateRsvp()"/></div>
-      <div class="form-group"><label>Host Name(s)</label><input type="text" id="f-host" placeholder="Kishanbhai and Asmitaben Patel" oninput="updateText('hostname')"/></div>
+      <div class="form-group"><label>RSVP By Date</label><input type="date" id="f-rsvp-date" oninput="updateRsvp();this.blur()" onchange="updateRsvp();this.blur()" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)" /></div>
+      <div class="form-group"><label>Host Name(s)</label><input type="text" id="f-host" placeholder="Host Name(s)" oninput="updateText('hostname')"/></div>
       <div class="form-group"><label>Mahaprasad</label>
         <select id="f-mahaprasad" onchange="updateText('mahaprasad')" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
           <option value="Mahaprasad will be served after sabha.">...served after sabha.</option>
@@ -132,8 +137,8 @@
         </select>
       </div>
     </div>
-    <div class="form-group"><label>Address Line 1</label><input type="text" id="f-addr1" placeholder="54 Oneill Drive" oninput="updateText('address')"/></div>
-    <div class="form-group"><label>Address Line 2</label><input type="text" id="f-addr2" placeholder="Moosic, PA 18507" oninput="updateText('address')"/></div>
+    <div class="form-group"><label>Address Line 1</label><input type="text" id="f-addr1" placeholder="Street Address" oninput="updateText('address')"/></div>
+    <div class="form-group"><label>Address Line 2</label><input type="text" id="f-addr2" placeholder="City, PA ZIP" oninput="updateText('address')"/></div>
 
     <!-- Advanced Settings (hidden by default, shown when allowAdvanced=true) -->
     <button id="advanced-toggle" onclick="toggleAdvanced()" style="display:none;width:100%;margin-top:16px;padding:10px;background:none;border:1px solid var(--cream-dark);border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--text-muted)">
@@ -244,21 +249,6 @@ function getActiveEls() {
 }
 
 // ── Date/time helpers ────────────────────────────────────────────────────────
-function buildTimeOptions() {
-  const sel = document.getElementById('f-time');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">— Select time —</option>';
-  for (let h = 8; h <= 22; h++) {
-    for (let m = 0; m < 60; m += 30) {
-      if (h === 22 && m > 0) break;
-      const period = h < 12 ? 'am' : 'pm';
-      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      const mStr = m === 0 ? ':00' : ':30';
-      const val = `${h12}${mStr} ${period}`;
-      sel.innerHTML += `<option value="${val}">${val}</option>`;
-    }
-  }
-}
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -288,7 +278,9 @@ function updateRsvp() {
 
 function getElText(id) {
   const day   = formatDate(document.getElementById('f-date')?.value || '');
-  const time  = document.getElementById('f-time')?.value || '';
+  const hourVal = document.getElementById('f-hour')?.value || '';
+  const minVal  = document.getElementById('f-minute')?.value || '';
+  const time    = hourVal ? `${hourVal}:${minVal.padStart(2,'0')} pm` : '';
   const rsvp  = formatRsvpDate(document.getElementById('f-rsvp-date')?.value || '');
   const host  = document.getElementById('f-host')?.value.trim() || '';
   const addr1 = document.getElementById('f-addr1')?.value.trim() || '';
@@ -633,7 +625,7 @@ async function sendForReview() {
     const zone = santosChecked && currentZone === 'satsang-sabha' ? 'satsang-sabha-santos' : currentZone;
     const eventData = {
       date:       document.getElementById('f-date')?.value || '',
-      time:       document.getElementById('f-time')?.value || '',
+      time:       (() => { const h = document.getElementById('f-hour')?.value; const m = document.getElementById('f-minute')?.value || '00'; return h ? `${h}:${m.padStart(2,'0')} pm` : ''; })(),
       rsvpDate:   document.getElementById('f-rsvp-date')?.value || '',
       host:       document.getElementById('f-host')?.value.trim() || '',
       addr1:      document.getElementById('f-addr1')?.value.trim() || '',
@@ -788,7 +780,6 @@ if (!_urlParams.get('session')) {
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-buildTimeOptions();
 verifyBuilderSession();
 
 document.getElementById('template-img').src = TEMPLATES['moosic'];
