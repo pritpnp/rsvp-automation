@@ -127,21 +127,6 @@
     <div class="form-group"><label>Address Line 1</label><input type="text" id="f-addr1" placeholder="54 Oneill Drive" oninput="updateText('address')"/></div>
     <div class="form-group"><label>Address Line 2</label><input type="text" id="f-addr2" placeholder="Moosic, PA 18507" oninput="updateText('address')"/></div>
 
-    <div class="section-label">Font Sizes</div>
-    <div id="fs-para-sliders">
-      <div class="font-size-row"><label>Date/Time</label><input type="range" min="8" max="40" value="28" id="fs-datetime" oninput="updateFontSize('datetime',this.value)"><span id="fs-datetime-val">28px</span></div>
-      <div class="font-size-row"><label>RSVP</label><input type="range" min="6" max="30" value="14" id="fs-rsvp" oninput="updateFontSize('rsvp',this.value)"><span id="fs-rsvp-val">14px</span></div>
-      <div class="font-size-row"><label>Host Name</label><input type="range" min="6" max="30" value="16" id="fs-hostname" oninput="updateFontSize('hostname',this.value)"><span id="fs-hostname-val">16px</span></div>
-      <div class="font-size-row"><label>Address</label><input type="range" min="6" max="30" value="16" id="fs-address" oninput="updateFontSize('address',this.value)"><span id="fs-address-val">16px</span></div>
-      <div class="font-size-row"><label>Addr Line Spacing</label><input type="range" min="0.7" max="2.0" step="0.05" value="1.15" id="lh-address" oninput="updateLineHeight('address',this.value)"><span id="lh-address-val">1.15</span></div>
-      <div class="font-size-row"><label>Mahaprasad</label><input type="range" min="6" max="22" value="11" id="fs-mahaprasad" oninput="updateFontSize('mahaprasad',this.value)"><span id="fs-mahaprasad-val">11px</span></div>
-    </div>
-    <div id="fs-ss-sliders" style="display:none">
-      <div class="font-size-row"><label>Date/Time</label><input type="range" min="8" max="40" value="26" id="fs-ss_datetime" oninput="updateFontSize('ss_datetime',this.value)"><span id="fs-ss_datetime-val">26px</span></div>
-      <div class="font-size-row"><label>Address</label><input type="range" min="6" max="30" value="17" id="fs-ss_address" oninput="updateFontSize('ss_address',this.value)"><span id="fs-ss_address-val">17px</span></div>
-      <div class="font-size-row"><label>Addr Line Spacing</label><input type="range" min="0.7" max="2.0" step="0.05" value="1.1" id="lh-ss_address" oninput="updateLineHeight('ss_address',this.value)"><span id="lh-ss_address-val">1.1</span></div>
-    </div>
-
     <!-- Advanced Settings (hidden by default, shown when allowAdvanced=true) -->
     <button id="advanced-toggle" onclick="toggleAdvanced()" style="display:none;width:100%;margin-top:16px;padding:10px;background:none;border:1px solid var(--cream-dark);border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--text-muted)">
       ⚙️ Advanced Settings <span id="advanced-arrow">▼</span>
@@ -589,13 +574,10 @@ function readUrlParams() {
 // ── Send for Review ───────────────────────────────────────────────────────────
 async function sendForReview() {
   const btn = document.getElementById('review-btn');
-  const status = document.getElementById('review-status');
-  // Get session from URL directly
   const token = new URLSearchParams(window.location.search).get('session') || 'standalone';
 
-  // Validate fields
-  const date = document.getElementById('f-date')?.value;
-  const time = document.getElementById('f-time')?.value;
+  const date  = document.getElementById('f-date')?.value;
+  const time  = document.getElementById('f-time')?.value;
   const addr1 = document.getElementById('f-addr1')?.value.trim();
   if (!date || !time || !addr1) {
     showReviewStatus('⚠️ Please fill in at least Date, Time, and Address before submitting.', false);
@@ -604,10 +586,8 @@ async function sendForReview() {
 
   btn.disabled = true;
   btn.textContent = '⏳ Capturing flyer...';
-  status.style.display = 'none';
 
   try {
-    // Capture the flyer preview as PNG via html2canvas
     const wrap = document.getElementById('flyer-wrap');
     document.querySelectorAll('.drag-item').forEach(el => {
       el.dataset.origBorder = el.style.borderColor;
@@ -617,53 +597,41 @@ async function sendForReview() {
 
     const canvas = await html2canvas(wrap, {
       scale: 923 / wrap.offsetWidth,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: null,
-      logging: false,
+      useCORS: true, allowTaint: true, backgroundColor: null, logging: false,
     });
 
     document.querySelectorAll('.drag-item').forEach(el => {
       el.style.borderColor = el.dataset.origBorder || 'transparent';
     });
 
-    // Convert to base64
-    const dataUrl = canvas.toDataURL('image/png');
-    const base64 = dataUrl.split(',')[1];
-
-    // Collect event data for reject URL
+    const base64 = canvas.toDataURL('image/png').split(',')[1];
     const santosChecked = document.getElementById('santos-cb')?.checked;
     const zone = santosChecked && currentZone === 'satsang-sabha' ? 'satsang-sabha-santos' : currentZone;
     const eventData = {
-      date:        document.getElementById('f-date')?.value || '',
-      time:        document.getElementById('f-time')?.value || '',
-      rsvpDate:    document.getElementById('f-rsvp-date')?.value || '',
-      host:        document.getElementById('f-host')?.value.trim() || '',
-      addr1:       document.getElementById('f-addr1')?.value.trim() || '',
-      addr2:       document.getElementById('f-addr2')?.value.trim() || '',
-      mahaprasad:  document.getElementById('f-mahaprasad')?.value || '',
-      santos:      santosChecked ? 'true' : 'false',
+      date:       document.getElementById('f-date')?.value || '',
+      time:       document.getElementById('f-time')?.value || '',
+      rsvpDate:   document.getElementById('f-rsvp-date')?.value || '',
+      host:       document.getElementById('f-host')?.value.trim() || '',
+      addr1:      document.getElementById('f-addr1')?.value.trim() || '',
+      addr2:      document.getElementById('f-addr2')?.value.trim() || '',
+      mahaprasad: document.getElementById('f-mahaprasad')?.value || '',
+      santos:     santosChecked ? 'true' : 'false',
+      zone:       zone,
     };
 
-    btn.textContent = '⏳ Sending for review...';
+    // Store in sessionStorage for review-sent page to upload
+    sessionStorage.setItem('pendingReview', JSON.stringify({ zone, imageBase64: base64, eventData, token }));
 
-    const res = await fetch('/.netlify/functions/review-flyer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-builder-session': token },
-      body: JSON.stringify({ zone, imageBase64: base64, eventData }),
-    });
+    // Redirect immediately
+    window.location.href = '/flyer-builder/review-sent/';
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Submission failed');
-
-    showReviewStatus('✅ Flyer sent for review! An admin will approve or reject it shortly.', true);
   } catch (err) {
-    showReviewStatus('❌ ' + err.message, false);
-  } finally {
     btn.disabled = false;
     btn.textContent = '📤 Send for Review';
+    showReviewStatus('❌ ' + err.message, false);
   }
 }
+
 
 function showReviewStatus(msg, success) {
   const el = document.getElementById('review-status');

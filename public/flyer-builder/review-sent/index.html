@@ -9,62 +9,16 @@
   <link rel="icon" type="image/png" href="/images/tab-logo.png" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: #F7F0E8;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-    .card {
-      background: #fff;
-      border-radius: 24px;
-      padding: 52px 40px;
-      max-width: 460px;
-      width: 100%;
-      text-align: center;
-      box-shadow: 0 8px 40px rgba(92,45,10,0.12);
-    }
+    body { font-family: 'DM Sans', sans-serif; background: #F7F0E8; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .top-border { position: fixed; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #5C2D0A, #E8650A, #F5C842, #E8650A, #5C2D0A); }
+    .card { background: #fff; border-radius: 24px; padding: 52px 40px; max-width: 460px; width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(92,45,10,0.12); }
     .icon { font-size: 64px; margin-bottom: 24px; }
-    h1 {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 30px;
-      color: #5C2D0A;
-      margin-bottom: 14px;
-    }
-    .desc {
-      font-size: 15px;
-      color: #8B6040;
-      line-height: 1.7;
-      margin-bottom: 10px;
-    }
-    .sub {
-      font-size: 13px;
-      color: #B08060;
-      line-height: 1.6;
-      margin-bottom: 32px;
-    }
-    .note {
-      background: #FDF6EC;
-      border-radius: 12px;
-      padding: 14px 18px;
-      font-size: 13px;
-      color: #8B6040;
-      line-height: 1.6;
-    }
-    .divider {
-      height: 1px;
-      background: #F5E6CC;
-      margin: 28px 0;
-    }
-    .top-border {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      height: 4px;
-      background: linear-gradient(90deg, #5C2D0A, #E8650A, #F5C842, #E8650A, #5C2D0A);
-    }
+    h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; color: #5C2D0A; margin-bottom: 14px; }
+    .desc { font-size: 15px; color: #8B6040; line-height: 1.7; margin-bottom: 10px; }
+    .sub  { font-size: 13px; color: #B08060; line-height: 1.6; margin-bottom: 32px; }
+    .note { background: #FDF6EC; border-radius: 12px; padding: 14px 18px; font-size: 13px; color: #8B6040; line-height: 1.6; }
+    .divider { height: 1px; background: #F5E6CC; margin: 28px 0; }
+    .uploading { font-size: 12px; color: #B08060; margin-top: 16px; opacity: 0.7; }
   </style>
 </head>
 <body>
@@ -73,14 +27,28 @@
     <div class="icon">✅</div>
     <h1>Flyer Sent for Review!</h1>
     <p class="desc">Your flyer has been submitted and is awaiting admin approval.</p>
-    <p class="sub">
-      If approved, it will be automatically uploaded to the site.<br>
-      If rejected, a link will be posted in the admin group so you can fix and resubmit.
-    </p>
+    <p class="sub">If approved, it will be automatically uploaded to the site.<br>If rejected, a link will be posted in the admin group so you can fix and resubmit.</p>
     <div class="divider"></div>
-    <div class="note">
-      You can safely close this tab. You'll be notified via the admin Telegram group once a decision is made.
-    </div>
+    <div class="note">You can safely close this tab. You'll be notified via the admin Telegram group once a decision is made.</div>
+    <p class="uploading" id="upload-status">Uploading flyer...</p>
   </div>
+  <script>
+    (async () => {
+      const raw = sessionStorage.getItem('pendingReview');
+      if (!raw) { document.getElementById('upload-status').textContent = ''; return; }
+      sessionStorage.removeItem('pendingReview');
+      try {
+        const { zone, imageBase64, eventData, token } = JSON.parse(raw);
+        await fetch('/.netlify/functions/review-flyer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-builder-session': token },
+          body: JSON.stringify({ zone, imageBase64, eventData }),
+        });
+        document.getElementById('upload-status').textContent = '';
+      } catch (err) {
+        document.getElementById('upload-status').textContent = 'Upload may have failed. Please try again from the admin portal.';
+      }
+    })();
+  </script>
 </body>
 </html>
