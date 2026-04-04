@@ -548,6 +548,12 @@ function readUrlParams() {
 async function sendForReview() {
   const btn = document.getElementById('review-btn');
   const status = document.getElementById('review-status');
+  // Wait up to 5 seconds for session verification to complete
+  let waited = 0;
+  while (!window.ADMIN_TOKEN && waited < 5000) {
+    await new Promise(r => setTimeout(r, 100));
+    waited += 100;
+  }
   const token = window.ADMIN_TOKEN;
 
   if (!token) {
