@@ -122,7 +122,14 @@ exports.handler = async (event) => {
     fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id, message_id, text, reply_markup: JSON.stringify({ inline_keyboard: [] }), ...extra }),
+      body: JSON.stringify({ chat_id, message_id, text, ...extra }),
+    });
+
+  const clearButtons = (chat_id, message_id) =>
+    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id, message_id, reply_markup: JSON.stringify({ inline_keyboard: [] }) }),
     });
 
   const sendPhotoBuffer = async (chat_id, flyerUrl) => {
@@ -389,6 +396,7 @@ exports.handler = async (event) => {
     if (cbData.startsWith('review:approve:')) {
       const reviewId = cbData.replace('review:approve:', '');
       await answerCallbackQuery(callbackQuery.id, 'Approving...');
+      await clearButtons(cbChatId, msgId);
       await editMessageText(cbChatId, msgId, '⏳ Approving flyer...');
 
       try {
@@ -485,6 +493,7 @@ GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
     if (cbData.startsWith('review:reject:')) {
       const reviewId = cbData.replace('review:reject:', '');
       await answerCallbackQuery(callbackQuery.id, 'Rejected');
+      await clearButtons(cbChatId, msgId);
 
       try {
         const { data: review } = await supabase
