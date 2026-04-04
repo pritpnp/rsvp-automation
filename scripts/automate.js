@@ -880,7 +880,6 @@ async function main() {
   }
 
   // Save deadlines.json
-  const deadlinesPath = path.join(REPO_ROOT, 'deadlines.json');
   let existing = {};
   if (fs.existsSync(deadlinesPath)) {
     try { existing = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
