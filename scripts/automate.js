@@ -73,35 +73,21 @@ async function resolveEventName(supabase, zone, ocrName) {
   }
 }
 
-function detectMediaType(buffer) {
-  // Detect actual image format from magic bytes — never trust the file extension
-  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'image/png';
-  if (buffer[0] === 0xFF && buffer[1] === 0xD8) return 'image/jpeg';
-  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return 'image/gif';
-  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[6] === 0x57) return 'image/webp';
-  return 'image/jpeg'; // fallback
-}
-
 async function extractEventInfo(flyerPath) {
   console.log('📸 Reading flyer with Claude OCR...');
+  // Compress image to JPEG under 4MB before sending to Claude API (5MB limit)
   const MAX_BYTES = 4 * 1024 * 1024;
   let imageBuffer = fs.readFileSync(flyerPath);
-  const detectedType = detectMediaType(imageBuffer);
-
-  // Always normalize to JPEG via Sharp — handles PNGs saved as .jpg,
-  // oversized images, and any format mismatches in one step
-  if (imageBuffer.length > MAX_BYTES || detectedType !== 'image/jpeg') {
-    const reason = imageBuffer.length > MAX_BYTES
-      ? `${Math.round(imageBuffer.length/1024/1024*10)/10}MB — too large`
-      : `detected as ${detectedType} — normalizing`;
-    console.log(`Converting flyer (${reason}) to JPEG for OCR...`);
+  let mediaType = path.extname(flyerPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+  if (imageBuffer.length > MAX_BYTES) {
+    console.log(`⚠️  Flyer is ${Math.round(imageBuffer.length/1024/1024*10)/10}MB — compressing for OCR...`);
     imageBuffer = await sharp(flyerPath)
       .resize({ width: 1800, withoutEnlargement: true })
       .jpeg({ quality: 85 })
       .toBuffer();
-    console.log(`Converted to JPEG, ${Math.round(imageBuffer.length/1024)}KB`);
+    mediaType = 'image/jpeg';
+    console.log(`✅ Compressed to ${Math.round(imageBuffer.length/1024)}KB for OCR`);
   }
-  const mediaType = 'image/jpeg';
   const base64Image = imageBuffer.toString('base64');
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -625,9 +611,10 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
 
   // Add static pages: VIP pass, login, admin
   const staticPages = [
-    { filePath: '/vip/index.html',   diskPath: path.join(__dirname, '..', 'public', 'vip',   'index.html') },
-    { filePath: '/login/index.html', diskPath: path.join(__dirname, '..', 'public', 'login', 'index.html') },
-    { filePath: '/admin/index.html', diskPath: path.join(__dirname, '..', 'public', 'admin', 'index.html') },
+    { filePath: '/vip/index.html',           diskPath: path.join(__dirname, '..', 'public', 'vip',           'index.html') },
+    { filePath: '/login/index.html',         diskPath: path.join(__dirname, '..', 'public', 'login',         'index.html') },
+    { filePath: '/admin/index.html',         diskPath: path.join(__dirname, '..', 'public', 'admin',         'index.html') },
+    { filePath: '/flyer-builder/index.html', diskPath: path.join(__dirname, '..', 'public', 'flyer-builder', 'index.html') },
   ];
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
   const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : '';
@@ -807,42 +794,16 @@ async function main() {
   const eventInfoMap = {};
   const deadlines    = {};
 
-  const forceAll = process.env.FORCE_ALL === 'true';
-  if (forceAll) console.log('\n🔄 FORCE_ALL=true — running OCR on all zones');
-
-  // Load existing deadlines.json so we can reuse data for unchanged zones
-  const deadlinesPath = path.join(REPO_ROOT, 'deadlines.json');
-  let existingDeadlines = {};
-  if (fs.existsSync(deadlinesPath)) {
-    try { existingDeadlines = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
-  }
-
   for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
     const isChanged = changedFlyers.includes(flyerRelPath);
-    const needsOcr  = forceAll || isChanged || !existingDeadlines[zone]?.date;
-    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'} ${needsOcr ? '(running OCR)' : '(skipping OCR — using cached data)'}`);
+    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'}`);
 
-    let eventInfo;
-    if (needsOcr) {
-      // 1. OCR extracts raw info from flyer
-      eventInfo = await extractEventInfo(flyerPath);
+    // 1. OCR extracts raw info from flyer
+    const eventInfo = await extractEventInfo(flyerPath);
 
-      // 2. Resolve canonical event name from Supabase
-      eventInfo.eventName = await resolveEventName(supabase, zone, eventInfo.eventName);
-    } else {
-      // Reuse existing deadlines.json data — no OCR needed, saves API cost
-      const cached = existingDeadlines[zone];
-      eventInfo = {
-        eventName:          cached.eventName  || '',
-        date:               cached.date       || '',
-        time:               cached.time       || '',
-        location:           '',
-        description:        '',
-        rsvpDeadline:       cached.deadline   || '',
-        invitationYPercent: 0.55
-      };
-      console.log(`  📋 Using cached: "${eventInfo.eventName}" — ${eventInfo.date}`);
-    }
+    // 2. Resolve canonical event name from Supabase
+    //    If a name has been set by admin, use it. Otherwise save OCR name as initial value.
+    eventInfo.eventName = await resolveEventName(supabase, zone, eventInfo.eventName);
 
     eventInfoMap[zone] = eventInfo;
 
@@ -883,7 +844,12 @@ async function main() {
   }
 
   // Save deadlines.json
-  const merged = { ...existingDeadlines, ...deadlines };
+  const deadlinesPath = path.join(REPO_ROOT, 'deadlines.json');
+  let existing = {};
+  if (fs.existsSync(deadlinesPath)) {
+    try { existing = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
+  }
+  const merged = { ...existing, ...deadlines };
   fs.writeFileSync(deadlinesPath, JSON.stringify(merged, null, 2));
   console.log('📅 deadlines.json updated:', merged);
 
