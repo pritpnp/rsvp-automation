@@ -621,7 +621,8 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     { filePath: '/vip/index.html',           diskPath: path.join(__dirname, '..', 'public', 'vip',           'index.html') },
     { filePath: '/login/index.html',         diskPath: path.join(__dirname, '..', 'public', 'login',         'index.html') },
     { filePath: '/admin/index.html',         diskPath: path.join(__dirname, '..', 'public', 'admin',         'index.html') },
-    { filePath: '/flyer-builder/index.html', diskPath: path.join(__dirname, '..', 'public', 'flyer-builder', 'index.html') },
+    { filePath: '/flyer-builder/index.html',              diskPath: path.join(__dirname, '..', 'public', 'flyer-builder', 'index.html') },
+    { filePath: '/flyer-builder/review-sent/index.html', diskPath: path.join(__dirname, '..', 'public', 'flyer-builder', 'review-sent', 'index.html') },
   ];
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
   const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : '';

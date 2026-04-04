@@ -496,14 +496,19 @@ GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
         const zone = review.zone.replace('-santos', '');
         const zoneLabel = ZONE_LABELS[zone] || zone;
 
-        await editMessageText(
-          cbChatId, msgId,
-          `❌ *Flyer rejected for ${zoneLabel}.*
+        // Edit original message to show rejected status
+        await editMessageText(cbChatId, msgId, `❌ Flyer rejected for ${zoneLabel}.`);
 
-Use the link below to fix and resubmit:
-${rejectUrl}`,
-          { parse_mode: 'Markdown' }
-        );
+        // Send a separate message with the link (avoids Markdown URL escaping issues)
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: ADMIN_CHAT_ID,
+            text: `🔗 Fix and resubmit the flyer here:\n${rejectUrl}`,
+            disable_web_page_preview: false,
+          }),
+        });
 
         // TODO: When zone chats are ready, send the link directly to the manager here
 

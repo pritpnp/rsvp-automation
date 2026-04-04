@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flyer Sent for Review — SCREvents</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="/images/tab-logo.png" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #F7F0E8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 52px 40px;
+      max-width: 460px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 40px rgba(92,45,10,0.12);
+    }
+    .icon { font-size: 64px; margin-bottom: 24px; }
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 30px;
+      color: #5C2D0A;
+      margin-bottom: 14px;
+    }
+    .desc {
+      font-size: 15px;
+      color: #8B6040;
+      line-height: 1.7;
+      margin-bottom: 10px;
+    }
+    .sub {
+      font-size: 13px;
+      color: #B08060;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+    .note {
+      background: #FDF6EC;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 13px;
+      color: #8B6040;
+      line-height: 1.6;
+    }
+    .divider {
+      height: 1px;
+      background: #F5E6CC;
+      margin: 28px 0;
+    }
+    .top-border {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #5C2D0A, #E8650A, #F5C842, #E8650A, #5C2D0A);
+    }
+  </style>
+</head>
+<body>
+  <div class="top-border"></div>
+  <div class="card">
+    <div class="icon">✅</div>
+    <h1>Flyer Sent for Review!</h1>
+    <p class="desc">Your flyer has been submitted and is awaiting admin approval.</p>
+    <p class="sub">
+      If approved, it will be automatically uploaded to the site.<br>
+      If rejected, a link will be posted in the admin group so you can fix and resubmit.
+    </p>
+    <div class="divider"></div>
+    <div class="note">
+      You can safely close this tab. You'll be notified via the admin Telegram group once a decision is made.
+    </div>
+  </div>
+</body>
+</html>

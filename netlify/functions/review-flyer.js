@@ -74,16 +74,6 @@ exports.handler = async (event) => {
   if (uploadError)
     return { statusCode: 500, headers, body: JSON.stringify({ error: `Storage upload failed: ${uploadError.message}` }) };
 
-  // ── Save review record ────────────────────────────────────────────────────
-  await supabase.from('flyer_reviews').insert({
-    id: reviewId,
-    zone,
-    storage_path: storagePath,
-    event_data: eventData || {},
-    status: 'pending',
-    created_by: managerName,
-  });
-
   // ── Build pre-filled reject URL ───────────────────────────────────────────
   const params = new URLSearchParams();
   if (eventData) {
@@ -96,8 +86,19 @@ exports.handler = async (event) => {
     if (eventData.mahaprasad)  params.set('mahaprasad', eventData.mahaprasad);
     if (eventData.santos)      params.set('santos', eventData.santos);
   }
-  params.set('zone', zone.replace('-santos', '').replace('-sabha', '-sabha'));
+  params.set('zone', zone.replace('-santos', ''));
+  // New session will be needed — direct to builder without session so they get prompted to reopen from admin
   const rejectUrl = `https://screvents.com/flyer-builder/?${params.toString()}`;
+
+  // ── Save review record (with rejectUrl baked in from the start) ────────────
+  await supabase.from('flyer_reviews').insert({
+    id: reviewId,
+    zone,
+    storage_path: storagePath,
+    event_data: { ...(eventData || {}), rejectUrl },
+    status: 'pending',
+    created_by: managerName,
+  });
 
   // ── Download image to send to Telegram ───────────────────────────────────
   const { data: signedData } = await supabase.storage
@@ -153,9 +154,6 @@ exports.handler = async (event) => {
   const tgData = await tgRes.json();
   if (!tgData.ok)
     return { statusCode: 500, headers, body: JSON.stringify({ error: `Telegram send failed: ${JSON.stringify(tgData)}` }) };
-
-  // Store reject URL in review record for webhook to use later
-  await supabase.from('flyer_reviews').update({ event_data: { ...(eventData || {}), rejectUrl } }).eq('id', reviewId);
 
   return { statusCode: 200, headers, body: JSON.stringify({ ok: true, reviewId }) };
 };
