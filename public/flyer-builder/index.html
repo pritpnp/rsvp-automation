@@ -675,9 +675,7 @@ async function verifyBuilderSession() {
   const sessionId = params.get('session');
 
   if (!sessionId) {
-    // Standalone mode — show everything for superadmin testing
-    window.ADMIN_TOKEN = 'standalone';
-    document.getElementById('advanced-toggle').style.display = 'flex';
+    // Already handled above before this function was called
     return;
   }
 
