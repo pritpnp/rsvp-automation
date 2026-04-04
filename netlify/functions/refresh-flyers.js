@@ -36,7 +36,14 @@ exports.handler = async (event) => {
     }
   }
 
-  // ── Dispatch GitHub Actions workflow with force_all=true ──────────────────
+  // ── Parse optional zone_override ─────────────────────────────────────────
+  let zoneOverride = '';
+  try {
+    const body = JSON.parse(event.body || '{}');
+    zoneOverride = body.zone_override || '';
+  } catch {}
+
+  // ── Dispatch GitHub Actions workflow ──────────────────────────────────────
   const ghRes = await fetch(
     'https://api.github.com/repos/pritpnp/rsvp-automation/actions/workflows/rsvp-automation.yml/dispatches',
     {
@@ -48,7 +55,10 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         ref: 'main',
-        inputs: { force_all: 'true' },
+        inputs: {
+          force_all: zoneOverride ? 'false' : 'true',
+          zone_override: zoneOverride,
+        },
       }),
     }
   );
