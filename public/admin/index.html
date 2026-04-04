@@ -259,8 +259,12 @@
               <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:8px;margin-bottom:4px">Flyer Builder Permissions</div>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-flyer-builder"> Access Flyer Builder</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-flyer-builder-advanced"> Advanced settings (positions &amp; fonts)</label>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:8px;margin-bottom:4px">Allowed Zones (comma-separated)</div>
-              <input type="text" id="new-perm-flyer-zones" placeholder="e.g. scranton, moosic" style="width:100%;padding:8px 10px;border:1px solid var(--cream-dark);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream)" />
+              <div style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-bottom:4px;padding-left:4px">Allowed Zones:</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding-left:16px"><input type="checkbox" id="new-perm-zone-scranton"> Scranton</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding-left:16px"><input type="checkbox" id="new-perm-zone-mountain-top"> Mountain Top</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding-left:16px"><input type="checkbox" id="new-perm-zone-moosic"> Moosic</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding-left:16px"><input type="checkbox" id="new-perm-zone-bloomsburg"> Bloomsburg</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding-left:16px"><input type="checkbox" id="new-perm-zone-satsang-sabha"> Satsang Sabha</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-edit-rsvp"> Edit number of guests</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="new-perm-delete-rsvp"> Delete RSVPs</label>
             </div>
@@ -381,9 +385,32 @@
 
         <div class="card" id="flyer-refresh-card">
           <h2>Refresh All Zones</h2>
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Force OCR on every zone that has a flyer — regardless of what changed. Use this if event details look wrong or are out of date. This will trigger a full site rebuild (~2 minutes).</p>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Force OCR on every zone — regardless of what changed. Use if event details look wrong. Triggers a full rebuild (~2 minutes).</p>
           <button id="flyer-refresh-btn" class="btn-create" onclick="refreshAllFlyers()" style="background:linear-gradient(135deg,var(--brown),var(--brown-mid))">🔄 Refresh All Zones →</button>
           <div id="flyer-refresh-status" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
+        </div>
+
+        <div class="card" id="flyer-refresh-zone-card">
+          <h2>Refresh Single Zone</h2>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Force OCR on one specific zone only. Much faster and cheaper than refreshing all zones.</p>
+          <div class="form-group" style="margin-bottom:16px">
+            <label>Zone</label>
+            <select id="refresh-zone-select" style="width:100%;padding:11px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
+              <option value="">— Select a zone —</option>
+              <option value="scranton">Scranton</option>
+              <option value="mountain-top">Mountain Top</option>
+              <option value="moosic">Moosic</option>
+              <option value="bloomsburg">Bloomsburg</option>
+              <option value="satsang-sabha">Satsang Sabha</option>
+              <option value="mandir-1">Mandir 1</option>
+              <option value="mandir-2">Mandir 2</option>
+              <option value="mandir-3">Mandir 3</option>
+              <option value="mandir-4">Mandir 4</option>
+              <option value="mandir-5">Mandir 5</option>
+            </select>
+          </div>
+          <button id="flyer-refresh-zone-btn" class="btn-create" onclick="refreshZone()" style="background:linear-gradient(135deg,var(--brown),var(--brown-mid))">🔄 Refresh Zone →</button>
+          <div id="flyer-refresh-zone-status" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
         </div>
       </div>
 
@@ -973,8 +1000,12 @@
                 <div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-top:10px;margin-bottom:6px">Flyer Builder Permissions</div>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-flyer-builder-${m.id}" ${m.permissions?.flyer_builder ? 'checked' : ''}> Access Flyer Builder</label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mgr-edit-flyer-builder-adv-${m.id}" ${m.permissions?.flyer_builder_advanced ? 'checked' : ''}> Advanced settings</label>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;margin-bottom:4px">Allowed Zones</div>
-                <input type="text" id="mgr-edit-flyer-zones-${m.id}" value="${(m.permissions?.flyer_zones||[]).join(', ')}" placeholder="e.g. scranton, moosic" style="width:100%;padding:7px 10px;border:1px solid var(--cream-dark);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream)" />
+                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-bottom:4px;padding-left:4px">Allowed Zones:</div>
+                ${['scranton','mountain-top','moosic','bloomsburg','satsang-sabha'].map(z => `
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding-left:16px">
+                  <input type="checkbox" id="mgr-edit-zone-${z}-${m.id}" ${(m.permissions?.flyer_zones||[]).includes(z) ? 'checked' : ''}>
+                  ${z.split('-').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ')}
+                </label>`).join('')}
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px">
@@ -1005,14 +1036,13 @@
         refresh_flyers:         document.getElementById('new-perm-refresh-flyer').checked,
         flyer_builder:          document.getElementById('new-perm-flyer-builder').checked,
         flyer_builder_advanced: document.getElementById('new-perm-flyer-builder-advanced').checked,
-        flyer_zones:            (document.getElementById('new-perm-flyer-zones').value || '').split(',').map(s=>s.trim()).filter(Boolean),
+        flyer_zones:            ['scranton','mountain-top','moosic','bloomsburg','satsang-sabha'].filter(z => document.getElementById('new-perm-zone-' + z)?.checked),
       };
       const res = await fetch(MANAGERS_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ username, password, permissions }) });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
       ['new-manager-username','new-manager-password'].forEach(id => document.getElementById(id).value = '');
-      ['new-perm-create','new-perm-edit','new-perm-view-rsvp','new-perm-edit-rsvp','new-perm-delete-rsvp','new-perm-upload-flyer','new-perm-remove-flyer','new-perm-refresh-flyer','new-perm-flyer-builder','new-perm-flyer-builder-advanced'].forEach(id => document.getElementById(id).checked = false);
-      document.getElementById('new-perm-flyer-zones').value = '';
+      ['new-perm-create','new-perm-edit','new-perm-view-rsvp','new-perm-edit-rsvp','new-perm-delete-rsvp','new-perm-upload-flyer','new-perm-remove-flyer','new-perm-refresh-flyer','new-perm-flyer-builder','new-perm-flyer-builder-advanced','new-perm-zone-scranton','new-perm-zone-mountain-top','new-perm-zone-moosic','new-perm-zone-bloomsburg','new-perm-zone-satsang-sabha'].forEach(id => document.getElementById(id).checked = false);
       sucEl.textContent = `✅ Manager "${data.username}" added.`;
       sucEl.style.display = 'block';
       setTimeout(() => sucEl.style.display = 'none', 6000);
@@ -1381,6 +1411,33 @@
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+    }
+
+    async function refreshZone() {
+      const zone = document.getElementById('refresh-zone-select').value;
+      const btn = document.getElementById('flyer-refresh-zone-btn');
+      const statusEl = document.getElementById('flyer-refresh-zone-status');
+      if (!zone) { alert('Please select a zone first'); return; }
+      btn.disabled = true; btn.textContent = '⏳ Triggering...';
+      statusEl.style.display = 'none';
+      try {
+        const res = await fetch('/.netlify/functions/refresh-flyers', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ zone_override: zone }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        statusEl.textContent = '✅ Refresh triggered for ' + zone + '! (~2 minutes)';
+        statusEl.style.background = '#f0fdf4'; statusEl.style.color = '#166534';
+        statusEl.style.display = 'block';
+      } catch (err) {
+        statusEl.textContent = '❌ ' + err.message;
+        statusEl.style.background = '#fef2f2'; statusEl.style.color = '#991b1b';
+        statusEl.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = '🔄 Refresh Zone →';
+      }
     }
 
     async function refreshAllFlyers() {

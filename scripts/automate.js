@@ -802,12 +802,40 @@ async function main() {
   const eventInfoMap = {};
   const deadlines    = {};
 
+  const forceAll     = process.env.FORCE_ALL === 'true';
+  const zoneOverride = process.env.ZONE_OVERRIDE?.trim() || '';
+
+  // Load deadlines.json cache for skipping unchanged zones
+  const deadlinesPath = path.join(REPO_ROOT, 'deadlines.json');
+  let cachedDeadlines = {};
+  if (fs.existsSync(deadlinesPath)) {
+    try { cachedDeadlines = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
+  }
+
   for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
     const isChanged = changedFlyers.includes(flyerRelPath);
-    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : '♻️ existing'}`);
+    const hasCached = !!cachedDeadlines[zone]?.deadline !== undefined && !!cachedDeadlines[zone]?.date;
+    const skipOcr   = !forceAll && !isChanged && hasCached && zone !== zoneOverride;
 
-    // 1. OCR extracts raw info from flyer
-    const eventInfo = await extractEventInfo(flyerPath);
+    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : skipOcr ? '⏭️ skipping OCR (cached)' : '♻️ existing'}`);
+
+    let eventInfo;
+    if (skipOcr) {
+      // Reuse cached data — no OCR needed
+      const cached = cachedDeadlines[zone];
+      eventInfo = {
+        eventName:          cached.eventName || '',
+        date:               cached.date || '',
+        time:               cached.time || '',
+        location:           '',
+        rsvpDeadline:       cached.deadline || '',
+        invitationYPercent: 0.55,
+      };
+      console.log(`  ✅ Using cached data for ${zone}: "${cached.eventName}"`);
+    } else {
+      // 1. OCR extracts raw info from flyer
+      eventInfo = await extractEventInfo(flyerPath);
+    }
 
     // 2. Resolve canonical event name from Supabase
     //    If a name has been set by admin, use it. Otherwise save OCR name as initial value.

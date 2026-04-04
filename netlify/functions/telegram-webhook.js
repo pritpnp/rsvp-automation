@@ -566,6 +566,31 @@ GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
   const isUploadFlyer   = normalizedText === '/uploadflyer';
   const isRemoveFlyer   = normalizedText === '/removeflyer';
   const isCancel        = normalizedText === '/cancel';
+  const isRefreshAll    = normalizedText === '/refreshall';
+
+  // ── /refreshall (admin chat only) — force OCR on all zones ──
+  if (isRefreshAll && chatId === ADMIN_CHAT_ID) {
+    await sendMessage(chatId, '🔄 Triggering full refresh (OCR on all zones)...');
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/pritpnp/rsvp-automation/actions/workflows/rsvp-automation.yml/dispatches`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${GITHUB_PAT}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: 'main', inputs: { force_all: 'true' } }),
+        }
+      );
+      if (res.ok || res.status === 204) {
+        await sendMessage(chatId, '✅ Full refresh triggered! All zones will be re-OCR'd and redeployed (~2 minutes).');
+      } else {
+        await sendMessage(chatId, `❌ Failed to trigger refresh: ${res.status}`);
+      }
+    } catch (err) {
+      await sendMessage(chatId, `❌ Error: ${err.message}`);
+    }
+    return { statusCode: 200, body: 'OK' };
+  }
+
 
   // ── /cancel (admin chat only) ──
   if (isCancel && chatId === ADMIN_CHAT_ID) {

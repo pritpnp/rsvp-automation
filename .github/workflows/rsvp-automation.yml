@@ -9,9 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       force_all:
-        description: 'Force OCR on all zones regardless of changes'
+        description: 'Force OCR on all zones (ignore cache)'
         required: false
         default: 'false'
+      zone_override:
+        description: 'Force OCR on a single zone (e.g. scranton)'
+        required: false
+        default: ''
 
 jobs:
   build-and-deploy:
@@ -50,7 +54,7 @@ jobs:
           cd scripts
           FLYERS=$(git diff --name-only HEAD~1 HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | tr '\n' ',')
           echo "🎯 Flyers to process: $FLYERS"
-          FLYER_PATHS="$FLYERS" FORCE_ALL="${{ github.event.inputs.force_all || 'false' }}" node automate.js
+          FLYER_PATHS="$FLYERS" FORCE_ALL="${{ github.event.inputs.force_all || 'false' }}" ZONE_OVERRIDE="${{ github.event.inputs.zone_override || '' }}" node automate.js
 
       - name: Commit deadlines.json
         run: |
