@@ -1086,7 +1086,7 @@
         refresh_flyers:          document.getElementById('mgr-edit-refresh-flyer-' + id).checked,
         flyer_builder:           document.getElementById('mgr-edit-flyer-builder-' + id).checked,
         flyer_builder_advanced:  document.getElementById('mgr-edit-flyer-builder-adv-' + id).checked,
-        flyer_zones:             (document.getElementById('mgr-edit-flyer-zones-' + id).value || '').split(',').map(s=>s.trim()).filter(Boolean),
+        flyer_zones:             ['scranton','mountain-top','moosic','bloomsburg','satsang-sabha'].filter(z => document.getElementById('mgr-edit-zone-' + z + '-' + id)?.checked),
       };
       const errEl = document.getElementById('mgr-edit-err-' + id);
       errEl.style.display = 'none';
