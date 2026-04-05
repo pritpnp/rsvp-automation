@@ -64,12 +64,12 @@ exports.handler = async (event) => {
 
   // ── Upload image to Supabase Storage ──────────────────────────────────────
   const reviewId = crypto.randomUUID();
-  const storagePath = `${reviewId}/${zone}-flyer.png`;
+  const storagePath = `${reviewId}/${zone}-flyer.jpg`;
   const imageBuffer = Buffer.from(imageBase64, 'base64');
 
   const { error: uploadError } = await supabase.storage
     .from('flyer-reviews')
-    .upload(storagePath, imageBuffer, { contentType: 'image/png', upsert: false });
+    .upload(storagePath, imageBuffer, { contentType: 'image/jpeg', upsert: false });
 
   if (uploadError)
     return { statusCode: 500, headers, body: JSON.stringify({ error: `Storage upload failed: ${uploadError.message}` }) };
@@ -136,7 +136,7 @@ exports.handler = async (event) => {
   parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`));
   parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="parse_mode"\r\n\r\nMarkdown\r\n`));
   parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="reply_markup"\r\n\r\n${replyMarkup}\r\n`));
-  parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="flyer.png"\r\nContent-Type: image/png\r\n\r\n`));
+  parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="flyer.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`));
   parts.push(imgBytes);
   parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
 

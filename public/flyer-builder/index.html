@@ -619,7 +619,7 @@ async function sendForReview() {
       el.style.borderColor = el.dataset.origBorder || 'transparent';
     });
 
-    const base64 = canvas.toDataURL('image/png').split(',')[1];
+    const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
     const santosChecked = document.getElementById('santos-cb')?.checked;
     const zone = santosChecked && currentZone === 'satsang-sabha' ? 'satsang-sabha-santos' : currentZone;
     const eventData = {
