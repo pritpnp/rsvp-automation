@@ -266,8 +266,6 @@ function formatRsvpDate(dateStr) {
 }
 
 function updateDatetime() {
-  const day  = formatDate(document.getElementById('f-date')?.value || '');
-  const time = document.getElementById('f-time')?.value || '';
   updateText('datetime');
   updateText('ss_datetime');
 }
@@ -569,12 +567,14 @@ function readUrlParams() {
   if (p.get('mahaprasad')) setField('f-mahaprasad', p.get('mahaprasad'));
 
   if (p.get('time')) {
-    // Time dropdown needs to be built first
-    setTimeout(() => {
-      setField('f-time', p.get('time'));
-      updateDatetime();
-      renderDragItems();
-    }, 200);
+    const t = p.get('time'); // e.g. "5:30 pm"
+    const match = t.match(/(\d+):(\d+)/);
+    if (match) {
+      const hEl = document.getElementById('f-hour');
+      const mEl = document.getElementById('f-minute');
+      if (hEl) hEl.value = parseInt(match[1], 10);
+      if (mEl) mEl.value = parseInt(match[2], 10);
+    }
   }
 
   if (p.get('santos') === 'true') {
