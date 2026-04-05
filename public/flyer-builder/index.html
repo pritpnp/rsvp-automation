@@ -592,9 +592,9 @@ async function sendForReview() {
   const token = new URLSearchParams(window.location.search).get('session') || 'standalone';
 
   const date  = document.getElementById('f-date')?.value;
-  const time  = document.getElementById('f-time')?.value;
+  const hour  = document.getElementById('f-hour')?.value;
   const addr1 = document.getElementById('f-addr1')?.value.trim();
-  if (!date || !time || !addr1) {
+  if (!date || !hour || !addr1) {
     showReviewStatus('⚠️ Please fill in at least Date, Time, and Address before submitting.', false);
     return;
   }
