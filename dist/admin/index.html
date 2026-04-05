@@ -1509,59 +1509,6 @@
       window.location.href = 'https://screvents.com';
     }
 
-    async function logout() {
-      if (sessionToken) await fetch(AUTH_API + '/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sessionToken }) }).catch(() => {});
-      localStorage.clear();
-      window.location.replace('/login');
-    }
-
-    function switchTab(tab, btn) {
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('tab-' + tab).classList.add('active');
-      btn.classList.add('active');
-      if (tab === 'rsvps') loadRsvps();
-
-    }
-
-    function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
-
-    async function launchFlyerBuilder() {
-      const btn    = document.getElementById('launch-builder-btn');
-      const status = document.getElementById('launch-builder-status');
-      btn.disabled = true;
-      btn.textContent = '⏳ Generating session...';
-      status.style.display = 'none';
-
-      // Open window immediately (before any async) to avoid popup blocker on mobile
-      const newTab = window.open('/flyer-builder/', '_blank');
-
-      try {
-        const res = await fetch('/.netlify/functions/create-builder-session', {
-          method: 'POST',
-          headers: authHeaders(),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to create session');
-        // Navigate the already-open tab to the session URL
-        if (newTab) {
-          newTab.location.href = `/flyer-builder/?session=${data.sessionId}`;
-        } else {
-          // Fallback if popup was blocked anyway
-          window.location.href = `/flyer-builder/?session=${data.sessionId}`;
-        }
-      } catch (err) {
-        if (newTab) newTab.close();
-        status.textContent = '❌ ' + err.message;
-        status.style.background = '#fef2f2';
-        status.style.color = '#991b1b';
-        status.style.display = 'block';
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Open Flyer Builder →';
-      }
-    }
-
-    </script>
+                    </script>
 </body>
 </html>
