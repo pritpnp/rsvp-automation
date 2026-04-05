@@ -700,16 +700,29 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   const repoRoot = path.join(__dirname, '..');
   const distDir  = path.join(repoRoot, 'dist');
 
-  if (fs.existsSync(distDir)) fs.rmSync(distDir, { recursive: true });
   fs.mkdirSync(distDir, { recursive: true });
 
+  // Only write files that changed (compare SHA1 of existing file)
+  let writtenCount = 0;
+  let skippedCount = 0;
   for (const [filePath, sha1] of Object.entries(files)) {
     const { content } = fileContents[sha1];
     const fullPath = path.join(distDir, filePath);
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+
+    // Skip if file already exists with same content
+    if (fs.existsSync(fullPath)) {
+      const existingHash = crypto.createHash('sha1').update(fs.readFileSync(fullPath)).digest('hex');
+      if (existingHash === sha1) {
+        skippedCount++;
+        continue;
+      }
+    }
     fs.writeFileSync(fullPath, content);
     console.log(`📄 Written: ${filePath}`);
+    writtenCount++;
   }
+  console.log(`📊 dist/ update: ${writtenCount} written, ${skippedCount} unchanged (skipped)`);
 
   // Copy images folder to dist/
   const imagesDir = path.join(repoRoot, 'images');
