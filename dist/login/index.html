@@ -492,11 +492,23 @@
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'flyerbuilder\', this)">✏️ Flyer Builder</button>';
       }
       tabsEl.innerHTML = tabsHtml;
-      // Auto-activate first available tab
-      const firstTab = tabsEl.querySelector('.tab-btn');
-      if (firstTab) { firstTab.classList.add('active'); firstTab.click(); }
 
       document.getElementById('admin-screen').style.display = 'block';
+
+      // Activate first available tab panel without triggering switchTab redirect logic
+      const firstTabBtn = tabsEl.querySelector('.tab-btn');
+      if (firstTabBtn) {
+        const onclickAttr = firstTabBtn.getAttribute('onclick') || '';
+        const match = onclickAttr.match(/switchTab\('([^']+)'/);
+        if (match) {
+          document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          const panel = document.getElementById('tab-' + match[1]);
+          if (panel) panel.classList.add('active');
+          firstTabBtn.classList.add('active');
+        }
+      }
+
       loadEventPicker();
       if (isSuperadmin) { loadManagers(); loadEvents(); loadZoneEventNames(); }
 
