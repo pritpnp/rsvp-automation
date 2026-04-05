@@ -49,7 +49,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
     const password_hash = await bcrypt.hash(password, 10);
-    const perms = permissions || { view_passes: true, create_delete_passes: false, edit_passes: false };
+    const perms = permissions || {};
     const { data, error } = await supabase
       .from('managers')
       .insert([{ username: username.toLowerCase().trim(), password_hash, permissions: perms }])
