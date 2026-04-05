@@ -125,6 +125,13 @@ exports.handler = async (event) => {
       body: JSON.stringify({ chat_id, message_id, text, ...extra }),
     });
 
+  const editMessageCaption = (chat_id, message_id, caption, extra = {}) =>
+    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageCaption`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id, message_id, caption, reply_markup: JSON.stringify({ inline_keyboard: [] }), ...extra }),
+    });
+
   const clearButtons = (chat_id, message_id) =>
     fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
       method: 'POST',
@@ -473,8 +480,7 @@ exports.handler = async (event) => {
           'satsang-sabha': 'Satsang Sabha',
         };
         const zoneLabel = ZONE_LABELS[zone] || zone;
-        await editMessageText(cbChatId, msgId, `✅ *Flyer approved and uploaded for ${zoneLabel}!*
-GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
+        await editMessageCaption(cbChatId, msgId, `✅ Approved — ${zoneLabel} flyer uploaded. GitHub Actions will process it now (~2 minutes).`);
 
         // TODO: When zone chats are ready, also notify the zone chat here:
         // const zoneChatId = ZONE_CHAT_IDS[zone];
@@ -482,7 +488,7 @@ GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
 
       } catch (err) {
         console.error('Review approve error:', err);
-        await editMessageText(cbChatId, msgId, `❌ Approval failed: ${err.message}`);
+        await editMessageCaption(cbChatId, msgId, `❌ Approval failed: ${err.message}`);
       }
 
       return { statusCode: 200, body: 'OK' };
@@ -518,7 +524,7 @@ GitHub Actions will process it now (~2 minutes).`, { parse_mode: 'Markdown' });
         const zone = review.zone.replace('-santos', '');
         const zoneLabel = ZONE_LABELS[zone] || zone;
 
-        await editMessageText(cbChatId, msgId, `❌ Rejected — ${zoneLabel} flyer was not approved.`);
+        await editMessageCaption(cbChatId, msgId, `❌ Rejected — ${zoneLabel} flyer was not approved.`);
 
         // Send a separate message with the link (avoids Markdown URL escaping issues)
         await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
