@@ -140,7 +140,7 @@
     <div class="admin-body">
 
       <!-- ── VIP Passes ── -->
-      <div class="tab-panel active" id="tab-passes">
+      <div class="tab-panel active" id="tab-passes" data-requires-passes="true">
         <div class="card" id="event-picker-card">
           <h2>Select Event</h2>
           <div id="event-picker-list"><div class="spinner"></div></div>
@@ -491,6 +491,13 @@
         tabsHtml += '<button class="tab-btn" onclick="switchTab(\'flyerbuilder\', this)">✏️ Flyer Builder</button>';
       }
       tabsEl.innerHTML = tabsHtml;
+      // If no view_passes permission, hide the passes tab button and switch to next tab
+      if (!isSuperadmin && !permissions.view_passes) {
+        const passBtn = tabsEl.querySelector('[onclick*="passes"]');
+        if (passBtn) passBtn.style.display = 'none';
+        const nextBtn = tabsEl.querySelector('.tab-btn:not([style*="none"])');
+        if (nextBtn) nextBtn.click();
+      }
 
       document.getElementById('admin-screen').style.display = 'block';
 
