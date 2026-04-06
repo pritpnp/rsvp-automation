@@ -459,8 +459,7 @@ function buildHubPage(allFlyers, deadlines) {
   const bapsLogoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
   const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
-  const sansthaLogoPath = path.join(REPO_ROOT, 'images', 'baps-sanstha.png');
-  const bapsSansthaBase64 = fs.existsSync(sansthaLogoPath) ? fs.readFileSync(sansthaLogoPath).toString('base64') : '';
+
 
   const zoneLabels = {
     'mountain-top': 'Mountain Top',
@@ -593,9 +592,7 @@ function buildHubPage(allFlyers, deadlines) {
     ${noEvents}
   </main>
   <footer>
-    ${bapsSansthaBase64
-      ? `<img src="data:image/png;base64,${bapsSansthaBase64}" style="max-width:200px;width:100%;display:block;margin:0 auto 8px;" alt="BAPS Swaminarayan Sanstha" />`
-      : `<span style="font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:600;color:#8B4513;display:block;margin-bottom:4px;">BAPS Swaminarayan Sanstha</span>`}
+    <span style="font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:600;color:#8B4513;display:block;margin-bottom:4px;">BAPS Swaminarayan Sanstha</span>
     <a href="https://www.baps.org/Scranton" target="_blank" style="color:rgba(122,69,32,0.6);text-decoration:none;font-size:12px;letter-spacing:0.04em;">www.baps.org/Scranton</a>
     <div style="margin-top:16px;"><a href="/admin" style="font-size:11px;color:rgba(122,69,32,0.35);text-decoration:none;letter-spacing:0.06em;border:1px solid rgba(122,69,32,0.15);padding:4px 12px;border-radius:20px;">Admin Portal</a></div>
   </footer>
