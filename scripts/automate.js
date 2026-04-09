@@ -668,9 +668,14 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
       fileContents[npSha1] = { filePath: npFilePath, content: npContent };
     }
 
-    // OG image
-    const ogFilePath = `${basePath}/og.jpg`;
-    const ogContent  = await buildOgImage(flyerPath);
+    // OG image — use builder-generated og.jpg if present, else auto-generate
+    const zoneDir      = path.dirname(flyerPath);
+    const manualOgPath = path.join(zoneDir, 'og.jpg');
+    const ogFilePath   = `${basePath}/og.jpg`;
+    const ogContent    = fs.existsSync(manualOgPath)
+      ? await sharp(manualOgPath).jpeg({ quality: 90 }).toBuffer()
+      : await buildOgImage(flyerPath);
+    console.log(`🖼️  OG source: ${fs.existsSync(manualOgPath) ? 'og.jpg (builder)' : 'auto-generated'}`);
     const ogSha1     = crypto.createHash('sha1').update(ogContent).digest('hex');
     files[ogFilePath] = ogSha1;
     fileContents[ogSha1] = { filePath: ogFilePath, content: ogContent };
