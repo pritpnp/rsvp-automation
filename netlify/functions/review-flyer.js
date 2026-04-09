@@ -47,7 +47,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
 
-  const { zone, imageBase64, eventData } = body;
+  const { zone, imageBase64, ogBase64, eventData } = body;
 
   const VALID_ZONES = ['scranton','mountain-top','moosic','bloomsburg','satsang-sabha','satsang-sabha-santos'];
   if (!zone || !VALID_ZONES.includes(zone))
@@ -74,6 +74,20 @@ exports.handler = async (event) => {
   if (uploadError)
     return { statusCode: 500, headers, body: JSON.stringify({ error: `Storage upload failed: ${uploadError.message}` }) };
 
+  // Upload OG preview image if provided
+  let ogStoragePath = null;
+  if (ogBase64) {
+    ogStoragePath = `${reviewId}/${zone}-og.jpg`;
+    const ogBuffer = Buffer.from(ogBase64, 'base64');
+    const { error: ogUploadError } = await supabase.storage
+      .from('flyer-reviews')
+      .upload(ogStoragePath, ogBuffer, { contentType: 'image/jpeg', upsert: false });
+    if (ogUploadError) {
+      console.warn(`⚠️ OG image upload failed: ${ogUploadError.message}`);
+      ogStoragePath = null;
+    }
+  }
+
   // ── Build pre-filled reject URL ───────────────────────────────────────────
   const params = new URLSearchParams();
   if (eventData) {
@@ -95,6 +109,7 @@ exports.handler = async (event) => {
     id: reviewId,
     zone,
     storage_path: storagePath,
+    og_storage_path: ogStoragePath,
     event_data: { ...(eventData || {}), rejectUrl },
     status: 'pending',
     created_by: managerName,

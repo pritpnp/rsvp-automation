@@ -416,7 +416,7 @@ exports.handler = async (event) => {
         if (!review) throw new Error('Review not found');
         if (review.status !== 'pending') throw new Error('Already processed');
 
-        // Download image from Supabase storage
+        // Download main flyer from Supabase storage
         const { data: signedData } = await supabase.storage
           .from('flyer-reviews')
           .createSignedUrl(review.storage_path, 300);
@@ -425,6 +425,21 @@ exports.handler = async (event) => {
         if (!imgRes.ok) throw new Error('Could not download flyer from storage');
         const imgBuffer = await imgRes.arrayBuffer();
         const base64Image = Buffer.from(imgBuffer).toString('base64');
+
+        // Download OG preview from Supabase storage (if present)
+        let ogBase64Image = null;
+        if (review.og_storage_path) {
+          const { data: ogSignedData } = await supabase.storage
+            .from('flyer-reviews')
+            .createSignedUrl(review.og_storage_path, 300);
+          if (ogSignedData?.signedUrl) {
+            const ogRes = await fetch(ogSignedData.signedUrl);
+            if (ogRes.ok) {
+              const ogBuffer = await ogRes.arrayBuffer();
+              ogBase64Image = Buffer.from(ogBuffer).toString('base64');
+            }
+          }
+        }
 
         // Commit to GitHub — delete any existing flyers first, then upload new one
         const zone = review.zone.replace('-santos', '');
@@ -452,7 +467,7 @@ exports.handler = async (event) => {
           }
         }
 
-        // Commit new flyer
+        // Commit new flyer.jpg
         const filePath = `flyers/${zone}/flyer.jpg`;
         const apiUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${filePath}`;
         const putRes = await fetch(apiUrl, {
@@ -468,11 +483,28 @@ exports.handler = async (event) => {
           throw new Error(`GitHub commit failed: ${err}`);
         }
 
+        // Commit og.jpg (builder 1200×630 preview) — falls back to main flyer if preview wasn't captured
+        const ogContent = ogBase64Image || base64Image;
+        const ogApiUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/flyers/${zone}/og.jpg`;
+        const ogPutRes = await fetch(ogApiUrl, {
+          method: 'PUT', headers: ghHeaders,
+          body: JSON.stringify({
+            message: `Upload og.jpg for ${zone} via flyer builder (approved)`,
+            content: ogContent,
+          }),
+        });
+
+        if (!ogPutRes.ok) {
+          const err = await ogPutRes.text();
+          throw new Error(`GitHub og.jpg commit failed: ${err}`);
+        }
+
         // Mark review as approved
         await supabase.from('flyer_reviews').update({ status: 'approved' }).eq('id', reviewId);
 
-        // Clean up storage
-        await supabase.storage.from('flyer-reviews').remove([review.storage_path]);
+        // Clean up storage (both flyer and og)
+        const pathsToRemove = [review.storage_path, review.og_storage_path].filter(Boolean);
+        await supabase.storage.from('flyer-reviews').remove(pathsToRemove);
 
         const ZONE_LABELS = {
           'scranton': 'Scranton', 'mountain-top': 'Mountain Top',
@@ -512,8 +544,9 @@ exports.handler = async (event) => {
         // Mark as rejected
         await supabase.from('flyer_reviews').update({ status: 'rejected' }).eq('id', reviewId);
 
-        // Clean up storage
-        await supabase.storage.from('flyer-reviews').remove([review.storage_path]);
+        // Clean up storage (both flyer and og)
+        const rejectPathsToRemove = [review.storage_path, review.og_storage_path].filter(Boolean);
+        await supabase.storage.from('flyer-reviews').remove(rejectPathsToRemove);
 
         const rejectUrl = review.event_data?.rejectUrl || 'https://screvents.com/flyer-builder/';
         const ZONE_LABELS = {
