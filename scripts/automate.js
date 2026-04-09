@@ -109,9 +109,8 @@ STRICT RULES:
 - location: Address ONLY. No sponsor names, no host names. Just the street address, city, state, zip.
 - location: Read street numbers very carefully. Count each digit exactly as printed. Do not add or remove digits (e.g. "311" must not become "3111").
 - rsvpDeadline: YYYY-MM-DD format using year 2026 unless clearly stated otherwise. Empty string if not mentioned.
-- invitationYPercent: A number between 0 and 1 representing how far down the image (as a fraction of total height) the word "Invitation" first appears. If not present, use 0.55.
 
-{"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"...","invitationYPercent":0.55}` }
+{"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"..."}` }
     ]}]
   });
   const info = JSON.parse(response.content[0].text.trim().replace(/\`\`\`json|\`\`\`/g, '').trim());
@@ -128,7 +127,7 @@ STRICT RULES:
   return info;
 }
 
-function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview = false) {
+function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview = false, ogSha1 = '') {
   const zoneLabel = zoneName(zone);
   const pageUrl = `https://screvents.com/${zone}`;
   const flyerUrl = `${pageUrl}/flyer.jpg`;
@@ -151,7 +150,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   ${tabLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${tabLogoBase64}" />` : ''}
   ${noPreview ? '' : `<meta property="og:title" content="${eventInfo.eventName} — ${zoneLabel} Zone" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
-  <meta property="og:image" content="${pageUrl}/og.jpg" />
+  <meta property="og:image" content="${pageUrl}/og.jpg${ogSha1 ? '?v=' + ogSha1.slice(0, 8) : ''}" />
   <meta property="og:url" content="${pageUrl}" />
   <meta property="og:type" content="website" />
   <meta property="og:image:width" content="1200" />
@@ -304,7 +303,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 }
 
 
-function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPreview = false, overrideUrl = null) {
+function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPreview = false, overrideUrl = null, ogSha1 = '') {
   const pageUrl = overrideUrl || `https://screvents.com/mandir/${slot.replace('mandir-', '')}`;
   const flyerUrl = `${pageUrl}/flyer.jpg`;
   const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
@@ -323,7 +322,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
   ${tabLogoBase64 ? `<link rel="icon" type="image/png" href="data:image/png;base64,${tabLogoBase64}" />` : ''}
   ${noPreview ? '' : `<meta property="og:title" content="${eventInfo.eventName} — BAPS Scranton Mandir" />
   <meta property="og:description" content="${eventInfo.date ? eventInfo.date + (eventInfo.time ? ' at ' + eventInfo.time : '') + ' · ' : ''}${eventInfo.location}" />
-  <meta property="og:image" content="${pageUrl}/og.jpg" />
+  <meta property="og:image" content="${pageUrl}/og.jpg${ogSha1 ? '?v=' + ogSha1.slice(0, 8) : ''}" />
   <meta property="og:url" content="${pageUrl}" />
   <meta property="og:type" content="website" />
   <meta property="og:image:width" content="1200" />
@@ -642,33 +641,12 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     }
   }
 
-  for (const { zone, html, flyerPath } of pages) {
+  for (const { zone, flyerPath } of pages) {
     const isMandirSlot  = MANDIR_SLOTS.includes(zone);
     const isMandirStyle = isMandirSlot || zone === 'satsang-sabha';
     const basePath      = isMandirSlot ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
 
-    // HTML page
-    const htmlFilePath = `${basePath}/index.html`;
-    const htmlContent  = Buffer.from(html);
-    const htmlSha1     = crypto.createHash('sha1').update(htmlContent).digest('hex');
-    files[htmlFilePath] = htmlSha1;
-    fileContents[htmlSha1] = { filePath: htmlFilePath, content: htmlContent };
-
-    // No-preview version
-    const pageData = pages.find(p => p.zone === zone);
-    if (pageData) {
-      const zoneOverrideUrl = (zone === 'satsang-sabha') ? `https://screvents.com/${zone}` : null;
-      const npHtml = isMandirStyle
-        ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true, zoneOverrideUrl)
-        : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, pageData.embedUrl, pageData.formUrl, true);
-      const npFilePath = `/np${basePath}/index.html`;
-      const npContent  = Buffer.from(npHtml);
-      const npSha1     = crypto.createHash('sha1').update(npContent).digest('hex');
-      files[npFilePath] = npSha1;
-      fileContents[npSha1] = { filePath: npFilePath, content: npContent };
-    }
-
-    // OG image — use builder-generated og.jpg if present, else auto-generate
+    // OG image — compute FIRST so we can embed the hash into the HTML
     const zoneDir      = path.dirname(flyerPath);
     const manualOgPath = path.join(zoneDir, 'og.jpg');
     const ogFilePath   = `${basePath}/og.jpg`;
@@ -680,6 +658,33 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     files[ogFilePath] = ogSha1;
     fileContents[ogSha1] = { filePath: ogFilePath, content: ogContent };
     console.log(`🖼️  OG image: ${Math.round(ogContent.length / 1024)}KB`);
+
+    // HTML page — rebuilt here with ogSha1 for cache-busting
+    const pageData = pages.find(p => p.zone === zone);
+    const embedUrl = pageData?.embedUrl || '';
+    const formUrl  = pageData?.formUrl  || '';
+    const zoneOverrideUrl = (zone === 'satsang-sabha') ? `https://screvents.com/${zone}` : null;
+    const html = isMandirStyle
+      ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, embedUrl, formUrl, false, zoneOverrideUrl, ogSha1)
+      : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, embedUrl, formUrl, false, ogSha1);
+
+    const htmlFilePath = `${basePath}/index.html`;
+    const htmlContent  = Buffer.from(html);
+    const htmlSha1     = crypto.createHash('sha1').update(htmlContent).digest('hex');
+    files[htmlFilePath] = htmlSha1;
+    fileContents[htmlSha1] = { filePath: htmlFilePath, content: htmlContent };
+
+    // No-preview version
+    if (pageData) {
+      const npHtml = isMandirStyle
+        ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, embedUrl, formUrl, true, zoneOverrideUrl, ogSha1)
+        : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, embedUrl, formUrl, true, ogSha1);
+      const npFilePath = `/np${basePath}/index.html`;
+      const npContent  = Buffer.from(npHtml);
+      const npSha1     = crypto.createHash('sha1').update(npContent).digest('hex');
+      files[npFilePath] = npSha1;
+      fileContents[npSha1] = { filePath: npFilePath, content: npContent };
+    }
 
     // Flyer image
     const imgFilePath = `${basePath}/flyer.jpg`;
@@ -839,7 +844,6 @@ async function main() {
         time:               cached.time || '',
         location:           '',
         rsvpDeadline:       cached.deadline || '',
-        invitationYPercent: 0.55,
       };
       console.log(`  ✅ Using cached data for ${zone}: "${cached.eventName}"`);
     } else {
