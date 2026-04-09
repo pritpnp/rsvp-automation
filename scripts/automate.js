@@ -406,7 +406,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
 </html>`;
 }
 
-async function buildOgImage(flyerPath, invitationYPercent) {
+async function buildOgImage(flyerPath) {
   const metadata = await sharp(flyerPath).metadata();
   const { width: w, height: h } = metadata;
   const aspectRatio = w / h;
@@ -669,13 +669,8 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     }
 
     // OG image
-    const zoneDir    = path.dirname(flyerPath);
-    const previewPath = ['preview.png', 'preview.jpg', 'preview.jpeg']
-      .map(f => path.join(zoneDir, f))
-      .find(f => fs.existsSync(f)) || flyerPath;
-    console.log(`🖼️  OG source: ${path.basename(previewPath)}`);
     const ogFilePath = `${basePath}/og.jpg`;
-    const ogContent  = await buildOgImage(previewPath, eventInfoMap[zone]?.invitationYPercent);
+    const ogContent  = await buildOgImage(flyerPath);
     const ogSha1     = crypto.createHash('sha1').update(ogContent).digest('hex');
     files[ogFilePath] = ogSha1;
     fileContents[ogSha1] = { filePath: ogFilePath, content: ogContent };
