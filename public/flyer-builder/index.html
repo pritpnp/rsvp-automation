@@ -843,7 +843,7 @@ function renderPreviewCanvas() {
   const img = document.getElementById('preview-template-img');
   if (img) {
     img.crossOrigin = 'anonymous';
-    img.src = templateSrc;
+    img.src = templateSrc + '?v=1';
     img.onload = () => renderPreviewDragItems();
     if (img.complete && img.naturalWidth > 0) renderPreviewDragItems();
   }
