@@ -282,7 +282,9 @@ function setZone(zone, btn) {
   isSatsang = zone === 'satsang-sabha';
   document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('template-img').src = TEMPLATES[zone];
+  const tImg = document.getElementById('template-img');
+  tImg.crossOrigin = 'anonymous';
+  tImg.src = TEMPLATES[zone];
   document.getElementById('para-fields').style.display = isSatsang ? 'none' : 'block';
   document.getElementById('fs-para-sliders').style.display = isSatsang ? 'none' : 'block';
   document.getElementById('fs-ss-sliders').style.display = isSatsang ? 'block' : 'none';
@@ -840,9 +842,9 @@ function renderPreviewCanvas() {
   const templateSrc = PREVIEW_TEMPLATES[zone] || PREVIEW_TEMPLATES['scranton'];
   const img = document.getElementById('preview-template-img');
   if (img) {
+    img.crossOrigin = 'anonymous';
     img.src = templateSrc;
     img.onload = () => renderPreviewDragItems();
-    // If already loaded (cached), render immediately
     if (img.complete && img.naturalWidth > 0) renderPreviewDragItems();
   }
 }
@@ -1092,7 +1094,9 @@ if (!_urlParams.get('session')) {
 // ── Start ─────────────────────────────────────────────────────────────────────
 verifyBuilderSession();
 
-document.getElementById('template-img').src = TEMPLATES['moosic'];
+const _tImg = document.getElementById('template-img');
+_tImg.crossOrigin = 'anonymous';
+_tImg.src = TEMPLATES['moosic'];
 document.getElementById('template-img').onload = () => {
   renderDragItems();
   renderPosList();

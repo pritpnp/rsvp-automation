@@ -49,3 +49,17 @@
   from = "/flyer-builder/review-sent/*"
   to = "/flyer-builder/review-sent/index.html"
   status = 200
+[[headers]]
+  for = "/flyer-builder/templates/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/preview-templates/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/fonts/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
