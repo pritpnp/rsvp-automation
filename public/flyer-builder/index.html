@@ -138,6 +138,18 @@
     <div id="para-fields">
       <div class="form-group"><label>RSVP By Date</label><input type="date" id="f-rsvp-date" oninput="updateRsvp();this.blur()" onchange="updateRsvp();this.blur()" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)" /></div>
       <div class="form-group"><label>Host Name(s)</label><input type="text" id="f-host" placeholder="Host Name(s)" oninput="updateText('hostname')"/></div>
+
+    </div>
+    <!-- Mandir checkbox (shown for Scranton + Satsang Sabha) -->
+    <div id="mandir-toggle" style="display:none;margin-bottom:10px;padding:10px 12px;background:var(--cream);border-radius:9px;border:1px solid var(--cream-dark)">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;font-weight:500;color:var(--brown)">
+        <input type="checkbox" id="mandir-cb" checked onchange="toggleMandir(this.checked)" style="width:16px;height:16px;accent-color:var(--saffron);cursor:pointer" />
+        Event is at Mandir
+      </label>
+    </div>
+
+    <!-- Mahaprasad (shown for para zones + satsang sabha) -->
+    <div id="mahaprasad-field" style="display:none">
       <div class="form-group"><label>Mahaprasad</label>
         <select id="f-mahaprasad" onchange="updateText('mahaprasad')" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
           <option value="Mahaprasad will be served after sabha.">...served after sabha.</option>
@@ -146,7 +158,8 @@
         </select>
       </div>
     </div>
-    <div class="form-group"><label>Address Line 1</label><input type="text" id="f-addr1" placeholder="Street Address" oninput="updateText('address')"/></div>
+
+        <div class="form-group"><label>Address Line 1</label><input type="text" id="f-addr1" placeholder="Street Address" oninput="updateText('address')"/></div>
     <div class="form-group"><label>Address Line 2</label><input type="text" id="f-addr2" placeholder="City, PA ZIP" oninput="updateText('address')"/></div>
 
     <!-- Advanced Settings (hidden by default, shown when allowAdvanced=true) -->
@@ -260,6 +273,9 @@ const ELEMENTS = {
 let focusedEl = null;
 
 // ── Zone switch ───────────────────────────────────────────────────────────────
+const MANDIR_ZONES = ['scranton', 'satsang-sabha'];
+const MANDIR_ADDRESS = { line1: 'BAPS Scranton Mandir', line2: '311 Oak Street, Scranton, PA 18508' };
+
 function setZone(zone, btn) {
   currentZone = zone;
   isSatsang = zone === 'satsang-sabha';
@@ -271,8 +287,41 @@ function setZone(zone, btn) {
   document.getElementById('fs-ss-sliders').style.display = isSatsang ? 'block' : 'none';
   document.getElementById('santos-toggle').style.display = isSatsang ? 'block' : 'none';
   if (!isSatsang) document.getElementById('santos-cb').checked = false;
+
+  // Mandir checkbox
+  const isMandir = MANDIR_ZONES.includes(zone);
+  document.getElementById('mandir-toggle').style.display = isMandir ? 'block' : 'none';
+  const cb = document.getElementById('mandir-cb');
+  cb.checked = isMandir; // default checked when entering a mandir zone
+  toggleMandir(isMandir);
+
+  // Mahaprasad — show for para zones (non-satsang) AND satsang sabha
+  document.getElementById('mahaprasad-field').style.display = 'block';
+
   renderDragItems();
   renderPosList();
+}
+
+function toggleMandir(checked) {
+  const addr1 = document.getElementById('f-addr1');
+  const addr2 = document.getElementById('f-addr2');
+  if (checked) {
+    addr1.value = MANDIR_ADDRESS.line1;
+    addr2.value = MANDIR_ADDRESS.line2;
+    addr1.disabled = true;
+    addr2.disabled = true;
+    addr1.style.opacity = '0.6';
+    addr2.style.opacity = '0.6';
+  } else {
+    addr1.value = '';
+    addr2.value = '';
+    addr1.disabled = false;
+    addr2.disabled = false;
+    addr1.style.opacity = '1';
+    addr2.style.opacity = '1';
+  }
+  updateText('address');
+  updateText('ss_address');
 }
 
 // ── Santos toggle ─────────────────────────────────────────────────────────────
