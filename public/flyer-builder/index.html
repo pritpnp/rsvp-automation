@@ -265,7 +265,8 @@ const ELEMENTS = {
   hostname:    { label: 'Host Name',   yPct: 0.8275, canvasYPct: 0.8455, fontSizePx: 17, bold: false, color: '#4c4c4b', font: 'GothamRegular',      bevel: false, lineHeight: 1.4 },
   address:     { label: 'Address',     yPct: 0.8614, canvasYPct: 0.8890, fontSizePx: 16, bold: false, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.15 },
   // satsang-specific — calibrated from position log
-  mahaprasad:  { label: 'Mahaprasad',  yPct: 0.900097435897436, canvasYPct: 0.900097435897436, fontSizePx: 11, bold: true, color: '#4c4c4b', font: 'AddingtonCF', bevel: false, lineHeight: 1.4 },
+  mahaprasad:    { label: 'Mahaprasad',  yPct: 0.9142, canvasYPct: 0.9142, fontSizePx: 11, bold: true, color: '#4c4c4b', font: 'AddingtonCF', bevel: false, lineHeight: 1.4 },
+  ss_mahaprasad: { label: 'Mahaprasad',  yPct: 0.900097435897436, canvasYPct: 0.900097435897436, fontSizePx: 11, bold: true, color: '#4c4c4b', font: 'AddingtonCF', bevel: false, lineHeight: 1.4 },
   ss_datetime: { label: 'Date & Time', yPct: 0.7714897435897436, canvasYPct: 0.7714897435897436, fontSizePx: 26, bold: false, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.4 },
   ss_address:  { label: 'Address',     yPct: 0.8403538461538461, canvasYPct: 0.8403538461538461, fontSizePx: 17, bold: false, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.1 },
 };
@@ -333,7 +334,7 @@ function toggleSantos(checked) {
 // ── Build drag items ──────────────────────────────────────────────────────────
 function getActiveEls() {
   return isSatsang
-    ? ['ss_datetime', 'ss_address', 'mahaprasad']
+    ? ['ss_datetime', 'ss_address', 'ss_mahaprasad']
     : ['datetime', 'rsvp', 'hostname', 'address', 'mahaprasad'];
 }
 
@@ -383,6 +384,7 @@ function getElText(id) {
     case 'hostname':    return host || 'Host Name';
     case 'address':     return addr || 'Address Line 1\nAddress Line 2';
     case 'mahaprasad':  return mahaprasad;
+    case 'ss_mahaprasad': return mahaprasad;
     case 'ss_datetime': return dt || 'Sat, April 12 at 4:30 pm';
     case 'ss_address':  return addr || '311 Oak St\nScranton, PA 18508';
   }
