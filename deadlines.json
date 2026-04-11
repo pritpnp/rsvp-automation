@@ -28,10 +28,10 @@
     "time": "4:00 pm"
   },
   "moosic": {
-    "deadline": "2026-04-17",
+    "deadline": "2026-04-10",
     "eventName": "Para Satsang Sabha",
-    "date": "Sunday, April 19",
-    "eventDate": "2026-04-19",
+    "date": "Friday, April 10",
+    "eventDate": "2026-04-10",
     "time": "5:00 pm"
   },
   "mandir-2": {
@@ -42,10 +42,10 @@
     "time": "3:30 pm - 5:30 pm"
   },
   "bloomsburg": {
-    "deadline": "2026-04-16",
+    "deadline": "2026-04-17",
     "eventName": "Para Satsang Sabha",
-    "date": "Sunday, April 19",
-    "eventDate": "2026-04-19",
+    "date": "Saturday, April 18",
+    "eventDate": "2026-04-18",
     "time": "5:00 pm"
   }
 }
