@@ -887,11 +887,19 @@ async function sendForReview() {
 
     // ── Step 2: Capture preview tab (always, for og.jpg) ────────────────────
     btn.textContent = '⏳ Capturing preview...';
-    renderPreviewCanvas(); // ensure preview is rendered with current data
+
+    // Temporarily show preview wrap so offsetWidth is valid
+    const previewCanvasWrap = document.getElementById('preview-canvas-wrap');
+    const wasHidden = !previewCanvasWrap.classList.contains('active');
+    if (wasHidden) {
+      previewCanvasWrap.style.visibility = 'hidden';
+      previewCanvasWrap.style.display = 'block';
+    }
+
     const previewWrap = document.getElementById('preview-wrap');
     const previewImg  = document.getElementById('preview-template-img');
 
-    // Wait for template image to load if not already
+    // Force fresh load with CORS
     await new Promise(resolve => {
       previewImg.crossOrigin = 'anonymous';
       previewImg.onload = resolve;
@@ -913,6 +921,13 @@ async function sendForReview() {
     previewWrap.querySelectorAll('.drag-item').forEach(el => {
       el.style.borderColor = el.dataset.origBorder || 'transparent';
     });
+
+    // Restore hidden state
+    if (wasHidden) {
+      previewCanvasWrap.style.display = '';
+      previewCanvasWrap.style.visibility = '';
+    }
+
     const ogBase64 = previewCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 
     const zone = (santosChecked && currentZone === 'satsang-sabha') ? 'satsang-sabha-santos' : currentZone;
