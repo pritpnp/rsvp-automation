@@ -781,7 +781,7 @@ async function main() {
   for (const zone of zones) {
     const zoneDir = path.join(REPO_ROOT_PATH, 'flyers', zone);
     if (!fs.existsSync(zoneDir)) continue;
-    const files = fs.readdirSync(zoneDir).filter(f => /\.(png|jpg|jpeg)$/i.test(f));
+    const files = fs.readdirSync(zoneDir).filter(f => f === 'flyer.jpg' || f === 'flyer.png' || f === 'flyer.jpeg');
     if (files.length > 0) {
       zonesWithFlyer.add(zone);
       // Only use the first flyer file per zone — prevents duplicate cards
