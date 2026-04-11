@@ -888,28 +888,14 @@ async function sendForReview() {
     // ── Step 2: Capture preview tab (always, for og.jpg) ────────────────────
     btn.textContent = '⏳ Capturing preview...';
 
-    // Temporarily show preview wrap so offsetWidth is valid
-    const previewCanvasWrap = document.getElementById('preview-canvas-wrap');
-    const wasHidden = !previewCanvasWrap.classList.contains('active');
-    if (wasHidden) {
-      previewCanvasWrap.style.setProperty('display', 'block', 'important');
-      previewCanvasWrap.style.visibility = 'hidden';
-      previewCanvasWrap.style.position = 'fixed';
-      previewCanvasWrap.style.left = '-9999px';
-    }
+    // Switch to preview tab so offsetWidth is valid, then switch back
+    const previewTabBtn = document.querySelector('.builder-tab[onclick*="preview"]');
+    const flyerTabBtn   = document.querySelector('.builder-tab[onclick*="flyer"]');
+    const wasOnFlyer    = document.getElementById('flyer-wrap-outer') && !document.getElementById('flyer-wrap-outer').classList.contains('hidden');
+    if (wasOnFlyer) previewTabBtn.click();
+    await new Promise(r => setTimeout(r, 500));
 
     const previewWrap = document.getElementById('preview-wrap');
-    const previewImg  = document.getElementById('preview-template-img');
-
-    // Force fresh load with CORS
-    await new Promise(resolve => {
-      previewImg.crossOrigin = 'anonymous';
-      previewImg.onload = resolve;
-      previewImg.onerror = resolve;
-      previewImg.src = (PREVIEW_TEMPLATES[currentZone] || PREVIEW_TEMPLATES['scranton']) + '?cb=' + Date.now();
-    });
-    renderPreviewDragItems();
-
     previewWrap.querySelectorAll('.drag-item').forEach(el => {
       el.dataset.origBorder = el.style.borderColor;
       el.style.borderColor = 'transparent';
@@ -924,13 +910,8 @@ async function sendForReview() {
       el.style.borderColor = el.dataset.origBorder || 'transparent';
     });
 
-    // Restore hidden state
-    if (wasHidden) {
-      previewCanvasWrap.style.display = '';
-      previewCanvasWrap.style.visibility = '';
-      previewCanvasWrap.style.position = '';
-      previewCanvasWrap.style.left = '';
-    }
+    // Switch back to flyer tab
+    if (wasOnFlyer) flyerTabBtn.click();
 
     const ogBase64 = previewCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 
