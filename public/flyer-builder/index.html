@@ -892,8 +892,10 @@ async function sendForReview() {
     const previewCanvasWrap = document.getElementById('preview-canvas-wrap');
     const wasHidden = !previewCanvasWrap.classList.contains('active');
     if (wasHidden) {
+      previewCanvasWrap.style.setProperty('display', 'block', 'important');
       previewCanvasWrap.style.visibility = 'hidden';
-      previewCanvasWrap.style.display = 'block';
+      previewCanvasWrap.style.position = 'fixed';
+      previewCanvasWrap.style.left = '-9999px';
     }
 
     const previewWrap = document.getElementById('preview-wrap');
@@ -926,6 +928,8 @@ async function sendForReview() {
     if (wasHidden) {
       previewCanvasWrap.style.display = '';
       previewCanvasWrap.style.visibility = '';
+      previewCanvasWrap.style.position = '';
+      previewCanvasWrap.style.left = '';
     }
 
     const ogBase64 = previewCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
