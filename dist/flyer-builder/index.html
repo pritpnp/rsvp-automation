@@ -879,7 +879,7 @@ async function sendForReview() {
     });
     const flyerCanvas = await html2canvas(wrap, {
       scale: 923 / wrap.offsetWidth,
-      useCORS: true, allowTaint: true, backgroundColor: null, logging: false,
+      useCORS: true, allowTaint: false, backgroundColor: null, logging: false,
     });
     document.querySelectorAll('.drag-item').forEach(el => {
       el.style.borderColor = el.dataset.origBorder || 'transparent';
@@ -893,13 +893,13 @@ async function sendForReview() {
     const previewImg  = document.getElementById('preview-template-img');
 
     // Wait for template image to load if not already
-    if (previewImg && !previewImg.complete) {
-      await new Promise(resolve => {
-        previewImg.onload = resolve;
-        previewImg.onerror = resolve; // don't hang if image fails
-      });
-      renderPreviewDragItems();
-    }
+    await new Promise(resolve => {
+      previewImg.crossOrigin = 'anonymous';
+      previewImg.onload = resolve;
+      previewImg.onerror = resolve;
+      previewImg.src = (PREVIEW_TEMPLATES[currentZone] || PREVIEW_TEMPLATES['scranton']) + '?cb=' + Date.now();
+    });
+    renderPreviewDragItems();
 
     previewWrap.querySelectorAll('.drag-item').forEach(el => {
       el.dataset.origBorder = el.style.borderColor;
@@ -909,7 +909,7 @@ async function sendForReview() {
     const previewScale  = 1200 / previewWrap.offsetWidth;
     const previewCanvas = await html2canvas(previewWrap, {
       scale: previewScale,
-      useCORS: true, allowTaint: true, backgroundColor: null, logging: false,
+      useCORS: true, allowTaint: false, backgroundColor: null, logging: false,
     });
     previewWrap.querySelectorAll('.drag-item').forEach(el => {
       el.style.borderColor = el.dataset.origBorder || 'transparent';
