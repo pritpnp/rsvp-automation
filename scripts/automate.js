@@ -210,7 +210,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   <div class="header">
     <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneName(zone) + ' Zone'}</div>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;display:none;display:flex;justify-content:center;">
+  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;">
     <div style="width:100%;max-width:480px;">
       <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
       <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
@@ -262,7 +262,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
     window.addEventListener('touchstart', function() { userHasScrolled = true; }, { once: true });
     const FLYER_URL = '${flyerUrl}';
     (function initShareBar() {
-      document.getElementById('share-bar').style.display = 'block';
+      document.getElementById('share-bar').style.cssText += ';display:flex;justify-content:center;';
       var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
       if (isMobile && navigator.share) {
         document.getElementById('share-btn').style.display = 'block';
@@ -464,7 +464,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     <div class="mandir-label">BAPS Scranton Mandir Event</div>
     <h1>${eventInfo.eventName}</h1>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;display:none;display:flex;justify-content:center;">
+  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;">
     <div style="width:100%;max-width:480px;">
       <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
       <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
@@ -494,7 +494,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
   <script>
     const FLYER_URL = '${flyerUrl}';
     (function initShareBar() {
-      document.getElementById('share-bar').style.display = 'block';
+      document.getElementById('share-bar').style.cssText += ';display:flex;justify-content:center;';
       var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
       if (isMobile && navigator.share) {
         document.getElementById('share-btn').style.display = 'block';
