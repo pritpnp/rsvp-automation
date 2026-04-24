@@ -297,6 +297,22 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
         document.getElementById('late-error').style.display = 'block';
       });
     }
+    // ── RSVP visibility check ─────────────────────────────────────────────
+    (async function() {
+      try {
+        const res = await fetch('/.netlify/functions/rsvp-status');
+        const settings = await res.json();
+        const zone = '${zone}';
+        const globalEnabled = settings['global'] !== false;
+        const zoneEnabled   = settings[zone]    !== false;
+        if (!globalEnabled || !zoneEnabled) {
+          const rsvpSection = document.querySelector('.rsvp-section');
+          const rsvpDivider = document.querySelector('.section-divider');
+          if (rsvpSection) rsvpSection.style.display = 'none';
+          if (rsvpDivider) rsvpDivider.style.display = 'none';
+        }
+      } catch(e) {}
+    })();
   </script>
 </body>
 </html>`;

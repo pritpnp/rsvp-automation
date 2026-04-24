@@ -281,6 +281,26 @@
 
       <!-- ── Events ── -->
       <div class="tab-panel" id="tab-events">
+
+        <!-- RSVP Controls -->
+        <div class="card" id="rsvp-control-card">
+          <h2>RSVP Controls</h2>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Enable or disable the RSVP form for each zone. Changes take effect immediately.</p>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--cream);border-radius:12px;border:1px solid var(--cream-dark);margin-bottom:12px;">
+            <div>
+              <div style="font-size:15px;font-weight:600;color:var(--brown)">&#127760; Global (All Zones)</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Overrides all zone settings when disabled</div>
+            </div>
+            <label style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer">
+              <input type="checkbox" id="rsvp-toggle-global" onchange="setRsvp('global', this.checked)" style="opacity:0;width:0;height:0" />
+              <span id="rsvp-slider-global" style="position:absolute;inset:0;background:#ccc;border-radius:26px;transition:0.3s;"></span>
+              <span id="rsvp-knob-global" style="position:absolute;left:3px;top:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:0.3s;"></span>
+            </label>
+          </div>
+          <div id="rsvp-zone-toggles" style="display:flex;flex-direction:column;gap:8px;"><div class="spinner"></div></div>
+          <div id="rsvp-status-msg" style="display:none;margin-top:12px;padding:10px 14px;border-radius:10px;font-size:13px;"></div>
+        </div>
+
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <h2 style="margin:0">Zone Event Names</h2>
@@ -518,7 +538,7 @@
       }
 
       loadEventPicker();
-      if (isSuperadmin) { loadManagers(); loadEvents(); loadZoneEventNames(); }
+      if (isSuperadmin) { loadManagers(); loadEvents(); loadZoneEventNames(); loadRsvpSettings(); }
 
       // Flyer tab visibility
       const canUpload = isSuperadmin || permissions.upload_flyers;
@@ -1508,6 +1528,68 @@
       window.location.href = 'https://screvents.com';
     }
 
-                    </script>
+                  
+    // ── RSVP Controls ────────────────────────────────────────────────────────
+    const RSVP_ZONE_LABELS = {
+      'scranton': 'Scranton', 'mountain-top': 'Mountain Top', 'moosic': 'Moosic',
+      'bloomsburg': 'Bloomsburg', 'satsang-sabha': 'Satsang Sabha',
+      'mandir-1': 'Mandir 1', 'mandir-2': 'Mandir 2', 'mandir-3': 'Mandir 3',
+      'mandir-4': 'Mandir 4', 'mandir-5': 'Mandir 5'
+    };
+
+    async function loadRsvpSettings() {
+      const res = await fetch('/.netlify/functions/rsvp-status');
+      const settings = await res.json();
+      setToggleUI('global', settings['global'] !== false);
+      const container = document.getElementById('rsvp-zone-toggles');
+      container.innerHTML = Object.entries(RSVP_ZONE_LABELS).map(function([zone, label]) {
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--cream);border-radius:10px;border:1px solid var(--cream-dark);">' +
+          '<div style="font-size:14px;font-weight:500;color:var(--brown)">' + label + '</div>' +
+          '<label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer">' +
+          '<input type="checkbox" id="rsvp-toggle-' + zone + '" onchange="setRsvp(\'' + zone + '\', this.checked)" style="opacity:0;width:0;height:0" />' +
+          '<span id="rsvp-slider-' + zone + '" style="position:absolute;inset:0;background:#ccc;border-radius:24px;transition:0.3s;"></span>' +
+          '<span id="rsvp-knob-' + zone + '" style="position:absolute;left:3px;top:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:0.3s;"></span>' +
+          '</label></div>';
+      }).join('');
+      Object.keys(RSVP_ZONE_LABELS).forEach(function(zone) {
+        setToggleUI(zone, settings[zone] !== false);
+      });
+    }
+
+    function setToggleUI(zone, enabled) {
+      var cb     = document.getElementById('rsvp-toggle-' + zone);
+      var slider = document.getElementById('rsvp-slider-' + zone);
+      var knob   = document.getElementById('rsvp-knob-' + zone);
+      if (!cb) return;
+      cb.checked = enabled;
+      slider.style.background = enabled ? 'var(--saffron)' : '#ccc';
+      knob.style.transform = enabled ? 'translateX(22px)' : 'translateX(0)';
+    }
+
+    async function setRsvp(zone, enabled) {
+      setToggleUI(zone, enabled);
+      var msg = document.getElementById('rsvp-status-msg');
+      try {
+        var res = await fetch('/.netlify/functions/manage-rsvp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-manager-token': managerToken },
+          body: JSON.stringify({ zone: zone, enabled: enabled })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        msg.style.display = 'block';
+        msg.style.background = '#f0fdf4';
+        msg.style.color = '#166534';
+        msg.textContent = '✅ RSVP ' + (enabled ? 'enabled' : 'disabled') + ' for ' + (zone === 'global' ? 'all zones' : zone);
+      } catch (err) {
+        msg.style.display = 'block';
+        msg.style.background = '#fef2f2';
+        msg.style.color = '#991b1b';
+        msg.textContent = '❌ Error: ' + err.message;
+        setToggleUI(zone, !enabled);
+      }
+      setTimeout(function() { msg.style.display = 'none'; }, 3000);
+    }
+  </script>
 </body>
 </html>
