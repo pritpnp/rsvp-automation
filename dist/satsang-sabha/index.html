@@ -66,12 +66,12 @@
     <div class="mandir-label">BAPS Scranton Mandir Event</div>
     <h1>Satsang Sabha with Santos</h1>
   </div>
-  <div class="flyer-wrap"><img src="https://screvents.com/satsang-sabha/flyer.jpg" alt="Satsang Sabha with Santos flyer" /></div>
   <div id="share-bar" style="padding:16px 16px 0;display:none;">
     <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:16px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:14px;font-size:20px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
     <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
     <div id="share-msg" style="display:none;margin-top:10px;padding:10px 14px;border-radius:10px;font-size:13px;text-align:center;"></div>
   </div>
+  <div class="flyer-wrap"><img src="https://screvents.com/satsang-sabha/flyer.jpg" alt="Satsang Sabha with Santos flyer" /></div>
   <div class="details-card">
     <div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">Sunday, May 3 at 4:00 pm</div></div></div>
     
@@ -113,17 +113,31 @@
       var msg = document.getElementById('share-msg');
       try {
         var blob = await fetchFlyerBlob();
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        msg.style.display = 'block';
-        msg.style.background = '#f0fdf4';
-        msg.style.color = '#166534';
-        msg.textContent = '✅ Flyer copied! Paste into WhatsApp or Telegram.';
-        setTimeout(function() { msg.style.display = 'none'; }, 4000);
+        var bitmap = await createImageBitmap(blob);
+        var canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0);
+        canvas.toBlob(async function(pngBlob) {
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+            msg.style.display = 'block';
+            msg.style.background = '#f0fdf4';
+            msg.style.color = '#166534';
+            msg.textContent = '✅ Flyer copied! Paste into WhatsApp or Telegram.';
+            setTimeout(function() { msg.style.display = 'none'; }, 4000);
+          } catch(e) {
+            msg.style.display = 'block';
+            msg.style.background = '#fef2f2';
+            msg.style.color = '#991b1b';
+            msg.textContent = '❌ Copy failed. Right-click the flyer to save it.';
+          }
+        }, 'image/png');
       } catch(e) {
         msg.style.display = 'block';
         msg.style.background = '#fef2f2';
         msg.style.color = '#991b1b';
-        msg.textContent = '❌ Could not copy. Right-click the flyer to save it.';
+        msg.textContent = '❌ Copy failed. Right-click the flyer to save it.';
       }
     }
   </script>
