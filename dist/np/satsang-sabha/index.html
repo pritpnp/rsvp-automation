@@ -58,7 +58,7 @@
     <div class="mandir-label">BAPS Scranton Mandir Event</div>
     <h1>Satsang Sabha with Santos</h1>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;display:none;display:flex;justify-content:center;">
+  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;">
     <div style="width:100%;max-width:480px;">
       <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
       <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
@@ -68,7 +68,7 @@
   <div class="flyer-wrap"><img src="https://screvents.com/satsang-sabha/flyer.jpg" alt="Satsang Sabha with Santos flyer" /></div>
   <div class="details-card">
     <div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">Sunday, May 3 at 4:00 pm</div></div></div>
-    <div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">311 Oak Street, Scranton, PA 18508</div></div></div>
+    
     
   </div>
   
@@ -76,7 +76,7 @@
   <script>
     const FLYER_URL = 'https://screvents.com/satsang-sabha/flyer.jpg';
     (function initShareBar() {
-      document.getElementById('share-bar').style.display = 'block';
+      document.getElementById('share-bar').style.cssText += ';display:flex;justify-content:center;';
       var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
       if (isMobile && navigator.share) {
         document.getElementById('share-btn').style.display = 'block';

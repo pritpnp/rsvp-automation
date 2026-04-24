@@ -59,7 +59,7 @@
   <div class="header">
     <div class="zone-label">BAPS Mountain Top Zone</div>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;display:none;display:flex;justify-content:center;">
+  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;">
     <div style="width:100%;max-width:480px;">
       <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
       <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
@@ -69,7 +69,7 @@
   <div class="flyer-wrap"><img src="https://screvents.com/mountain-top/flyer.jpg" alt="Para Satsang Sabha flyer" /></div>
   <div class="details-card">
     <div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">Friday, May 29 at 6:00 pm</div></div></div>
-    <div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">502 Robbins Way, Mountain Top, PA 18707</div></div></div>
+    
     <div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">Friday, May 29, 2026</div></div></div>
   </div>
   <div class="section-divider"><span>RSVP</span></div>
@@ -111,7 +111,7 @@
     window.addEventListener('touchstart', function() { userHasScrolled = true; }, { once: true });
     const FLYER_URL = 'https://screvents.com/mountain-top/flyer.jpg';
     (function initShareBar() {
-      document.getElementById('share-bar').style.display = 'block';
+      document.getElementById('share-bar').style.cssText += ';display:flex;justify-content:center;';
       var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
       if (isMobile && navigator.share) {
         document.getElementById('share-btn').style.display = 'block';
