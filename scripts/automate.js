@@ -210,10 +210,12 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   <div class="header">
     <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneName(zone) + ' Zone'}</div>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;display:none;text-align:center;">
-    <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;max-width:480px;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
-    <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;max-width:480px;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
-    <div id="share-msg" style="display:none;max-width:480px;margin:8px auto 0;padding:10px 14px;border-radius:10px;font-size:13px;text-align:center;"></div>
+  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;display:none;">
+    <div style="max-width:480px;margin:0 auto;display:flex;flex-direction:column;align-items:stretch;">
+      <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
+      <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
+      <div id="share-msg" style="display:none;margin-top:8px;padding:10px 14px;border-radius:10px;font-size:13px;text-align:center;"></div>
+    </div>
   </div>
   <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
@@ -462,10 +464,12 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     <div class="mandir-label">BAPS Scranton Mandir Event</div>
     <h1>${eventInfo.eventName}</h1>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;display:none;text-align:center;">
-    <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;max-width:480px;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
-    <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;max-width:480px;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
-    <div id="share-msg" style="display:none;max-width:480px;margin:8px auto 0;padding:10px 14px;border-radius:10px;font-size:13px;text-align:center;"></div>
+  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;display:none;">
+    <div style="max-width:480px;margin:0 auto;display:flex;flex-direction:column;align-items:stretch;">
+      <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
+      <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
+      <div id="share-msg" style="display:none;margin-top:8px;padding:10px 14px;border-radius:10px;font-size:13px;text-align:center;"></div>
+    </div>
   </div>
   <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
