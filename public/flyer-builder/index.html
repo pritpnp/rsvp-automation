@@ -750,6 +750,7 @@ function formatPreviewDate(dateStr) {
 // Text is centered at x=75% (right half center) of the image
 const PREVIEW_ELEMENTS = {
   prev_datetime: { label: 'Date & Time', yPct: 0.6438, fontSizePx: 22, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.3 },
+  prev_santos:   { label: 'Santos',       yPct: 0.71,   fontSizePx: 16, color: '#48467F', font: 'AddingtonCF',      bevel: false, lineHeight: 1.3 },
   prev_rsvp:     { label: 'RSVP Line',   yPct: 0.7734, fontSizePx: 16, color: '#4c4c4b', font: 'AddingtonCF',      bevel: false, lineHeight: 1.3 },
 };
 
@@ -761,6 +762,7 @@ function getPreviewElText(id) {
   const rsvp    = formatRsvpDate(document.getElementById('f-rsvp-date')?.value || '');
   const map = {
     prev_datetime: (day && time) ? `${day} at ${time}` : (day || time),
+    prev_santos:   (isSatsang && document.getElementById('santos-cb')?.checked) ? 'In the presence of Pujya Santos' : '',
     prev_rsvp:     rsvp ? `Please RSVP by ${rsvp}` : '',
   };
   return map[id] || '';
