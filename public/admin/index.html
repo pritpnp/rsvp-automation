@@ -1572,7 +1572,7 @@
       try {
         var res = await fetch('/.netlify/functions/manage-rsvp', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-manager-token': managerToken },
+          headers: { 'Content-Type': 'application/json', 'x-manager-token': sessionToken },
           body: JSON.stringify({ zone: zone, enabled: enabled })
         });
         var data = await res.json();
