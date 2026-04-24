@@ -829,7 +829,7 @@ async function main() {
 
   for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
     const isChanged = changedFlyers.includes(flyerRelPath);
-    const hasCached = !!cachedDeadlines[zone]?.deadline !== undefined && !!cachedDeadlines[zone]?.date;
+    const hasCached = !!cachedDeadlines[zone]?.date && !!cachedDeadlines[zone]?.eventName;
     const skipOcr   = !forceAll && !isChanged && hasCached && zone !== zoneOverride;
 
     console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : skipOcr ? '⏭️ skipping OCR (cached)' : '♻️ existing'}`);
