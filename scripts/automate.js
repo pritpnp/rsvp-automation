@@ -211,6 +211,11 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
     <div class="zone-label">BAPS ${zone === 'satsang-sabha' ? 'Satsang Sabha Events' : zoneName(zone) + ' Zone'}</div>
   </div>
   <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
+  <div id="share-bar" style="padding:16px 16px 0;display:none;">
+    <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:16px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:14px;font-size:20px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
+    <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
+    <div id="share-msg" style="display:none;margin-top:10px;padding:10px 14px;border-radius:10px;font-size:13px;text-align:center;"></div>
+  </div>
   <div class="details-card">
     ${eventInfo.date ? `<div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">${eventInfo.date}${eventInfo.time ? ' at ' + eventInfo.time : ''}</div></div></div>` : ''}
     ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
@@ -253,6 +258,52 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 
     var userHasScrolled = false;
     window.addEventListener('touchstart', function() { userHasScrolled = true; }, { once: true });
+    const FLYER_URL = '${flyerUrl}';
+    (function initShareBar() {
+      document.getElementById('share-bar').style.display = 'block';
+      var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      if (isMobile && navigator.share) {
+        document.getElementById('share-btn').style.display = 'block';
+      } else {
+        document.getElementById('copy-btn').style.display = 'block';
+      }
+    })();
+    async function fetchFlyerBlob() {
+      var res = await fetch(FLYER_URL);
+      return await res.blob();
+    }
+    async function shareFlyerMobile() {
+      var msg = document.getElementById('share-msg');
+      try {
+        var blob = await fetchFlyerBlob();
+        var file = new File([blob], 'flyer.jpg', { type: 'image/jpeg' });
+        await navigator.share({ files: [file] });
+      } catch(e) {
+        if (e.name !== 'AbortError') {
+          msg.style.display = 'block';
+          msg.style.background = '#fef2f2';
+          msg.style.color = '#991b1b';
+          msg.textContent = '\u274C Could not share. Try saving the image manually.';
+        }
+      }
+    }
+    async function copyFlyerDesktop() {
+      var msg = document.getElementById('share-msg');
+      try {
+        var blob = await fetchFlyerBlob();
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        msg.style.display = 'block';
+        msg.style.background = '#f0fdf4';
+        msg.style.color = '#166534';
+        msg.textContent = '\u2705 Flyer copied! Paste into WhatsApp or Telegram.';
+        setTimeout(function() { msg.style.display = 'none'; }, 4000);
+      } catch(e) {
+        msg.style.display = 'block';
+        msg.style.background = '#fef2f2';
+        msg.style.color = '#991b1b';
+        msg.textContent = '\u274C Could not copy. Right-click the flyer to save it.';
+      }
+    }
     window.addEventListener('wheel', function() { userHasScrolled = true; }, { once: true });
 
     function onIframeLoad() {
@@ -398,6 +449,11 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     <h1>${eventInfo.eventName}</h1>
   </div>
   <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
+  <div id="share-bar" style="padding:16px 16px 0;display:none;">
+    <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:16px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:14px;font-size:20px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
+    <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
+    <div id="share-msg" style="display:none;margin-top:10px;padding:10px 14px;border-radius:10px;font-size:13px;text-align:center;"></div>
+  </div>
   <div class="details-card">
     ${eventInfo.date ? `<div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">${eventInfo.date}${eventInfo.time ? ' at ' + eventInfo.time : ''}</div></div></div>` : ''}
     ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
@@ -417,6 +473,54 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     </div>
   </div>` : ''}
   <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
+  <script>
+    const FLYER_URL = '${flyerUrl}';
+    (function initShareBar() {
+      document.getElementById('share-bar').style.display = 'block';
+      var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      if (isMobile && navigator.share) {
+        document.getElementById('share-btn').style.display = 'block';
+      } else {
+        document.getElementById('copy-btn').style.display = 'block';
+      }
+    })();
+    async function fetchFlyerBlob() {
+      var res = await fetch(FLYER_URL);
+      return await res.blob();
+    }
+    async function shareFlyerMobile() {
+      var msg = document.getElementById('share-msg');
+      try {
+        var blob = await fetchFlyerBlob();
+        var file = new File([blob], 'flyer.jpg', { type: 'image/jpeg' });
+        await navigator.share({ files: [file] });
+      } catch(e) {
+        if (e.name !== 'AbortError') {
+          msg.style.display = 'block';
+          msg.style.background = '#fef2f2';
+          msg.style.color = '#991b1b';
+          msg.textContent = '\u274C Could not share. Try saving the image manually.';
+        }
+      }
+    }
+    async function copyFlyerDesktop() {
+      var msg = document.getElementById('share-msg');
+      try {
+        var blob = await fetchFlyerBlob();
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        msg.style.display = 'block';
+        msg.style.background = '#f0fdf4';
+        msg.style.color = '#166534';
+        msg.textContent = '\u2705 Flyer copied! Paste into WhatsApp or Telegram.';
+        setTimeout(function() { msg.style.display = 'none'; }, 4000);
+      } catch(e) {
+        msg.style.display = 'block';
+        msg.style.background = '#fef2f2';
+        msg.style.color = '#991b1b';
+        msg.textContent = '\u274C Could not copy. Right-click the flyer to save it.';
+      }
+    }
+  </script>
 </body>
 </html>`;
 }
