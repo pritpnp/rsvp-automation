@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Ping Supabase database
         env:
-          SUPABASE_URL: https://rgvutbpgncghbghzhcps.supabase.co
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           status=$(curl -s -o /dev/null -w "%{http_code}" \
