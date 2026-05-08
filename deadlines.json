@@ -37,9 +37,9 @@
   "mandir-2": {
     "deadline": "",
     "eventName": "Sant Parayan",
-    "date": "",
-    "eventDate": "",
-    "time": ""
+    "date": "Thursday, May 14",
+    "eventDate": "2026-05-14",
+    "time": "7:15 pm"
   },
   "bloomsburg": {
     "deadline": "2026-04-17",
@@ -47,5 +47,12 @@
     "date": "Saturday, April 18",
     "eventDate": "2026-04-18",
     "time": "5:00 pm"
+  },
+  "mandir-3": {
+    "deadline": "",
+    "eventName": "Joy of Others Walk | Run",
+    "date": "Saturday, May 30",
+    "eventDate": "2026-05-30",
+    "time": "9:00 am - 12:00 pm"
   }
 }
