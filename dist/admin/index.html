@@ -142,6 +142,49 @@
 
       <!-- ── VIP Passes ── -->
       <div class="tab-panel active" id="tab-passes" data-requires-passes="true">
+
+        <!-- Invite Lookup Security — superadmin only -->
+        <div class="card" id="invite-security-card" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <h2 style="margin:0">🛡 Invite Lookup Security</h2>
+            <button onclick="loadInviteSecurity()" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">↻ Refresh</button>
+          </div>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.5">
+            Visitors are blocked from <strong>screvents.com/invite</strong> after
+            <strong id="rl-threshold">5</strong> failed lookups within
+            <strong id="rl-window">60</strong> minutes. Whitelisted IPs bypass the limit.
+          </p>
+
+          <!-- Currently blocked -->
+          <div style="margin-bottom:18px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">🚫 Currently Blocked</div>
+            <div id="invite-blocked-list"><div class="empty-state" style="padding:14px">No IPs currently blocked.</div></div>
+          </div>
+
+          <!-- Watching -->
+          <div style="margin-bottom:18px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">👀 Watching (under threshold)</div>
+            <div id="invite-watching-list"><div class="empty-state" style="padding:14px">No suspicious activity.</div></div>
+          </div>
+
+          <!-- Whitelist -->
+          <div style="margin-bottom:18px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">✓ Whitelist</div>
+            <div class="form-row" style="margin-bottom:10px">
+              <div class="form-group" style="flex:1;min-width:140px"><label>IP Address</label><input type="text" id="whitelist-ip" placeholder="e.g. 192.168.1.100" /></div>
+              <div class="form-group" style="flex:2;min-width:160px"><label>Note (optional)</label><input type="text" id="whitelist-note" placeholder="e.g. Mandir front desk" /></div>
+              <div style="display:flex;align-items:flex-end"><button onclick="addToWhitelist()" style="padding:11px 18px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;height:fit-content">Add →</button></div>
+            </div>
+            <div id="invite-whitelist-list"><div class="empty-state" style="padding:14px">No whitelisted IPs.</div></div>
+          </div>
+
+          <!-- Recent activity -->
+          <details style="margin-top:8px">
+            <summary style="cursor:pointer;font-size:12px;color:var(--gold);padding:6px 0;user-select:none">📜 Recent lookup activity (last 100)</summary>
+            <div id="invite-activity-list" style="margin-top:10px"><div class="empty-state" style="padding:14px">No activity yet.</div></div>
+          </details>
+        </div>
+
         <div class="card" id="event-picker-card">
           <h2>Select Event</h2>
           <div id="event-picker-list"><div class="spinner"></div></div>
@@ -155,7 +198,11 @@
               <h2 style="margin:0" id="selected-event-title">Create Pass</h2>
               <button onclick="clearEventSelection()" style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);padding:5px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">Change Event</button>
             </div>
-            <div class="form-group"><label>Guest Name</label><input type="text" id="new-guest" placeholder="Full Name" /></div>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Guests look up their invitation at <strong>screvents.com/invite</strong> using the name and phone you save here.</p>
+            <div class="form-row">
+              <div class="form-group" style="flex:2;min-width:160px"><label>Guest Name</label><input type="text" id="new-guest" placeholder="Full Name" /></div>
+              <div class="form-group"><label>Phone Number</label><input type="tel" id="new-phone" placeholder="(555) 123-4567" inputmode="tel" /></div>
+            </div>
             <button class="btn-create" style="margin-top:14px" onclick="createPass()">Generate Pass →</button>
             <div class="success-msg" id="pass-success"></div>
           </div>
@@ -166,7 +213,7 @@
               <h2 style="margin:0">Bulk Upload</h2>
               <button onclick="downloadTemplate()" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">⬇ Download Template</button>
             </div>
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Upload a CSV or Excel file. Only the <strong>Name</strong> column is required.</p>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Upload a CSV or Excel file. The <strong>Name</strong> and <strong>Phone</strong> columns are required — phone is what guests use to look up their invite.</p>
 
             <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()"
               ondragover="event.preventDefault();this.classList.add('drag-over')"
@@ -463,6 +510,7 @@
     const UPDATE_EVENT_NAME_API = '/.netlify/functions/update-event-name';
     const TRIGGER_REDEPLOY_API  = '/.netlify/functions/trigger-redeploy';
     const REFRESH_FLYERS_API    = '/.netlify/functions/refresh-flyers';
+    const RATE_LIMIT_API        = '/.netlify/functions/admin-rate-limit';
 
     document.addEventListener('DOMContentLoaded', function() {
       if (!sessionToken) {
@@ -539,7 +587,11 @@
       }
 
       loadEventPicker();
-      if (isSuperadmin) { loadManagers(); loadEvents(); loadZoneEventNames(); loadRsvpSettings(); }
+      if (isSuperadmin) {
+        document.getElementById('invite-security-card').style.display = 'block';
+        loadInviteSecurity();
+        loadManagers(); loadEvents(); loadZoneEventNames(); loadRsvpSettings();
+      }
 
       // Flyer tab visibility
       const canUpload = isSuperadmin || permissions.upload_flyers;
@@ -672,14 +724,19 @@
             ${canDelete ? `<input type="checkbox" id="cb-${p.id}" data-pass-id="${p.id}" onchange="togglePassSelect('${p.id}', this.checked)" style="width:16px;height:16px;flex-shrink:0;accent-color:var(--saffron);cursor:pointer" />` : ''}
             <div class="item-info">
               <div class="item-name">${p.guest_name}</div>
-              <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank">screvents.com/vip/${p.id} ↗</a>
+              <div class="item-sub">${p.phone ? '📞 ' + p.phone : '<span style="color:#dc2626">⚠ No phone — invite lookup disabled</span>'}</div>
+              <a class="item-link" href="https://screvents.com/invite" target="_blank">screvents.com/invite ↗ (share this)</a>
+              <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank" style="opacity:0.6">direct preview: /vip/${p.id} ↗</a>
             </div>
             ${canEdit ? `<button onclick="toggleEditPass('${p.id}')" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0">Edit</button>` : ''}
             ${canDelete ? `<button class="btn-delete" onclick="deletePass('${p.id}')">Delete</button>` : ''}
           </div>
           ${canEdit ? `
           <div id="pass-edit-${p.id}" style="display:none;background:var(--cream);border-radius:10px;padding:12px">
-            <div class="form-group"><label>Guest Name</label><input type="text" id="pass-edit-name-${p.id}" value="${p.guest_name.replace(/"/g, '&quot;')}" /></div>
+            <div class="form-row">
+              <div class="form-group" style="flex:2;min-width:160px"><label>Guest Name</label><input type="text" id="pass-edit-name-${p.id}" value="${p.guest_name.replace(/"/g, '&quot;')}" /></div>
+              <div class="form-group"><label>Phone Number</label><input type="tel" id="pass-edit-phone-${p.id}" value="${(p.phone || '').replace(/"/g, '&quot;')}" placeholder="(555) 123-4567" inputmode="tel" /></div>
+            </div>
             <div style="display:flex;gap:8px;margin-top:10px">
               <button onclick="savePass('${p.id}')" style="padding:8px 18px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
               <button onclick="toggleEditPass('${p.id}')" style="padding:8px 14px;background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">Cancel</button>
@@ -749,15 +806,18 @@
     // ── Single pass actions ────────────────────────────────────────────────
     async function createPass() {
       const guest_name = document.getElementById('new-guest').value.trim();
+      const phone = document.getElementById('new-phone').value.trim();
       const sucEl = document.getElementById('pass-success');
       if (!guest_name || !selectedEventId) return;
-      const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ guest_name, event_id: selectedEventId }) });
+      if (!phone) { alert('Phone number is required so guests can look up their invitation.'); return; }
+      const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ guest_name, phone, event_id: selectedEventId }) });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Failed to create pass'); return; }
       document.getElementById('new-guest').value = '';
-      sucEl.innerHTML = `✅ Pass created! <a href="https://screvents.com/vip/${data.id}" target="_blank">View pass ↗</a>`;
+      document.getElementById('new-phone').value = '';
+      sucEl.innerHTML = `✅ Pass created! Share <a href="https://screvents.com/invite" target="_blank">screvents.com/invite</a> with the guest — they'll look it up by name + phone.`;
       sucEl.style.display = 'block';
-      setTimeout(() => sucEl.style.display = 'none', 8000);
+      setTimeout(() => sucEl.style.display = 'none', 10000);
       loadPasses();
     }
 
@@ -776,8 +836,11 @@
 
     async function savePass(id) {
       const guest_name = document.getElementById('pass-edit-name-' + id).value.trim();
+      const phone = document.getElementById('pass-edit-phone-' + id).value.trim();
       if (!guest_name) return;
-      const res = await fetch(PASSES_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id, guest_name }) });
+      const body = { id, guest_name };
+      if (phone) body.phone = phone;
+      const res = await fetch(PASSES_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) });
       if (res.ok) loadPasses();
       else { const d = await res.json(); alert(d.error || 'Failed to save'); }
     }
@@ -786,7 +849,7 @@
     let parsedRows = [];
 
     function downloadTemplate() {
-      const csv = 'Name,Email,Phone,Telegram\n';
+      const csv = 'Name,Phone,Email,Telegram\nJohn Doe,(555) 123-4567,,\n';
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -815,17 +878,28 @@
           const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
           if (!data.length) { showUploadError('File appears to be empty.'); return; }
 
-          // Find the Name column (case-insensitive)
-          const nameKey = Object.keys(data[0]).find(k => k.toLowerCase() === 'name');
-          if (!nameKey) { showUploadError('Could not find a "Name" column. Please use the template.'); return; }
+          // Find Name and Phone columns (case-insensitive)
+          const keys = Object.keys(data[0]);
+          const nameKey  = keys.find(k => k.toLowerCase() === 'name');
+          const phoneKey = keys.find(k => k.toLowerCase() === 'phone');
+          if (!nameKey)  { showUploadError('Could not find a "Name" column. Please use the template.'); return; }
+          if (!phoneKey) { showUploadError('Could not find a "Phone" column. Phone is required so guests can look up their invite.'); return; }
 
-          parsedRows = data.map(row => ({
-            name:     (row[nameKey] || '').toString().trim(),
-            email:    (row['Email'] || row['email'] || '').toString().trim(),
-            phone:    (row['Phone'] || row['phone'] || '').toString().trim(),
-            telegram: (row['Telegram'] || row['telegram'] || '').toString().trim(),
-            valid:    !!(row[nameKey] || '').toString().trim()
-          }));
+          parsedRows = data.map(row => {
+            const name  = (row[nameKey]  || '').toString().trim();
+            const phone = (row[phoneKey] || '').toString().trim();
+            const phoneDigits = phone.replace(/\D+/g, '');
+            const normalized = (phoneDigits.length === 11 && phoneDigits.startsWith('1')) ? phoneDigits.slice(1) : phoneDigits;
+            const phoneValid = normalized.length === 10;
+            return {
+              name,
+              phone,
+              email:    (row['Email'] || row['email'] || '').toString().trim(),
+              telegram: (row['Telegram'] || row['telegram'] || '').toString().trim(),
+              valid:    !!name && phoneValid,
+              issue:    !name ? 'missing name' : (!phoneValid ? 'invalid phone' : '')
+            };
+          });
 
           renderUploadPreview();
         } catch(err) {
@@ -839,20 +913,21 @@
       const valid   = parsedRows.filter(r => r.valid);
       const invalid = parsedRows.filter(r => !r.valid);
       const countEl = document.getElementById('preview-count');
-      countEl.textContent = `${valid.length} valid row${valid.length !== 1 ? 's' : ''}${invalid.length ? ` · ${invalid.length} skipped (no name)` : ''}`;
+      const skippedSummary = invalid.length ? ` · ${invalid.length} skipped` : '';
+      countEl.textContent = `${valid.length} valid row${valid.length !== 1 ? 's' : ''}${skippedSummary}`;
       countEl.style.color = valid.length ? 'var(--brown)' : '#991b1b';
 
       const table = document.getElementById('preview-table');
       table.innerHTML = `
         <thead><tr>
-          <th>Name</th><th>Email</th><th>Phone</th><th>Telegram</th>
+          <th>Name</th><th>Phone</th><th>Email</th><th>Telegram</th>
         </tr></thead>
         <tbody>
           ${parsedRows.map(r => `
-            <tr class="${r.valid ? '' : 'invalid'}">
+            <tr class="${r.valid ? '' : 'invalid'}" ${r.issue ? `title="${r.issue}"` : ''}>
               <td>${r.name || '(empty)'}</td>
+              <td>${r.phone || '<em style="color:#dc2626">missing</em>'}</td>
               <td>${r.email || '—'}</td>
-              <td>${r.phone || '—'}</td>
               <td>${r.telegram || '—'}</td>
             </tr>`).join('')}
         </tbody>`;
@@ -877,8 +952,8 @@
     }
 
     async function importPasses() {
-      const names = parsedRows.filter(r => r.valid).map(r => r.name);
-      if (!names.length || !selectedEventId) return;
+      const guests = parsedRows.filter(r => r.valid).map(r => ({ name: r.name, phone: r.phone }));
+      if (!guests.length || !selectedEventId) return;
 
       const btn = document.getElementById('import-btn');
       const sucEl = document.getElementById('import-success');
@@ -891,7 +966,7 @@
       const res = await fetch(PASSES_API, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ guests: names, event_id: selectedEventId })
+        body: JSON.stringify({ guests, event_id: selectedEventId })
       });
       const data = await res.json();
 
@@ -908,6 +983,139 @@
       sucEl.style.display = 'block';
       clearUpload();
       loadPasses();
+    }
+
+    // ── Invite Lookup Security ─────────────────────────────────────────────
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function timeAgo(iso) {
+      if (!iso) return '';
+      const s = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+      if (s < 60) return s + 's ago';
+      const m = Math.floor(s / 60);
+      if (m < 60) return m + 'm ago';
+      const h = Math.floor(m / 60);
+      if (h < 24) return h + 'h ago';
+      return Math.floor(h / 24) + 'd ago';
+    }
+
+    async function loadInviteSecurity() {
+      if (sessionRole !== 'superadmin') return;
+      try {
+        const res = await fetch(RATE_LIMIT_API, { headers: authHeaders() });
+        if (!res.ok) return;
+        const d = await res.json();
+
+        document.getElementById('rl-threshold').textContent = d.threshold;
+        document.getElementById('rl-window').textContent = d.window_minutes;
+
+        // Blocked
+        const blockedEl = document.getElementById('invite-blocked-list');
+        if (!d.blocked.length) {
+          blockedEl.innerHTML = '<div class="empty-state" style="padding:14px">No IPs currently blocked.</div>';
+        } else {
+          blockedEl.innerHTML = '<div class="item-list">' + d.blocked.map(b => `
+            <div class="item" style="border-color:#fca5a5;background:#fef2f2">
+              <div class="item-info">
+                <div class="item-name" style="font-family:monospace">${escapeHtml(b.ip)}</div>
+                <div class="item-sub"><strong style="color:#dc2626">${b.fail_count} failed attempts</strong> · last ${timeAgo(b.last_attempt)} · tried "${escapeHtml(b.last_name || '')}" / ${escapeHtml(b.last_phone || '')}</div>
+              </div>
+              <button onclick="whitelistIp('${escapeHtml(b.ip)}', 'Unblocked from rate limit')" style="padding:7px 14px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0">Whitelist</button>
+            </div>`).join('') + '</div>';
+        }
+
+        // Watching
+        const watchingEl = document.getElementById('invite-watching-list');
+        if (!d.watching.length) {
+          watchingEl.innerHTML = '<div class="empty-state" style="padding:14px">No suspicious activity.</div>';
+        } else {
+          watchingEl.innerHTML = '<div class="item-list">' + d.watching.map(w => `
+            <div class="item">
+              <div class="item-info">
+                <div class="item-name" style="font-family:monospace">${escapeHtml(w.ip)}</div>
+                <div class="item-sub">${w.fail_count}/${d.threshold} failures · last ${timeAgo(w.last_attempt)} · tried "${escapeHtml(w.last_name || '')}" / ${escapeHtml(w.last_phone || '')}</div>
+              </div>
+              <button onclick="whitelistIp('${escapeHtml(w.ip)}', '')" style="padding:6px 12px;background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0">Whitelist</button>
+            </div>`).join('') + '</div>';
+        }
+
+        // Whitelist
+        const wlEl = document.getElementById('invite-whitelist-list');
+        if (!d.whitelist.length) {
+          wlEl.innerHTML = '<div class="empty-state" style="padding:14px">No whitelisted IPs.</div>';
+        } else {
+          wlEl.innerHTML = '<div class="item-list">' + d.whitelist.map(w => `
+            <div class="item">
+              <div class="item-info">
+                <div class="item-name" style="font-family:monospace">${escapeHtml(w.ip)}</div>
+                <div class="item-sub">${w.note ? escapeHtml(w.note) + ' · ' : ''}added ${timeAgo(w.added_at)}${w.added_by ? ' by ' + escapeHtml(w.added_by) : ''}</div>
+              </div>
+              <button class="btn-delete" onclick="removeFromWhitelist('${escapeHtml(w.ip)}')">Remove</button>
+            </div>`).join('') + '</div>';
+        }
+
+        // Recent activity
+        const actEl = document.getElementById('invite-activity-list');
+        if (!d.recent.length) {
+          actEl.innerHTML = '<div class="empty-state" style="padding:14px">No activity yet.</div>';
+        } else {
+          actEl.innerHTML = '<div style="overflow-x:auto"><table class="rsvp-table">' +
+            '<thead><tr><th>When</th><th>IP</th><th>Name</th><th>Phone</th><th>Result</th></tr></thead>' +
+            '<tbody>' + d.recent.map(a => `
+              <tr>
+                <td>${timeAgo(a.attempted_at)}</td>
+                <td style="font-family:monospace;font-size:12px">${escapeHtml(a.ip)}</td>
+                <td>${escapeHtml(a.name_attempted || '')}</td>
+                <td>${escapeHtml(a.phone_attempted || '')}</td>
+                <td>${a.success ? '<span style="color:#166534">✓ found</span>' : '<span style="color:#dc2626">✗ failed</span>'}</td>
+              </tr>`).join('') +
+            '</tbody></table></div>';
+        }
+      } catch (e) {
+        console.error('Failed to load invite security:', e);
+      }
+    }
+
+    async function addToWhitelist() {
+      const ip = document.getElementById('whitelist-ip').value.trim();
+      const note = document.getElementById('whitelist-note').value.trim();
+      if (!ip) { alert('Enter an IP address.'); return; }
+      await whitelistIp(ip, note);
+      document.getElementById('whitelist-ip').value = '';
+      document.getElementById('whitelist-note').value = '';
+    }
+
+    async function whitelistIp(ip, note) {
+      const res = await fetch(RATE_LIMIT_API, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ ip, note })
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Failed to add to whitelist');
+        return;
+      }
+      loadInviteSecurity();
+    }
+
+    async function removeFromWhitelist(ip) {
+      if (!confirm('Remove ' + ip + ' from the whitelist? They will be subject to rate limits again.')) return;
+      const res = await fetch(RATE_LIMIT_API, {
+        method: 'DELETE',
+        headers: authHeaders(),
+        body: JSON.stringify({ ip })
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Failed to remove from whitelist');
+        return;
+      }
+      loadInviteSecurity();
     }
 
     // ── RSVPs ──────────────────────────────────────────────────────────────
