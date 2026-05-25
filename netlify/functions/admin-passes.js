@@ -5,6 +5,19 @@ const headers = {
   'Content-Type': 'application/json'
 };
 
+// Normalize a phone string to digits-only, stripping a leading US "1".
+// Returns '' for empty input. A 10-digit result is considered a valid US number.
+function normalizePhone(p) {
+  if (!p) return '';
+  const digits = String(p).replace(/\D+/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1);
+  return digits;
+}
+
+function isValidPhone(normalized) {
+  return normalized.length === 10;
+}
+
 async function authenticate(event, supabase) {
   const adminPassword = event.headers['x-admin-password'];
   if (adminPassword === process.env.ADMIN_PASSWORD) {
@@ -74,11 +87,48 @@ exports.handler = async (event) => {
 
     const body = JSON.parse(event.body);
 
-    // ── Batch create: { guests: ['Name1', 'Name2', ...], event_id } ──────────
+    // ── Batch create: { guests: [{name, phone}, ...], event_id } ────────────
     if (Array.isArray(body.guests)) {
       const { guests, event_id } = body;
       if (!event_id || !guests.length) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
+      }
+
+      // Validate each row has name + valid phone
+      const prepared = [];
+      for (let i = 0; i < guests.length; i++) {
+        const g = guests[i];
+        const name = (typeof g === 'string' ? g : g?.name || '').trim();
+        const rawPhone = typeof g === 'object' ? (g?.phone || '') : '';
+        const phone_normalized = normalizePhone(rawPhone);
+        if (!name) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: `Row ${i + 1}: missing name` }) };
+        }
+        if (!isValidPhone(phone_normalized)) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: `Row ${i + 1} (${name}): phone must be a valid 10-digit US number` }) };
+        }
+        prepared.push({ name, phone: String(rawPhone).trim(), phone_normalized });
+      }
+
+      // Reject duplicate phones within the same batch
+      const seen = new Set();
+      for (const p of prepared) {
+        if (seen.has(p.phone_normalized)) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: `Duplicate phone in upload: ${p.phone}` }) };
+        }
+        seen.add(p.phone_normalized);
+      }
+
+      // Reject phones that already exist for this event
+      const { data: existing } = await supabase
+        .from('vip_passes')
+        .select('phone_normalized')
+        .eq('event_id', event_id)
+        .in('phone_normalized', prepared.map(p => p.phone_normalized));
+      if (existing && existing.length) {
+        const dupes = new Set(existing.map(e => e.phone_normalized));
+        const conflict = prepared.find(p => dupes.has(p.phone_normalized));
+        return { statusCode: 400, headers, body: JSON.stringify({ error: `Phone ${conflict.phone} already has a pass for this event` }) };
       }
 
       const { data: evt } = await supabase
@@ -101,8 +151,10 @@ exports.handler = async (event) => {
         ? evt?.start_date
         : `${evt?.start_date} – ${evt?.end_date}`;
 
-      const rows = guests.map(name => ({
-        guest_name: name.trim(),
+      const rows = prepared.map(p => ({
+        guest_name: p.name,
+        phone: p.phone,
+        phone_normalized: p.phone_normalized,
         event_id,
         event_name: evt?.event_name || '',
         event_date
@@ -117,11 +169,27 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ created: data.length, passes: data }) };
     }
 
-    // ── Single create: { guest_name, event_id } ───────────────────────────
-    const { guest_name, event_id } = body;
+    // ── Single create: { guest_name, phone, event_id } ────────────────────
+    const { guest_name, phone, event_id } = body;
     if (!guest_name || !event_id) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
+    const phone_normalized = normalizePhone(phone);
+    if (!isValidPhone(phone_normalized)) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Phone must be a valid 10-digit US number' }) };
+    }
+
+    // Reject phone already used for this event
+    const { data: dupe } = await supabase
+      .from('vip_passes')
+      .select('id, guest_name')
+      .eq('event_id', event_id)
+      .eq('phone_normalized', phone_normalized)
+      .maybeSingle();
+    if (dupe) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: `This phone already has a pass for this event (${dupe.guest_name})` }) };
+    }
+
     const { data: evt } = await supabase.from('events').select('max_passes, event_name, start_date, end_date').eq('id', event_id).single();
     const { count } = await supabase.from('vip_passes').select('*', { count: 'exact', head: true }).eq('event_id', event_id);
     if (evt && count >= evt.max_passes) {
@@ -132,7 +200,7 @@ exports.handler = async (event) => {
       : `${evt?.start_date} – ${evt?.end_date}`;
     const { data, error } = await supabase
       .from('vip_passes')
-      .insert([{ guest_name, event_id, event_name: evt?.event_name || '', event_date }])
+      .insert([{ guest_name, phone: String(phone).trim(), phone_normalized, event_id, event_name: evt?.event_name || '', event_date }])
       .select()
       .single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
@@ -168,9 +236,43 @@ exports.handler = async (event) => {
     if (!auth.permissions.edit_passes) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to edit passes' }) };
     }
-    const { id, guest_name } = JSON.parse(event.body);
+    const { id, guest_name, phone } = JSON.parse(event.body);
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
-    const { data, error } = await supabase.from('vip_passes').update({ guest_name }).eq('id', id).select().single();
+
+    const update = {};
+    if (typeof guest_name === 'string') update.guest_name = guest_name.trim();
+    if (typeof phone === 'string') {
+      const phone_normalized = normalizePhone(phone);
+      if (!isValidPhone(phone_normalized)) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Phone must be a valid 10-digit US number' }) };
+      }
+      // Check no other pass for the same event already uses this phone
+      const { data: current } = await supabase
+        .from('vip_passes')
+        .select('event_id')
+        .eq('id', id)
+        .single();
+      if (current) {
+        const { data: dupe } = await supabase
+          .from('vip_passes')
+          .select('id, guest_name')
+          .eq('event_id', current.event_id)
+          .eq('phone_normalized', phone_normalized)
+          .neq('id', id)
+          .maybeSingle();
+        if (dupe) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: `This phone already has a pass for this event (${dupe.guest_name})` }) };
+        }
+      }
+      update.phone = phone.trim();
+      update.phone_normalized = phone_normalized;
+    }
+
+    if (!Object.keys(update).length) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Nothing to update' }) };
+    }
+
+    const { data, error } = await supabase.from('vip_passes').update(update).eq('id', id).select().single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
