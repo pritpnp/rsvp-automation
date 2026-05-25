@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Find My Invitation — BAPS Scranton</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="/images/tab-logo.png" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --saffron: #E8650A;
+      --gold: #C8860A;
+      --gold-light: #F5C842;
+      --cream: #FDF6EC;
+      --cream-dark: #F5E6CC;
+      --brown: #5C2D0A;
+      --brown-mid: #8B4513;
+      --text-muted: #8B6040;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: var(--brown);
+    }
+
+    .top-border {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--brown), var(--saffron), var(--gold-light), var(--saffron), var(--brown));
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 420px;
+      animation: fadeUp 0.5s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 36px 28px;
+      box-shadow: 0 16px 48px rgba(92,45,10,0.12);
+      border: 1px solid rgba(200,134,10,0.15);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .ornament {
+      font-size: 16px;
+      letter-spacing: 8px;
+      color: var(--gold);
+      opacity: 0.6;
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    .org {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--brown);
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 10px;
+      line-height: 1.5;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 13px 14px;
+      border: 1px solid var(--cream-dark);
+      border-radius: 12px;
+      font-size: 15px;
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      color: var(--brown);
+      transition: border-color 0.15s ease;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
+    .btn-submit {
+      width: 100%;
+      margin-top: 8px;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--saffron), var(--gold));
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: transform 0.15s ease, opacity 0.2s ease;
+    }
+    .btn-submit:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn-submit:active:not(:disabled) { transform: translateY(0); }
+    .btn-submit:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    .error {
+      display: none;
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #991b1b;
+      text-align: center;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 22px;
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+    }
+
+    .spinner-sm {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: -2px;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="top-border"></div>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="header">
+        <span class="ornament">✦ ✦ ✦</span>
+        <div class="org">BAPS Swaminarayan Sanstha</div>
+        <h1>Find Your Invitation</h1>
+        <p class="subtitle">Enter the name and phone number you shared with us to view your personal VIP invitation.</p>
+      </div>
+
+      <form id="lookup-form" autocomplete="on">
+        <div class="form-group">
+          <label for="name">Full Name</label>
+          <input type="text" id="name" name="name" autocomplete="name" required placeholder="Your name" />
+        </div>
+        <div class="form-group">
+          <label for="phone">Phone Number</label>
+          <input type="tel" id="phone" name="phone" autocomplete="tel" required placeholder="(555) 123-4567" inputmode="tel" />
+        </div>
+        <button type="submit" class="btn-submit" id="submit-btn">View My Invitation →</button>
+        <div class="error" id="error"></div>
+      </form>
+    </div>
+    <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
+  </div>
+
+  <script>
+    const form = document.getElementById('lookup-form');
+    const btn = document.getElementById('submit-btn');
+    const errEl = document.getElementById('error');
+
+    function showError(msg) {
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    }
+    function clearError() {
+      errEl.style.display = 'none';
+      errEl.textContent = '';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError();
+
+      const name = document.getElementById('name').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      if (!name || !phone) {
+        showError('Please enter both your name and phone number.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-sm"></span>Looking up...';
+
+      try {
+        const res = await fetch('/.netlify/functions/lookup-pass', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.id) {
+          showError(data.error || "We couldn't find an invitation for that name and phone. Please check and try again.");
+          btn.disabled = false;
+          btn.textContent = 'View My Invitation →';
+          return;
+        }
+
+        window.location.href = '/vip/' + data.id;
+      } catch (err) {
+        showError('Something went wrong. Please try again in a moment.');
+        btn.disabled = false;
+        btn.textContent = 'View My Invitation →';
+      }
+    });
+  </script>
+</body>
+</html>
