@@ -19,6 +19,13 @@ on:
         required: false
         default: ''
 
+# Serialize runs so multiple rapid pushes (e.g. flyer-builder remove + upload + og)
+# don't race each other to push deadlines.json / dist/. cancel-in-progress: false
+# means new runs queue behind the in-flight one instead of cancelling it.
+concurrency:
+  group: rsvp-automation-deploy
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -63,5 +70,21 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add deadlines.json || true
-          git diff --staged --quiet || git commit -m "Auto-update deadlines.json [skip ci]"
-          git push origin main || true
+          if git diff --staged --quiet; then
+            echo "ℹ️  No deadlines.json changes to commit."
+            exit 0
+          fi
+          git commit -m "Auto-update deadlines.json [skip ci]"
+          # Retry the push with rebase if the remote moved while we were running.
+          # With workflow-level concurrency this should be rare, but the daily
+          # cron + a manual push could still overlap by a few seconds.
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              echo "✅ deadlines.json pushed (attempt $attempt)"
+              exit 0
+            fi
+            echo "⚠️  push attempt $attempt rejected — rebasing on origin/main and retrying"
+            git pull --rebase origin main
+          done
+          echo "❌ deadlines.json push failed after 3 attempts"
+          exit 1

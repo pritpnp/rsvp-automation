@@ -905,16 +905,34 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
   // Commit and push dist/
   const { execSync } = require('child_process');
   const run = cmd => execSync(cmd, { cwd: repoRoot, stdio: 'inherit' });
+  const runOptional = cmd => { try { execSync(cmd, { cwd: repoRoot, stdio: 'inherit' }); return true; } catch { return false; } };
   run('git config user.email "actions@github.com"');
   run('git config user.name "GitHub Actions"');
   run('git add dist/');
-  try {
+
+  // Distinguish "nothing to commit" (expected) from "commit/push failed" (an actual bug).
+  // The old catch-all wrapped both in the same path and printed "No changes to dist/" even
+  // when the push was rejected — that's how 4 weeks of stale deadlines.json went unnoticed.
+  const nothingStaged = runOptional('git diff --staged --quiet');
+  if (nothingStaged) {
+    console.log('ℹ️  No changes to dist/, skipping commit');
+  } else {
     run('git commit -m "deploy: update dist"');
     const remote = `https://x-access-token:${process.env.GITHUB_PAT}@github.com/${process.env.GITHUB_REPOSITORY}.git`;
-    run(`git push "${remote}" HEAD:main`);
-    console.log('✅ dist/ committed and pushed — Netlify CI deploying...');
-  } catch (e) {
-    console.log('ℹ️  No changes to dist/, skipping commit');
+    let pushed = false;
+    for (let attempt = 1; attempt <= 3 && !pushed; attempt++) {
+      try {
+        run(`git push "${remote}" HEAD:main`);
+        pushed = true;
+        console.log(`✅ dist/ pushed (attempt ${attempt}) — Netlify CI deploying...`);
+      } catch (e) {
+        console.warn(`⚠️  dist push attempt ${attempt} rejected; rebasing on origin/main and retrying`);
+        run(`git pull --rebase "${remote}" main`);
+      }
+    }
+    if (!pushed) {
+      throw new Error('dist/ push failed after 3 attempts — workflow concurrency may be misconfigured');
+    }
   }
 
   return pages.map(({ zone }) => `https://screvents.com/${zone}`);
