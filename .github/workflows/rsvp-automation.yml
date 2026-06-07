@@ -36,7 +36,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4.2.2
         with:
-          fetch-depth: 2
+          # fetch enough history that we can diff back to the last
+          # "deploy: update dist" commit (see the FLYERS step below).
+          # 50 covers many days of activity without a full clone.
+          fetch-depth: 50
 
       - name: Setup Node.js
         uses: actions/setup-node@v4.4.0
@@ -61,7 +64,21 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           cd scripts
-          FLYERS=$(git diff --name-only HEAD~1 HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | tr '\n' ',')
+          # Diff against the last successful "deploy: update dist" commit
+          # rather than HEAD~1. Concurrency in this workflow can cancel
+          # intermediate pushes (e.g. a rapid remove-flyer / upload-flyer /
+          # upload-og sequence collapses to one surviving run), and
+          # HEAD~1...HEAD for that survivor would miss the flyer.jpg change.
+          # The last-deploy commit is a stable marker of "everything before
+          # this has already been OCR'd"; anything since then needs OCR.
+          LAST_DEPLOY=$(git log --pretty=%H --grep='^deploy: update dist' -1 || echo "")
+          if [ -n "$LAST_DEPLOY" ] && [ "$LAST_DEPLOY" != "$(git rev-parse HEAD)" ]; then
+            DIFF_BASE="$LAST_DEPLOY"
+          else
+            DIFF_BASE="HEAD~1"
+          fi
+          echo "📐 Diffing flyer changes since: $DIFF_BASE"
+          FLYERS=$(git diff --name-only "$DIFF_BASE" HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | tr '\n' ',')
           echo "🎯 Flyers to process: $FLYERS"
           FLYER_PATHS="$FLYERS" FORCE_ALL="${{ github.event.inputs.force_all || 'false' }}" ZONE_OVERRIDE="${{ github.event.inputs.zone_override || '' }}" node automate.js
 
