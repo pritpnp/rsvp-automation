@@ -1,18 +1,19 @@
-// Event-night RSVP cleanup. Mirrors the Google Apps Script that already
-// runs at 11 PM on event day for the Sheet, so Supabase doesn't drift out
-// of sync after the event ends. Runs from .github/workflows/cleanup-past-rsvps.yml
-// on a dual UTC cron (3 AM / 4 AM) — one of which is 11 PM America/New_York
-// depending on whether DST is active. The script computes today's date in
-// NY time, finds zones whose eventDate is in the past (inclusive of today),
-// and deletes their RSVPs from both stores.
+// Event-night RSVP cleanup — archive variant.
 //
-// Semantics:
-//   - "the night of the event" means same-day cleanup, so an event on
-//     Sat 14 has its RSVPs cleaned by 11 PM Sat / midnight Sun.
-//   - Late-running firings (eventDate < today) clean up any zone that was
-//     missed by an outage on its actual event day.
-//   - Re-runs are idempotent — deleting from an already-empty zone is a
-//     no-op and stays silent on Telegram.
+// Runs from .github/workflows/cleanup-past-rsvps.yml on a dual UTC cron
+// (3 AM / 4 AM) so 11 PM America/New_York is covered year-round. For
+// every zone whose eventDate is on or before today (in NY time), the
+// script copies the active RSVP rows into rsvps_archive (preserving id,
+// adding archived_at + event_date), then deletes them from rsvps and the
+// Google Sheet. The admin view stays focused on upcoming events; the
+// historical data lives in rsvps_archive for later lookup.
+//
+// Order matters: archive insert MUST succeed before delete runs. If the
+// insert fails the rows are kept in rsvps and Telegram surfaces an alert
+// so we don't quietly lose data.
+//
+// Re-runs are idempotent — archive uses upsert on the row id, and delete
+// from an already-empty zone is a no-op.
 
 const fs = require('fs');
 const path = require('path');
@@ -25,7 +26,6 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID   = process.env.TELEGRAM_CHAT_ID;
 
 function todayInNY() {
-  // en-CA locale returns YYYY-MM-DD, matching the format eventDate uses.
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
@@ -44,8 +44,6 @@ async function sheetsClient() {
 }
 
 async function deleteSheetRowsForZones(sheets, zoneSet) {
-  // Pull rows, find indexes for matching zones, deleteDimension bottom-up
-  // so each delete doesn't shift the indexes of pending ones.
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range: `${SHEET_TAB}!A:E`
@@ -64,7 +62,6 @@ async function deleteSheetRowsForZones(sheets, zoneSet) {
   const sheet = meta.data.sheets.find(s => s.properties.title === SHEET_TAB);
   const sheetId = sheet.properties.sheetId;
 
-  // Delete from the bottom up so earlier indexes stay valid.
   const requests = toDelete
     .sort((a, b) => b - a)
     .map(rowIndex => ({
@@ -108,46 +105,75 @@ async function main() {
   }
 
   if (!zonesToClean.length) {
-    console.log('✅ No zones with past or current event date — nothing to clean.');
+    console.log('✅ No zones with past or current event date — nothing to archive.');
     return;
   }
 
   console.log(`🎯 Candidate zones: ${zonesToClean.map(z => `${z.zone}(${z.eventDate})`).join(', ')}`);
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-
-  // Count what's in each zone before deleting, so the Telegram summary is
-  // informative — and so we know whether to send a message at all.
   const zoneList = zonesToClean.map(z => z.zone);
-  const { data: existingRows, error: countErr } = await supabase
-    .from('rsvps')
-    .select('zone, guests')
-    .in('zone', zoneList);
-  if (countErr) throw new Error('Supabase pre-count failed: ' + countErr.message);
+  const eventDateByZone = Object.fromEntries(zonesToClean.map(z => [z.zone, z.eventDate]));
 
-  const counts = new Map(); // zone → { rsvps, guests }
-  for (const r of (existingRows || [])) {
+  // Pull every row we're about to archive — we need the full record so we
+  // can preserve id, name, etc. in the archive table.
+  const { data: liveRows, error: readErr } = await supabase
+    .from('rsvps')
+    .select('id, zone, name, guests, event_name, submitted_at, sheet_row_id')
+    .in('zone', zoneList);
+  if (readErr) throw new Error('Supabase pre-read failed: ' + readErr.message);
+
+  if (!liveRows || liveRows.length === 0) {
+    console.log('✅ Past-event zones are already clean in Supabase — no Telegram needed.');
+    return;
+  }
+
+  // Group counts by zone for the Telegram summary.
+  const counts = new Map();
+  for (const r of liveRows) {
     if (!counts.has(r.zone)) counts.set(r.zone, { rsvps: 0, guests: 0 });
     const c = counts.get(r.zone);
     c.rsvps++;
     c.guests += parseInt(r.guests, 10) || 0;
   }
 
-  if (counts.size === 0) {
-    console.log('✅ Past-event zones are already clean in Supabase — no Telegram needed.');
-    return;
+  // ── Step 1: Archive ────────────────────────────────────────────────────
+  // Upsert by id so a re-run after a partial failure doesn't double-write.
+  const archivedAt = new Date().toISOString();
+  const archiveRows = liveRows.map(r => ({
+    id:           r.id,
+    zone:         r.zone,
+    name:         r.name,
+    guests:       r.guests,
+    event_name:   r.event_name,
+    submitted_at: r.submitted_at,
+    sheet_row_id: r.sheet_row_id,
+    event_date:   eventDateByZone[r.zone] || '',
+    archived_at:  archivedAt
+  }));
+  const { error: archiveErr } = await supabase
+    .from('rsvps_archive')
+    .upsert(archiveRows, { onConflict: 'id' });
+  if (archiveErr) {
+    // Don't proceed to delete — we'd lose data. Telegram so the failure
+    // is visible immediately instead of getting buried in workflow logs.
+    await sendTelegram(`⚠️ <b>RSVP cleanup aborted</b>\n\nArchive insert failed: <code>${archiveErr.message}</code>\n\n${liveRows.length} row(s) remain in rsvps untouched. Investigate before next run.`);
+    throw new Error('Supabase archive insert failed: ' + archiveErr.message);
   }
+  console.log(`📦 Archive: upserted ${archiveRows.length} row(s) into rsvps_archive.`);
 
-  // Supabase delete in a single query — Postgres handles all matches at once.
+  // ── Step 2: Delete from active rsvps ──────────────────────────────────
   const { error: delErr } = await supabase
     .from('rsvps')
     .delete()
     .in('zone', zoneList);
-  if (delErr) throw new Error('Supabase delete failed: ' + delErr.message);
-  console.log(`🗑️  Supabase: deleted ${[...counts.values()].reduce((a, c) => a + c.rsvps, 0)} rows.`);
+  if (delErr) {
+    await sendTelegram(`⚠️ <b>RSVP archive partial</b>\n\nRows are safely in rsvps_archive but delete from rsvps failed: <code>${delErr.message}</code>\n\nSync-check will now show drift between Supabase and Sheet until this is resolved.`);
+    throw new Error('Supabase delete failed: ' + delErr.message);
+  }
+  console.log(`🗑️  Deleted ${liveRows.length} row(s) from rsvps.`);
 
-  // Sheet best-effort — if it fails, sync-check will surface the drift in
-  // its next 10-min window. Don't crash the cleanup over a Sheets blip.
+  // ── Step 3: Sheet best-effort ─────────────────────────────────────────
   let sheetDeleted = -1;
   try {
     const sheets = await sheetsClient();
@@ -157,27 +183,25 @@ async function main() {
     console.warn(`⚠️  Sheet delete failed: ${e.message}`);
   }
 
-  // Telegram summary — one message, lists what we cleaned.
-  const lines = ['🧹 <b>Event RSVP cleanup</b>', ''];
+  // ── Step 4: Telegram summary ──────────────────────────────────────────
+  const lines = ['📦 <b>Event RSVP archive</b>', ''];
   for (const { zone, eventName, eventDate } of zonesToClean) {
     const c = counts.get(zone);
-    if (!c) continue; // skipped — already empty
+    if (!c) continue;
     const label = eventName ? `${zone} (${eventName})` : zone;
     lines.push(`• ${label} — ${c.rsvps} RSVPs / ${c.guests} guests · event was ${eventDate}`);
   }
+  lines.push('', 'Moved to <code>rsvps_archive</code> — admin RSVP view now shows upcoming events only.');
   if (sheetDeleted >= 0) {
-    lines.push('', `Sheet rows removed: ${sheetDeleted}`);
+    lines.push(`Sheet rows removed: ${sheetDeleted}`);
   } else {
-    lines.push('', '⚠️ Sheet cleanup failed — see workflow logs. Sync check will flag the drift.');
+    lines.push('⚠️ Sheet cleanup failed — see workflow logs. Sync check will flag the drift.');
   }
   await sendTelegram(lines.join('\n'));
   console.log('📲 Telegram summary sent.');
 }
 
 main().catch(err => {
-  console.error('❌ Cleanup failed:', err.message);
-  // Don't ping Telegram on infra errors — the workflow run is red in
-  // GitHub which is enough signal, and we don't want to spam during
-  // a Supabase/Sheets outage.
+  console.error('❌ Archive cleanup failed:', err.message);
   process.exit(1);
 });
