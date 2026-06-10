@@ -811,14 +811,28 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     const isMandirStyle = isMandirSlot || zone === 'satsang-sabha';
     const basePath      = isMandirSlot ? `/mandir/${zone.replace('mandir-', '')}` : `/${zone}`;
 
-    // OG image — compute FIRST so we can embed the hash into the HTML
+    // OG image — compute FIRST so we can embed the hash into the HTML.
+    // Priority: manual og.jpg from flyer-builder → main-page branded og.png
+    // (mandir-1..5 default; the auto 50/50 split looks awkward for the
+    // portrait flyers these zones use) → auto 50/50 split for everything else.
     const zoneDir      = path.dirname(flyerPath);
     const manualOgPath = path.join(zoneDir, 'og.jpg');
+    const mainOgPath   = path.join(REPO_ROOT, 'public', 'og.png');
     const ogFilePath   = `${basePath}/og.jpg`;
-    const ogContent    = fs.existsSync(manualOgPath)
-      ? await sharp(manualOgPath).jpeg({ quality: 90 }).toBuffer()
-      : await buildOgImage(flyerPath);
-    console.log(`🖼️  OG source: ${fs.existsSync(manualOgPath) ? 'og.jpg (builder)' : 'auto-generated'}`);
+
+    let ogContent;
+    let ogSource;
+    if (fs.existsSync(manualOgPath)) {
+      ogContent = await sharp(manualOgPath).jpeg({ quality: 90 }).toBuffer();
+      ogSource  = 'og.jpg (builder)';
+    } else if (isMandirSlot && fs.existsSync(mainOgPath)) {
+      ogContent = await sharp(mainOgPath).jpeg({ quality: 90 }).toBuffer();
+      ogSource  = 'main-page og.png (mandir slot default)';
+    } else {
+      ogContent = await buildOgImage(flyerPath);
+      ogSource  = 'auto-generated';
+    }
+    console.log(`🖼️  OG source: ${ogSource}`);
     const ogSha1     = crypto.createHash('sha1').update(ogContent).digest('hex');
     files[ogFilePath] = ogSha1;
     fileContents[ogSha1] = { filePath: ogFilePath, content: ogContent };
