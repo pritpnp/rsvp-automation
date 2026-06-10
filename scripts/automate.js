@@ -228,13 +228,18 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
     <div id="rsvp-open">
       ${!eventInfo.rsvpDeadline ? `<p style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C8860A;text-align:center;margin-bottom:8px;">RSVP Not Required</p>` : ''}
       <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
-      <div class="form-container" style="position:relative;">
-        <div id="form-loader" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#fff;z-index:1;min-height:200px;">
-          <div style="width:36px;height:36px;border:3px solid #e0d5c8;border-top-color:#C8860A;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-          <span style="font-size:13px;color:#8B6040;">Loading form...</span>
+      <div style="background:#fff;border-radius:20px;padding:28px 24px;box-shadow:0 4px 24px rgba(92,45,10,0.10);">
+        <div id="rsvp-form" style="text-align:left;">
+          <input id="rsvp-name" type="text" placeholder="Full Name" autocomplete="name" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
+          <input id="rsvp-guests" type="number" placeholder="Number of Guests" min="1" max="100" inputmode="numeric" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:16px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
+          <button id="rsvp-submit" onclick="submitRsvp()" style="width:100%;padding:14px;background:linear-gradient(135deg,#C8860A,#E6A817);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity 0.2s ease;">Submit RSVP →</button>
         </div>
-        <iframe id="rsvp-iframe" src="${embedUrl}" title="RSVP Form" tabindex="-1" onload="onIframeLoad()">Loading…</iframe>
-        <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
+        <div id="rsvp-success" style="display:none;text-align:center;padding:8px 0;">
+          <div style="font-size:44px;margin-bottom:10px;">🙏</div>
+          <h3 style="font-family:'Cormorant Garamond',serif;font-size:22px;color:#5C2D0A;margin-bottom:6px;">Thank you!</h3>
+          <p style="font-size:14px;color:#8B6040;line-height:1.5;">Your RSVP has been confirmed. We look forward to seeing you.</p>
+        </div>
+        <div id="rsvp-error" style="display:none;margin-top:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;font-size:13px;color:#991b1b;text-align:center;"></div>
       </div>
     </div>
     <div id="rsvp-closed" style="display:none;">
@@ -322,15 +327,45 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
     }
     window.addEventListener('wheel', function() { userHasScrolled = true; }, { once: true });
 
-    function onIframeLoad() {
-      document.getElementById('form-loader').style.display = 'none';
-      if (!userHasScrolled) {
-        window.scrollTo(0, 0);
-        var snaps = 0;
-        var interval = setInterval(function() {
-          if (!userHasScrolled) window.scrollTo(0, 0);
-          if (++snaps >= 10) clearInterval(interval);
-        }, 50);
+    // ── Native RSVP form (Phase 2 — replaces MS Forms iframe) ────────────
+    const RSVP_ZONE = '${zone}';
+    const RSVP_EVENT_NAME = ${JSON.stringify(eventInfo.eventName || '')};
+    async function submitRsvp() {
+      const nameEl = document.getElementById('rsvp-name');
+      const guestsEl = document.getElementById('rsvp-guests');
+      const btn = document.getElementById('rsvp-submit');
+      const errEl = document.getElementById('rsvp-error');
+      const name = nameEl.value.trim();
+      const guests = parseInt(guestsEl.value, 10);
+      errEl.style.display = 'none';
+      if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; nameEl.focus(); return; }
+      if (!guests || guests < 1) { errEl.textContent = 'Please enter the number of guests.'; errEl.style.display = 'block'; guestsEl.focus(); return; }
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      btn.textContent = 'Submitting...';
+      try {
+        const res = await fetch('/.netlify/functions/submit-rsvp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ zone: RSVP_ZONE, name: name, guests: guests, eventName: RSVP_EVENT_NAME })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          errEl.textContent = data.error || 'Could not save your RSVP. Please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.style.opacity = '1';
+          btn.textContent = 'Submit RSVP →';
+          return;
+        }
+        document.getElementById('rsvp-form').style.display = 'none';
+        document.getElementById('rsvp-success').style.display = 'block';
+      } catch (e) {
+        errEl.textContent = 'Network error. Please check your connection and try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.textContent = 'Submit RSVP →';
       }
     }
 
@@ -394,14 +429,12 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
   const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
   const hasRsvp = !!eventInfo.rsvpDeadline;
-  // Mandir slots (mandir-1..5) use the native /submit-rsvp endpoint instead
-  // of the Microsoft Forms iframe — those slots never had MS Forms URLs
-  // wired up. The native form posts directly to Supabase + Sheets so the
-  // admin's RSVP toggle takes effect immediately, with no Power Automate
-  // intermediary. satsang-sabha still uses the iframe path.
-  const isMandirSlot = /^mandir-[1-5]$/.test(slot);
-  const useNativeForm = isMandirSlot;
-  const embedSrc = (!useNativeForm && hasRsvp && embedUrl) ? embedUrl : '';
+  // Phase 2: every mandir-style zone (mandir-1..5 AND satsang-sabha) posts
+  // directly to /submit-rsvp, eliminating the MS Forms → Power Automate →
+  // Google Sheets pipeline. submit-rsvp writes Supabase first, then mirrors
+  // to the Sheet so the existing admin RSVP view keeps working.
+  const useNativeForm = true;
+  const embedSrc = '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1144,18 +1177,15 @@ async function main() {
     const isMandirSlot   = MANDIR_SLOTS.includes(zone);
     const isSatsangSabha = zone === 'satsang-sabha';
 
+    // Phase 2: native /submit-rsvp on every zone, so embedUrl/formUrl no
+    // longer need to be threaded through. Kept as empty strings to preserve
+    // existing function signatures (and the share-bar's footer URL fields).
     let html, embedUrl = '', formUrl = '';
     if (isMandirSlot) {
       html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
     } else if (isSatsangSabha) {
-      const forms = getGoogleForm(zone);
-      embedUrl = forms.embedUrl;
-      formUrl  = forms.formUrl;
       html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl, false, `https://screvents.com/${zone}`);
     } else {
-      const forms = getGoogleForm(zone);
-      embedUrl = forms.embedUrl;
-      formUrl  = forms.formUrl;
       html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
     }
     pages.push({ zone, html, flyerPath, embedUrl, formUrl });
