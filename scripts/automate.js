@@ -220,7 +220,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
   <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
     ${eventInfo.date ? `<div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">${eventInfo.date}${eventInfo.time ? ' at ' + eventInfo.time : ''}</div></div></div>` : ''}
-    ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
+    ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(eventInfo.location)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dotted currentColor;">${eventInfo.location}</a></div></div></div>` : ''}
     ${eventInfo.rsvpDeadline ? `<div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">${new Date(eventInfo.rsvpDeadline + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric'})}</div></div></div>` : ''}
   </div>
   <div class="section-divider"><span>RSVP</span></div>
@@ -481,7 +481,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
   <div class="flyer-wrap"><img src="${flyerUrl}" alt="${eventInfo.eventName} flyer" /></div>
   <div class="details-card">
     ${eventInfo.date ? `<div class="detail-row"><div class="detail-icon">📅</div><div class="detail-content"><div class="detail-label">Date</div><div class="detail-value">${eventInfo.date}${eventInfo.time ? ' at ' + eventInfo.time : ''}</div></div></div>` : ''}
-    ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
+    ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(eventInfo.location)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dotted currentColor;">${eventInfo.location}</a></div></div></div>` : ''}
     ${hasRsvp ? `<div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">${new Date(eventInfo.rsvpDeadline + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric'})}</div></div></div>` : ''}
   </div>
   ${hasRsvp && (embedSrc || useNativeForm) ? `
@@ -1122,7 +1122,7 @@ async function main() {
         eventName:          cached.eventName || '',
         date:               cached.date || '',
         time:               cached.time || '',
-        location:           '',
+        location:           cached.location || '',
         rsvpDeadline:       cached.deadline || '',
       };
       console.log(`  ✅ Using cached data for ${zone}: "${cached.eventName}"`);
@@ -1169,7 +1169,11 @@ async function main() {
       eventName: eventInfo.eventName || (isMandirSlot ? 'Mandir Event' : 'Para Satsang Sabha'),
       date:      eventInfo.date || '',
       eventDate: eventDateISO,
-      time:      eventInfo.time || ''
+      time:      eventInfo.time || '',
+      // Persist location so cached re-runs (the common path — skipOcr=true)
+      // don't drop it. Previously this lived only in memory during the OCR
+      // run and was lost on every subsequent deploy.
+      location:  eventInfo.location || ''
     };
   }
 
