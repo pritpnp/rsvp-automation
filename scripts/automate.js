@@ -394,7 +394,14 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
   const tabLogoBase64 = fs.existsSync(tabLogoPath) ? fs.readFileSync(tabLogoPath).toString('base64') : bapsLogoBase64;
   const hasRsvp = !!eventInfo.rsvpDeadline;
-  const embedSrc = hasRsvp && embedUrl ? embedUrl : '';
+  // Mandir slots (mandir-1..5) use the native /submit-rsvp endpoint instead
+  // of the Microsoft Forms iframe — those slots never had MS Forms URLs
+  // wired up. The native form posts directly to Supabase + Sheets so the
+  // admin's RSVP toggle takes effect immediately, with no Power Automate
+  // intermediary. satsang-sabha still uses the iframe path.
+  const isMandirSlot = /^mandir-[1-5]$/.test(slot);
+  const useNativeForm = isMandirSlot;
+  const embedSrc = (!useNativeForm && hasRsvp && embedUrl) ? embedUrl : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -477,9 +484,24 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value">${eventInfo.location}</div></div></div>` : ''}
     ${hasRsvp ? `<div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">${new Date(eventInfo.rsvpDeadline + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric'})}</div></div></div>` : ''}
   </div>
-  ${hasRsvp && embedSrc ? `
+  ${hasRsvp && (embedSrc || useNativeForm) ? `
   <div class="section-divider"><span>RSVP</span></div>
   <div class="rsvp-section">
+    ${useNativeForm ? `
+    <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;box-shadow:0 4px 24px rgba(122,31,46,0.10);">
+      <div id="rsvp-form" style="text-align:left;">
+        <input id="rsvp-name" type="text" placeholder="Full Name" autocomplete="name" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#3D1A00;" />
+        <input id="rsvp-guests" type="number" placeholder="Number of Guests" min="1" max="100" inputmode="numeric" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:16px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#3D1A00;" />
+        <button id="rsvp-submit" onclick="submitRsvp()" style="width:100%;padding:14px;background:linear-gradient(135deg,#7A1F2E,#A0304A);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity 0.2s ease;">Submit RSVP →</button>
+      </div>
+      <div id="rsvp-success" style="display:none;text-align:center;padding:8px 0;">
+        <div style="font-size:44px;margin-bottom:10px;">🙏</div>
+        <h3 style="font-family:'Cormorant Garamond',serif;font-size:22px;color:#7A1F2E;margin-bottom:6px;">Thank you!</h3>
+        <p style="font-size:14px;color:#8B6040;line-height:1.5;">Your RSVP has been confirmed. We look forward to seeing you.</p>
+      </div>
+      <div id="rsvp-error" style="display:none;margin-top:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;font-size:13px;color:#991b1b;text-align:center;"></div>
+    </div>` : `
     <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
     <div class="form-container" style="position:relative;">
       <div id="form-loader" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#fff;z-index:1;min-height:200px;">
@@ -488,11 +510,72 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
       </div>
       <iframe src="${embedSrc}" title="RSVP Form" onload="document.getElementById('form-loader').style.display='none'">Loading…</iframe>
       <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
-    </div>
+    </div>`}
   </div>` : ''}
   <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
   <script>
     const FLYER_URL = '${flyerUrl}';
+    ${useNativeForm ? `
+    // ── Native RSVP form (mandir slots) ──────────────────────────────────
+    const RSVP_ZONE = '${slot}';
+    const RSVP_EVENT_NAME = ${JSON.stringify(eventInfo.eventName || '')};
+    async function submitRsvp() {
+      const nameEl = document.getElementById('rsvp-name');
+      const guestsEl = document.getElementById('rsvp-guests');
+      const btn = document.getElementById('rsvp-submit');
+      const errEl = document.getElementById('rsvp-error');
+      const name = nameEl.value.trim();
+      const guests = parseInt(guestsEl.value, 10);
+      errEl.style.display = 'none';
+      if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; nameEl.focus(); return; }
+      if (!guests || guests < 1) { errEl.textContent = 'Please enter the number of guests.'; errEl.style.display = 'block'; guestsEl.focus(); return; }
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      btn.textContent = 'Submitting...';
+      try {
+        const res = await fetch('/.netlify/functions/submit-rsvp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ zone: RSVP_ZONE, name: name, guests: guests, eventName: RSVP_EVENT_NAME })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          errEl.textContent = data.error || 'Could not save your RSVP. Please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.style.opacity = '1';
+          btn.textContent = 'Submit RSVP →';
+          return;
+        }
+        document.getElementById('rsvp-form').style.display = 'none';
+        document.getElementById('rsvp-success').style.display = 'block';
+      } catch (e) {
+        errEl.textContent = 'Network error. Please check your connection and try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.textContent = 'Submit RSVP →';
+      }
+    }
+    ` : ''}
+    // ── RSVP visibility check ────────────────────────────────────────────
+    // Mirrors buildHtmlPage so the admin's RSVP on/off toggle hides the
+    // section in real time without needing a redeploy.
+    (async function() {
+      try {
+        const res = await fetch('/.netlify/functions/rsvp-status');
+        const settings = await res.json();
+        const zone = '${slot}';
+        const globalEnabled = settings['global'] !== false;
+        const zoneEnabled   = settings[zone]    !== false;
+        if (!globalEnabled || !zoneEnabled) {
+          const rsvpSection = document.querySelector('.rsvp-section');
+          const rsvpDivider = document.querySelector('.section-divider');
+          if (rsvpSection) rsvpSection.style.display = 'none';
+          if (rsvpDivider) rsvpDivider.style.display = 'none';
+        }
+      } catch(e) {}
+    })();
     (function initShareBar() {
       document.getElementById('share-bar').style.cssText += ';display:flex;justify-content:center;';
       var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
