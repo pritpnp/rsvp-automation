@@ -23,9 +23,9 @@
   "mandir-1": {
     "deadline": "",
     "eventName": "4th of July Picnic",
-    "date": "Saturday, May 23",
-    "eventDate": "2026-05-23",
-    "time": "4:00 pm"
+    "date": "Saturday, July 4",
+    "eventDate": "2026-07-04",
+    "time": "10:00 am"
   },
   "moosic": {
     "deadline": "2026-06-18",
@@ -36,10 +36,10 @@
   },
   "mandir-2": {
     "deadline": "",
-    "eventName": "Sant Parayan",
-    "date": "",
-    "eventDate": "",
-    "time": ""
+    "eventName": "4th of July Mandir Picnic",
+    "date": "Saturday, July 4",
+    "eventDate": "2026-07-04",
+    "time": "10:00 am"
   },
   "bloomsburg": {
     "deadline": "2026-06-10",
