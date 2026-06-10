@@ -75,6 +75,25 @@
   <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
   <script>
     const FLYER_URL = 'https://screvents.com/satsang-sabha/flyer.jpg';
+    
+    // ── RSVP visibility check ────────────────────────────────────────────
+    // Mirrors buildHtmlPage so the admin's RSVP on/off toggle hides the
+    // section in real time without needing a redeploy.
+    (async function() {
+      try {
+        const res = await fetch('/.netlify/functions/rsvp-status');
+        const settings = await res.json();
+        const zone = 'satsang-sabha';
+        const globalEnabled = settings['global'] !== false;
+        const zoneEnabled   = settings[zone]    !== false;
+        if (!globalEnabled || !zoneEnabled) {
+          const rsvpSection = document.querySelector('.rsvp-section');
+          const rsvpDivider = document.querySelector('.section-divider');
+          if (rsvpSection) rsvpSection.style.display = 'none';
+          if (rsvpDivider) rsvpDivider.style.display = 'none';
+        }
+      } catch(e) {}
+    })();
     (function initShareBar() {
       document.getElementById('share-bar').style.cssText += ';display:flex;justify-content:center;';
       var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
