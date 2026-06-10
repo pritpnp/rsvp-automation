@@ -84,6 +84,48 @@
   <script>
     const FLYER_URL = 'https://screvents.com/satsang-sabha/flyer.jpg';
     
+    // ── Native RSVP form (mandir slots) ──────────────────────────────────
+    const RSVP_ZONE = 'satsang-sabha';
+    const RSVP_EVENT_NAME = "Satsang Sabha";
+    async function submitRsvp() {
+      const nameEl = document.getElementById('rsvp-name');
+      const guestsEl = document.getElementById('rsvp-guests');
+      const btn = document.getElementById('rsvp-submit');
+      const errEl = document.getElementById('rsvp-error');
+      const name = nameEl.value.trim();
+      const guests = parseInt(guestsEl.value, 10);
+      errEl.style.display = 'none';
+      if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; nameEl.focus(); return; }
+      if (!guests || guests < 1) { errEl.textContent = 'Please enter the number of guests.'; errEl.style.display = 'block'; guestsEl.focus(); return; }
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      btn.textContent = 'Submitting...';
+      try {
+        const res = await fetch('/.netlify/functions/submit-rsvp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ zone: RSVP_ZONE, name: name, guests: guests, eventName: RSVP_EVENT_NAME })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          errEl.textContent = data.error || 'Could not save your RSVP. Please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.style.opacity = '1';
+          btn.textContent = 'Submit RSVP →';
+          return;
+        }
+        document.getElementById('rsvp-form').style.display = 'none';
+        document.getElementById('rsvp-success').style.display = 'block';
+      } catch (e) {
+        errEl.textContent = 'Network error. Please check your connection and try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.textContent = 'Submit RSVP →';
+      }
+    }
+    
     // ── RSVP visibility check ────────────────────────────────────────────
     // Mirrors buildHtmlPage so the admin's RSVP on/off toggle hides the
     // section in real time without needing a redeploy.
