@@ -4,55 +4,63 @@
     "eventName": "Para Satsang Sabha",
     "date": "Friday, May 29",
     "eventDate": "2026-05-29",
-    "time": "6:00 pm"
+    "time": "6:00 pm",
+    "location": ""
   },
   "scranton": {
     "deadline": "2026-05-08",
     "eventName": "Para Satsang Sabha",
     "date": "Friday, May 8",
     "eventDate": "2026-05-08",
-    "time": "5:00 pm"
+    "time": "5:00 pm",
+    "location": ""
   },
   "satsang-sabha": {
     "deadline": "",
     "eventName": "Satsang Sabha",
     "date": "Sunday, May 3",
     "eventDate": "2026-05-03",
-    "time": "4:00 pm"
+    "time": "4:00 pm",
+    "location": ""
   },
   "mandir-1": {
     "deadline": "2026-07-01",
     "eventName": "Mountain Top July 4th Picnic",
     "date": "Saturday, July 4",
     "eventDate": "2026-07-04",
-    "time": "10:00 am"
+    "time": "10:00 am",
+    "location": ""
   },
   "moosic": {
     "deadline": "2026-06-18",
     "eventName": "Para Satsang Sabha",
     "date": "Friday, June 19",
     "eventDate": "2026-06-19",
-    "time": "6:00 pm"
+    "time": "6:00 pm",
+    "location": ""
   },
   "mandir-2": {
     "deadline": "2026-07-01",
     "eventName": "Scranton July 4th Picnic",
     "date": "Saturday, July 4",
     "eventDate": "2026-07-04",
-    "time": "10:00 am"
+    "time": "10:00 am",
+    "location": ""
   },
   "bloomsburg": {
     "deadline": "2026-06-10",
     "eventName": "Para Satsang Sabha",
     "date": "Friday, June 12",
     "eventDate": "2026-06-12",
-    "time": "6:00 pm"
+    "time": "6:00 pm",
+    "location": ""
   },
   "mandir-3": {
     "deadline": "",
     "eventName": "Walkathon",
     "date": "Saturday, May 30",
     "eventDate": "2026-05-30",
-    "time": "9:00 am - 12:00 pm"
+    "time": "9:00 am - 12:00 pm",
+    "location": ""
   }
 }
