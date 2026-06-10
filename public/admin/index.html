@@ -35,7 +35,11 @@
     .tab-btn { flex: 1; padding: 14px; background: #e8e0d5; border: none; color: #000; font-size: 13px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; border-bottom: 2px solid transparent; transition: all 0.2s; }
     .tab-btn.active { color: var(--gold-light); border-bottom-color: var(--gold-light); background: #1a1a1a; }
     .tab-btn:hover:not(.active) { color: var(--gold); background: #2d2d2d; }
-    .admin-body { max-width: 700px; margin: 0 auto; padding: 28px 20px 60px; }
+    .admin-body { max-width: 700px; margin: 0 auto; padding: 28px 20px 60px; transition: max-width 0.2s ease; }
+    /* RSVPs and Archive tabs have wide tables (7-8 columns including
+       phone + IP). Stretch the container so they fit without a horizontal
+       scrollbar. Other tabs stay narrow — forms look better in a column. */
+    body.tab-wide .admin-body { max-width: 1100px; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
     .card { background: #fff; border-radius: 16px; padding: 24px; margin-bottom: 24px; box-shadow: 0 2px 16px rgba(92,45,10,0.08); }
@@ -638,6 +642,8 @@
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('tab-' + tab).classList.add('active');
       btn.classList.add('active');
+      // Wide layout for the data-heavy tabs; default narrow for forms.
+      document.body.classList.toggle('tab-wide', tab === 'rsvps' || tab === 'archive');
       if (tab === 'rsvps')   loadRsvps();
       if (tab === 'archive') loadArchive();
     }
@@ -1014,6 +1020,17 @@
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // Format a stored phone (likely raw digits from older rows, or already
+    // formatted from new ones) as (xxx) xxx-xxxx for display. Falls back to
+    // the original string when it isn't a parseable 10-digit US number.
+    function formatPhoneDisplay(p) {
+      if (!p) return '';
+      let d = String(p).replace(/\D/g, '');
+      if (d.length === 11 && d.startsWith('1')) d = d.slice(1);
+      if (d.length !== 10) return p;
+      return '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
+    }
+
     function timeAgo(iso) {
       if (!iso) return '';
       const s = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -1190,8 +1207,8 @@
                 <button onclick="cancelEditGuests('${r.powerapps_id}')" style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:2px">✕</button>
               </span>` : ''}
             </td>
-            <td style="font-size:12px;color:var(--text-muted)">${r.phone ? escapeHtml(r.phone) : '—'}</td>
-            <td style="font-family:monospace;font-size:11px;color:var(--text-muted)">${r.ip ? escapeHtml(r.ip) : '—'}</td>
+            <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${r.phone ? escapeHtml(formatPhoneDisplay(r.phone)) : '—'}</td>
+            <td style="font-family:monospace;font-size:11px;color:var(--text-muted);white-space:nowrap">${r.ip ? escapeHtml(r.ip) : '—'}</td>
             <td>${r.submitted ? new Date(r.submitted).toLocaleDateString() : '—'}</td>
             ${canDeleteRsvp ? `<td><button class="btn-delete-sm" onclick="deleteRsvp('${r.powerapps_id}', '${escapeHtml(r.name).replace(/'/g, "\\'")}')">Remove</button></td>` : ''}
           </tr>`;
@@ -1306,8 +1323,8 @@
             <td>${escapeHtml(r.event_name || '—')}</td>
             <td>${escapeHtml(r.event_date || '—')}</td>
             <td>${escapeHtml(r.guests)}</td>
-            <td style="font-size:12px;color:var(--text-muted)">${r.phone ? escapeHtml(r.phone) : '—'}</td>
-            <td style="font-family:monospace;font-size:11px;color:var(--text-muted)">${r.ip ? escapeHtml(r.ip) : '—'}</td>
+            <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${r.phone ? escapeHtml(formatPhoneDisplay(r.phone)) : '—'}</td>
+            <td style="font-family:monospace;font-size:11px;color:var(--text-muted);white-space:nowrap">${r.ip ? escapeHtml(r.ip) : '—'}</td>
             <td>${r.submitted ? new Date(r.submitted).toLocaleDateString() : '—'}</td>
           </tr>`;
         }).join('') + '</tbody></table></div>';
