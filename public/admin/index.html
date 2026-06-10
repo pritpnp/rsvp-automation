@@ -282,6 +282,28 @@
         </div>
       </div>
 
+      <!-- ── Archived RSVPs ── -->
+      <div class="tab-panel" id="tab-archive">
+        <div class="card">
+          <h2>Archived RSVPs</h2>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Past-event RSVPs moved here automatically at 11 PM on event night. Use filters below to find a specific event or attendee.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+            <input type="text" id="archive-search" placeholder="Search by name..." oninput="reloadArchive()"
+              style="flex:2;min-width:160px;padding:9px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream)" />
+            <select id="archive-zone-filter" onchange="reloadArchive()"
+              style="flex:1;min-width:130px;padding:9px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
+              <option value="">All Zones</option>
+            </select>
+            <select id="archive-date-filter" onchange="reloadArchive()"
+              style="flex:1;min-width:140px;padding:9px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
+              <option value="">All Event Dates</option>
+            </select>
+          </div>
+          <div id="archive-summary" style="font-size:13px;color:var(--text-muted);margin-bottom:12px"></div>
+          <div id="archive-container"><div class="spinner"></div></div>
+        </div>
+      </div>
+
       <!-- ── Managers ── -->
       <div class="tab-panel" id="tab-managers">
         <div class="card">
@@ -550,6 +572,7 @@
       const _tab = (name, label) => '<button class="tab-btn' + (!tabsHtml ? ' active' : '') + '" onclick="switchTab(\'' + name + '\', this)">' + label + '</button>';
       if (isSuperadmin || permissions.view_passes) tabsHtml += _tab('passes', '🎟 VIP Passes');
       if (permissions.view_rsvps || isSuperadmin) tabsHtml += _tab('rsvps', '📋 RSVPs');
+      if (permissions.view_rsvps || isSuperadmin) tabsHtml += _tab('archive', '📦 Archive');
       if (isSuperadmin) {
         tabsHtml += _tab('managers', '👤 Managers');
         tabsHtml += _tab('events', '📅 Events');
@@ -615,8 +638,8 @@
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('tab-' + tab).classList.add('active');
       btn.classList.add('active');
-      if (tab === 'rsvps') loadRsvps();
-
+      if (tab === 'rsvps')   loadRsvps();
+      if (tab === 'archive') loadArchive();
     }
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
@@ -1144,15 +1167,22 @@
       if (!rsvps.length) { c.innerHTML = '<div class="empty-state">No RSVPs found.</div>'; return; }
       const canEditRsvp   = sessionPermissions.edit_rsvps;
       const canDeleteRsvp = sessionPermissions.delete_rsvps;
+      const dupRows = rsvps.filter(r => r.dup_signals && r.dup_signals.length).length;
+      if (dupRows) summary.textContent += ` · ⚠️ ${dupRows} possible duplicate${dupRows !== 1 ? 's' : ''}`;
       c.innerHTML = '<div style="overflow-x:auto"><table class="rsvp-table">' +
-        '<thead><tr><th>Name</th><th>Zone</th><th>Guests</th><th>Submitted</th>' + (canDeleteRsvp ? '<th></th>' : '') + '</tr></thead>' +
-        '<tbody>' + rsvps.map(r => `
-          <tr id="rsvp-${r.powerapps_id}">
-            <td>${r.name}</td>
-            <td><span class="zone-pill">${r.zone}</span></td>
+        '<thead><tr><th>Name</th><th>Zone</th><th>Guests</th><th>Phone</th><th>IP</th><th>Submitted</th>' + (canDeleteRsvp ? '<th></th>' : '') + '</tr></thead>' +
+        '<tbody>' + rsvps.map(r => {
+          const dupTags = (r.dup_signals || []).map(s =>
+            `<span title="Same ${s} as another RSVP in this zone" style="display:inline-block;background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;font-size:9px;font-weight:600;padding:1px 6px;border-radius:8px;margin-left:4px;text-transform:uppercase;letter-spacing:0.05em">dup ${s}</span>`
+          ).join('');
+          const rowStyle = (r.dup_signals && r.dup_signals.length) ? 'background:#fffaf3;' : '';
+          return `
+          <tr id="rsvp-${r.powerapps_id}" style="${rowStyle}">
+            <td>${escapeHtml(r.name)}${dupTags}</td>
+            <td><span class="zone-pill">${escapeHtml(r.zone)}</span></td>
             <td id="guests-display-${r.powerapps_id}">
-              <span id="guests-val-${r.powerapps_id}">${r.guests}</span>
-              ${canEditRsvp ? `<button onclick="startEditGuests('${r.powerapps_id}', '${r.guests}')"
+              <span id="guests-val-${r.powerapps_id}">${escapeHtml(r.guests)}</span>
+              ${canEditRsvp ? `<button onclick="startEditGuests('${r.powerapps_id}', '${escapeHtml(r.guests)}')"
                 style="background:none;border:none;color:var(--gold);font-size:11px;cursor:pointer;margin-left:6px;padding:0;font-family:'DM Sans',sans-serif">Edit</button>
               <span id="guests-edit-${r.powerapps_id}" style="display:none">
                 <input type="number" min="1" id="guests-input-${r.powerapps_id}" style="width:50px;padding:3px 6px;border:1px solid var(--cream-dark);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif" />
@@ -1160,9 +1190,12 @@
                 <button onclick="cancelEditGuests('${r.powerapps_id}')" style="background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:2px">✕</button>
               </span>` : ''}
             </td>
+            <td style="font-size:12px;color:var(--text-muted)">${r.phone ? escapeHtml(r.phone) : '—'}</td>
+            <td style="font-family:monospace;font-size:11px;color:var(--text-muted)">${r.ip ? escapeHtml(r.ip) : '—'}</td>
             <td>${r.submitted ? new Date(r.submitted).toLocaleDateString() : '—'}</td>
-            ${canDeleteRsvp ? `<td><button class="btn-delete-sm" onclick="deleteRsvp('${r.powerapps_id}', '${r.name.replace(/'/g, "\\'")}')">Remove</button></td>` : ''}
-          </tr>`).join('') +
+            ${canDeleteRsvp ? `<td><button class="btn-delete-sm" onclick="deleteRsvp('${r.powerapps_id}', '${escapeHtml(r.name).replace(/'/g, "\\'")}')">Remove</button></td>` : ''}
+          </tr>`;
+        }).join('') +
         '</tbody></table></div>';
     }
 
@@ -1203,6 +1236,81 @@
       });
       if (res.ok) { allRsvps = allRsvps.filter(r => r.powerapps_id !== id); filterRsvps(); }
       else alert('Failed to remove RSVP');
+    }
+
+    // ── Archived RSVPs ─────────────────────────────────────────────────────
+    const ARCHIVE_API = '/.netlify/functions/get-archived-rsvps';
+    let archiveLoaded = false;
+
+    async function loadArchive() {
+      // First load: pass no filters so we get the full distinct facets to
+      // populate the dropdowns. Subsequent loads come through reloadArchive.
+      const zone = document.getElementById('archive-zone-filter').value;
+      const date = document.getElementById('archive-date-filter').value;
+      const q    = document.getElementById('archive-search').value.trim();
+      const params = new URLSearchParams();
+      if (zone) params.set('zone', zone);
+      if (date) params.set('event_date', date);
+      if (q)    params.set('q', q);
+      const url = ARCHIVE_API + (params.toString() ? '?' + params.toString() : '');
+      const c = document.getElementById('archive-container');
+      c.innerHTML = '<div class="spinner"></div>';
+      try {
+        const res = await fetch(url, { headers: authHeaders() });
+        const d = await res.json();
+        if (!res.ok) { c.innerHTML = '<div class="empty-state">' + escapeHtml(d.error || 'Failed to load archive.') + '</div>'; return; }
+
+        // Populate filter dropdowns from the response on first load only —
+        // re-rendering them on every reload would reset the user's selection.
+        if (!archiveLoaded) {
+          const zoneSel = document.getElementById('archive-zone-filter');
+          for (const z of (d.zones || [])) zoneSel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`);
+          const dateSel = document.getElementById('archive-date-filter');
+          for (const dt of (d.event_dates || [])) dateSel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(dt)}">${escapeHtml(dt)}</option>`);
+          archiveLoaded = true;
+        }
+
+        renderArchive(d.rows || []);
+      } catch (e) {
+        c.innerHTML = '<div class="empty-state">Network error loading archive.</div>';
+      }
+    }
+
+    function reloadArchive() {
+      // Debounce on search-as-you-type via a small timer; filter changes
+      // call this directly via onchange.
+      clearTimeout(reloadArchive._t);
+      reloadArchive._t = setTimeout(loadArchive, 200);
+    }
+
+    function renderArchive(rows) {
+      const c = document.getElementById('archive-container');
+      const summary = document.getElementById('archive-summary');
+      const total = rows.reduce((s, r) => s + (parseInt(r.guests) || 1), 0);
+      const dupRows = rows.filter(r => r.dup_signals && r.dup_signals.length).length;
+      let s = `${rows.length} archived RSVP${rows.length !== 1 ? 's' : ''} · ${total} guest${total !== 1 ? 's' : ''} total`;
+      if (dupRows) s += ` · ⚠️ ${dupRows} possible duplicate${dupRows !== 1 ? 's' : ''}`;
+      summary.textContent = s;
+      if (!rows.length) { c.innerHTML = '<div class="empty-state">No archived RSVPs match the current filters.</div>'; return; }
+      c.innerHTML = '<div style="overflow-x:auto"><table class="rsvp-table">' +
+        '<thead><tr><th>Name</th><th>Zone</th><th>Event</th><th>Event Date</th><th>Guests</th><th>Phone</th><th>IP</th><th>Submitted</th></tr></thead>' +
+        '<tbody>' + rows.map(r => {
+          const dupTags = (r.dup_signals || []).map(sig =>
+            `<span title="Same ${sig} as another RSVP in this event" style="display:inline-block;background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;font-size:9px;font-weight:600;padding:1px 6px;border-radius:8px;margin-left:4px;text-transform:uppercase;letter-spacing:0.05em">dup ${sig}</span>`
+          ).join('');
+          const rowStyle = (r.dup_signals && r.dup_signals.length) ? 'background:#fffaf3;' : '';
+          return `
+          <tr style="${rowStyle}">
+            <td>${escapeHtml(r.name)}${dupTags}</td>
+            <td><span class="zone-pill">${escapeHtml(r.zone)}</span></td>
+            <td>${escapeHtml(r.event_name || '—')}</td>
+            <td>${escapeHtml(r.event_date || '—')}</td>
+            <td>${escapeHtml(r.guests)}</td>
+            <td style="font-size:12px;color:var(--text-muted)">${r.phone ? escapeHtml(r.phone) : '—'}</td>
+            <td style="font-family:monospace;font-size:11px;color:var(--text-muted)">${r.ip ? escapeHtml(r.ip) : '—'}</td>
+            <td>${r.submitted ? new Date(r.submitted).toLocaleDateString() : '—'}</td>
+          </tr>`;
+        }).join('') + '</tbody></table></div>';
     }
 
     // ── Managers ───────────────────────────────────────────────────────────

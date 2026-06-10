@@ -46,6 +46,7 @@ exports.handler = async (event) => {
   const zone      = String(body.zone || '').trim();
   const name      = String(body.name || '').trim();
   const eventName = String(body.eventName || '').trim();
+  const phoneRaw  = String(body.phone || '').trim();
   const guests    = Math.max(1, parseInt(body.guests, 10) || 1);
 
   if (!zone || !name) {
@@ -54,6 +55,27 @@ exports.handler = async (event) => {
   if (guests > 100) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Guest count is too high — please contact the organizer directly.' }) };
   }
+
+  // Phone is optional. If provided, validate it normalizes to 10 digits so we
+  // don't store garbage that won't dedup. Reject if user typed something but
+  // it isn't a real phone number — don't silently drop it.
+  let phone = '';
+  if (phoneRaw) {
+    const digits = phoneRaw.replace(/\D+/g, '');
+    const normalized = (digits.length === 11 && digits.startsWith('1')) ? digits.slice(1) : digits;
+    if (normalized.length !== 10) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Phone number looks invalid. Leave blank if you prefer not to share.' }) };
+    }
+    phone = phoneRaw;  // store as the user typed it; dedup logic normalizes
+  }
+
+  // IP from Netlify's edge headers. Falls through to x-forwarded-for for
+  // local dev / curl tests. 'unknown' as a last resort so the column is
+  // never null (queries get simpler).
+  const ip = event.headers['x-nf-client-connection-ip']
+          || (event.headers['x-forwarded-for'] || '').split(',')[0].trim()
+          || event.headers['client-ip']
+          || 'unknown';
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -85,7 +107,9 @@ exports.handler = async (event) => {
       guests,
       event_name: eventName,
       submitted_at: submittedAt,
-      sheet_row_id: id
+      sheet_row_id: id,
+      phone,
+      ip
     }]);
 
   if (dbError) {
