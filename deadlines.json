@@ -5,7 +5,7 @@
     "date": "Friday, May 29",
     "eventDate": "2026-05-29",
     "time": "6:00 pm",
-    "location": ""
+    "location": "502 Robbins Way, Mountain Top, PA 18707"
   },
   "scranton": {
     "deadline": "2026-05-08",
@@ -13,7 +13,7 @@
     "date": "Friday, May 8",
     "eventDate": "2026-05-08",
     "time": "5:00 pm",
-    "location": ""
+    "location": "311 Oak Street, Scranton, PA 18508"
   },
   "satsang-sabha": {
     "deadline": "",
@@ -21,15 +21,15 @@
     "date": "Sunday, May 3",
     "eventDate": "2026-05-03",
     "time": "4:00 pm",
-    "location": ""
+    "location": "311 Oak Street, Scranton, PA 18508"
   },
   "mandir-1": {
     "deadline": "2026-07-01",
     "eventName": "Mountain Top July 4th Picnic",
-    "date": "Saturday, July 4",
-    "eventDate": "2026-07-04",
+    "date": "Saturday, July 4th",
+    "eventDate": "",
     "time": "10:00 am",
-    "location": ""
+    "location": "3052 Church Rd, Mountain Top, PA 18707"
   },
   "moosic": {
     "deadline": "2026-06-18",
@@ -37,15 +37,15 @@
     "date": "Friday, June 19",
     "eventDate": "2026-06-19",
     "time": "6:00 pm",
-    "location": ""
+    "location": "522 Orchid Drive, Moosic, PA 18507"
   },
   "mandir-2": {
     "deadline": "2026-07-01",
     "eventName": "Scranton July 4th Picnic",
-    "date": "Saturday, July 4",
-    "eventDate": "2026-07-04",
+    "date": "Saturday, July 4th",
+    "eventDate": "",
     "time": "10:00 am",
-    "location": ""
+    "location": "1 Bald Mountain Rd, Scranton, PA 18507"
   },
   "bloomsburg": {
     "deadline": "2026-06-10",
@@ -53,7 +53,7 @@
     "date": "Friday, June 12",
     "eventDate": "2026-06-12",
     "time": "6:00 pm",
-    "location": ""
+    "location": "22 Bond Lane, Bloomsburg, PA 17815"
   },
   "mandir-3": {
     "deadline": "",
@@ -61,6 +61,6 @@
     "date": "Saturday, May 30",
     "eventDate": "2026-05-30",
     "time": "9:00 am - 12:00 pm",
-    "location": ""
+    "location": "500 Arthur Ave, Scranton, PA 18510"
   }
 }
