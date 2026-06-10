@@ -89,10 +89,12 @@
     const RSVP_EVENT_NAME = "Satsang Sabha";
     async function submitRsvp() {
       const nameEl = document.getElementById('rsvp-name');
+      const phoneEl = document.getElementById('rsvp-phone');
       const guestsEl = document.getElementById('rsvp-guests');
       const btn = document.getElementById('rsvp-submit');
       const errEl = document.getElementById('rsvp-error');
       const name = nameEl.value.trim();
+      const phone = phoneEl ? phoneEl.value.trim() : '';
       const guests = parseInt(guestsEl.value, 10);
       errEl.style.display = 'none';
       if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; nameEl.focus(); return; }
@@ -104,7 +106,7 @@
         const res = await fetch('/.netlify/functions/submit-rsvp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ zone: RSVP_ZONE, name: name, guests: guests, eventName: RSVP_EVENT_NAME })
+          body: JSON.stringify({ zone: RSVP_ZONE, name: name, phone: phone, guests: guests, eventName: RSVP_EVENT_NAME })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
