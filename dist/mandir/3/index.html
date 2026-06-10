@@ -87,6 +87,19 @@
     // ── Native RSVP form (mandir slots) ──────────────────────────────────
     const RSVP_ZONE = 'mandir-3';
     const RSVP_EVENT_NAME = "Walkathon";
+    // As-you-type US phone formatter. Strips non-digits, drops leading 1
+    // (so a pasted "+1 555…" still works), caps at 10 digits, and rewrites
+    // the visible value to (xxx) xxx-xxxx. Server-side validation still
+    // re-normalizes, so this is purely visual.
+    function formatPhoneInput(el) {
+      let d = el.value.replace(/D/g, '');
+      if (d.length === 11 && d.startsWith('1')) d = d.slice(1);
+      d = d.slice(0, 10);
+      if (d.length <= 3)      el.value = d;
+      else if (d.length <= 6) el.value = '(' + d.slice(0, 3) + ') ' + d.slice(3);
+      else                    el.value = '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
+    }
+
     async function submitRsvp() {
       const nameEl = document.getElementById('rsvp-name');
       const phoneEl = document.getElementById('rsvp-phone');
