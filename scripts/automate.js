@@ -1024,7 +1024,11 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
         console.log(`✅ dist/ pushed (attempt ${attempt}) — Netlify CI deploying...`);
       } catch (e) {
         console.warn(`⚠️  dist push attempt ${attempt} rejected; rebasing on origin/main and retrying`);
-        run(`git pull --rebase "${remote}" main`);
+        // --autostash so the rebase doesn't fail on the deadlines.json
+        // write that happens earlier in main() and is still unstaged at
+        // this point (the workflow's "Commit deadlines.json" step is what
+        // eventually picks it up).
+        run(`git pull --rebase --autostash "${remote}" main`);
       }
     }
     if (!pushed) {

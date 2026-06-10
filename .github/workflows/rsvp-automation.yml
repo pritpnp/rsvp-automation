@@ -101,7 +101,7 @@ jobs:
               exit 0
             fi
             echo "⚠️  push attempt $attempt rejected — rebasing on origin/main and retrying"
-            git pull --rebase origin main
+            git pull --rebase --autostash origin main
           done
           echo "❌ deadlines.json push failed after 3 attempts"
           exit 1
