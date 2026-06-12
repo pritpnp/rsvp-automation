@@ -1,22 +1,21 @@
 name: Event-Night RSVP Cleanup
 
-# Mirrors the Google Apps Script that wipes Sheet RSVPs at 11 PM on the
-# event night, but applied to BOTH the Sheet and Supabase so the two
-# stores stay in agreement (otherwise the 10-min sync-check would fire
-# drift alerts every time an event ends).
+# Archives past-event RSVPs to keep the admin view focused on upcoming
+# events. Runs the morning AFTER the event so attendees can still be
+# checked at the door the day of.
 #
-# Two crons because GitHub Actions runs in UTC and we want 11 PM
+# Two crons because GitHub Actions runs in UTC and we want 4 AM
 # America/New_York year-round:
-#   - 3 AM UTC = 11 PM EDT (Mar-Nov)
-#   - 4 AM UTC = 11 PM EST (Nov-Mar)
-# Only one is "11 PM local" on any given date; the other firing computes
-# today's NY date inside the script and sees nothing to clean, so it
-# exits silently with no Telegram.
+#   - 8 AM UTC = 4 AM EDT (Mar-Nov)
+#   - 9 AM UTC = 4 AM EST (Nov-Mar)
+# Only one is "4 AM local" on any given date; the other firing computes
+# today's NY date inside the script, finds nothing whose eventDate is
+# strictly before today, and exits silently with no Telegram.
 
 on:
   schedule:
-    - cron: '0 3 * * *'
-    - cron: '0 4 * * *'
+    - cron: '0 8 * * *'
+    - cron: '0 9 * * *'
   workflow_dispatch:
 
 concurrency:

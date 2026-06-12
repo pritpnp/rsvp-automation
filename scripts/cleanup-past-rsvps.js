@@ -101,7 +101,10 @@ async function main() {
   const zonesToClean = [];
   for (const [zone, info] of Object.entries(deadlines)) {
     if (!info?.eventDate) continue;
-    if (info.eventDate <= today) zonesToClean.push({ zone, eventDate: info.eventDate, eventName: info.eventName });
+    // Strictly less-than: archive only AFTER the event day has passed.
+    // The previous <= caused tonight's RSVPs to be wiped at midnight on
+    // event day, before the event had even happened.
+    if (info.eventDate < today) zonesToClean.push({ zone, eventDate: info.eventDate, eventName: info.eventName });
   }
 
   if (!zonesToClean.length) {
