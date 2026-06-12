@@ -122,11 +122,17 @@ async function main() {
     zonesToProcess = [TARGET_ZONE];
   }
 
-  // Filter to zones with future deadlines (unless TEST_MODE)
+  // Filter to zones whose event is today or in the future (unless TEST_MODE).
+  // The old version filtered on the RSVP deadline, which excluded the
+  // day-of-event case where the RSVP window has closed but you want a
+  // final headcount most of all. Fall back to deadline if eventDate is
+  // missing (older entries / mandir slots without a parsed date).
   if (!TEST_MODE) {
     zonesToProcess = zonesToProcess.filter(zone => {
       const info = deadlines[zone];
-      return info && info.deadline && today <= info.deadline;
+      if (!info) return false;
+      const cutoff = info.eventDate || info.deadline;
+      return cutoff && today <= cutoff;
     });
   }
 
