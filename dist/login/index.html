@@ -69,16 +69,24 @@
     // If already logged in, redirect — clear stale token if invalid
     const token = localStorage.getItem('admin_token');
     if (token) {
-      fetch(AUTH_API + '/verify?token=' + token)
+      fetch(AUTH_API + '/verify', { headers: { Authorization: 'Bearer ' + token } })
         .then(r => r.json())
         .then(d => {
           if (d.valid) {
             window.location.replace('/admin');
           } else {
-            localStorage.clear();
+            localStorage.removeItem('admin_token');
+            localStorage.removeItem('admin_username');
+            localStorage.removeItem('admin_role');
+            localStorage.removeItem('admin_permissions');
           }
         })
-        .catch(() => { localStorage.clear(); });
+        .catch(() => {
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('admin_username');
+          localStorage.removeItem('admin_role');
+          localStorage.removeItem('admin_permissions');
+        });
     }
 
     async function login() {

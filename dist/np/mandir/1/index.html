@@ -58,7 +58,7 @@
     <div class="mandir-label">BAPS Scranton Mandir Event</div>
     <h1>Mountain Top July 4th Picnic</h1>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;">
+  <div id="share-bar" style="display:none;background:var(--maroon);padding:12px 16px;">
     <div style="width:100%;max-width:480px;">
       <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
       <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
@@ -74,7 +74,6 @@
   
   <div class="section-divider"><span>RSVP</span></div>
   <div class="rsvp-section">
-    
     <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
     <div style="background:#fff;border-radius:20px;padding:28px 24px;box-shadow:0 4px 24px rgba(122,31,46,0.10);">
       <div id="rsvp-form" style="text-align:left;">
@@ -93,7 +92,6 @@
   <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
   <script>
     const FLYER_URL = 'https://screvents.com/mandir/1/flyer.jpg';
-    
     // ── Native RSVP form (mandir slots) ──────────────────────────────────
     const RSVP_ZONE = 'mandir-1';
     const RSVP_EVENT_NAME = "Mountain Top July 4th Picnic";
@@ -135,7 +133,6 @@
         btn.textContent = 'Submit RSVP →';
       }
     }
-    
     // ── RSVP visibility check ────────────────────────────────────────────
     // Mirrors buildHtmlPage so the admin's RSVP on/off toggle hides the
     // section in real time without needing a redeploy.
@@ -143,7 +140,7 @@
       try {
         const res = await fetch('/.netlify/functions/rsvp-status');
         const settings = await res.json();
-        const zone = 'mandir-1';
+        const zone = "mandir-1";
         const globalEnabled = settings['global'] !== false;
         const zoneEnabled   = settings[zone]    !== false;
         if (!globalEnabled || !zoneEnabled) {

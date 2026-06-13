@@ -236,7 +236,7 @@
       fetch('/.netlify/functions/late-rsvp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, guests: guests, zone: 'mountain-top', eventName: 'Para Satsang Sabha' })
+        body: JSON.stringify({ name: name, guests: guests, zone: "mountain-top", eventName: "Para Satsang Sabha" })
       }).then(function(r) {
         if (r.ok) {
           document.getElementById('late-form').style.display = 'none';
@@ -253,7 +253,7 @@
       try {
         const res = await fetch('/.netlify/functions/rsvp-status');
         const settings = await res.json();
-        const zone = 'mountain-top';
+        const zone = "mountain-top";
         const globalEnabled = settings['global'] !== false;
         const zoneEnabled   = settings[zone]    !== false;
         if (!globalEnabled || !zoneEnabled) {

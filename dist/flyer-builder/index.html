@@ -598,49 +598,6 @@ function drawEl(ctx, id, W, H, scale) {
   });
 }
 
-// ── Download Flyer (screenshot of preview) ───────────────────────────────────────
-async function downloadFlyer() {
-  const btn = document.getElementById('dl-btn');
-  btn.disabled = true; btn.textContent = '⏳ Capturing...';
-  try {
-    const wrap = document.getElementById('flyer-wrap');
-    
-    // Temporarily hide dashed borders on drag items for clean screenshot
-    document.querySelectorAll('.drag-item').forEach(el => {
-      el.dataset.origBorder = el.style.borderColor;
-      el.style.borderColor = 'transparent';
-      el.style.background = 'transparent';
-    });
-
-    const santosChecked = document.getElementById('santos-cb')?.checked;
-    const filename = (currentZone === 'satsang-sabha' && santosChecked ? 'satsang-sabha-santos' : currentZone) + '-flyer.png';
-
-    const canvas = await html2canvas(wrap, {
-      scale: 923 / wrap.offsetWidth,  // render at full 923px width
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: null,
-      logging: false,
-    });
-
-    // Restore borders
-    document.querySelectorAll('.drag-item').forEach(el => {
-      el.style.borderColor = el.dataset.origBorder || 'transparent';
-    });
-
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  } catch(e) {
-    alert('Error: ' + e.message);
-    document.querySelectorAll('.drag-item').forEach(el => {
-      el.style.borderColor = el.dataset.origBorder || 'transparent';
-    });
-  }
-  finally { btn.disabled = false; btn.textContent = '⬇ Download Flyer'; }
-}
-
 // ── Advanced settings toggle ─────────────────────────────────────────────────
 let advancedOpen = false;
 function toggleAdvanced() {
@@ -846,7 +803,7 @@ function renderPreviewCanvas() {
   const img = document.getElementById('preview-template-img');
   if (img) {
     img.crossOrigin = 'anonymous';
-    img.src = templateSrc + '?v=1';
+    img.src = templateSrc;
     img.onload = () => renderPreviewDragItems();
     if (img.complete && img.naturalWidth > 0) renderPreviewDragItems();
   }
@@ -869,6 +826,10 @@ async function sendForReview() {
   btn.disabled = true;
   btn.textContent = '⏳ Capturing flyer...';
 
+  const previewTabBtn = document.querySelector('.builder-tab[onclick*="preview"]');
+  const flyerTabBtn   = document.querySelector('.builder-tab[onclick*="flyer"]');
+  const wasOnFlyer    = document.getElementById('flyer-wrap-outer') && !document.getElementById('flyer-wrap-outer').classList.contains('hidden');
+
   try {
     const santosChecked = document.getElementById('santos-cb')?.checked;
     const wrap = document.getElementById('flyer-wrap');
@@ -876,6 +837,7 @@ async function sendForReview() {
     // ── Step 1: Capture main flyer (always from flyer tab) ──────────────────
     document.querySelectorAll('.drag-item').forEach(el => {
       el.dataset.origBorder = el.style.borderColor;
+      el.dataset.origBg = el.style.background;
       el.style.borderColor = 'transparent';
       el.style.background = 'transparent';
     });
@@ -883,24 +845,27 @@ async function sendForReview() {
       scale: 923 / wrap.offsetWidth,
       useCORS: true, allowTaint: false, backgroundColor: null, logging: false,
     });
-    document.querySelectorAll('.drag-item').forEach(el => {
-      el.style.borderColor = el.dataset.origBorder || 'transparent';
-    });
     const base64 = flyerCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 
     // ── Step 2: Capture preview tab (always, for og.jpg) ────────────────────
     btn.textContent = '⏳ Capturing preview...';
 
     // Switch to preview tab so offsetWidth is valid, then switch back
-    const previewTabBtn = document.querySelector('.builder-tab[onclick*="preview"]');
-    const flyerTabBtn   = document.querySelector('.builder-tab[onclick*="flyer"]');
-    const wasOnFlyer    = document.getElementById('flyer-wrap-outer') && !document.getElementById('flyer-wrap-outer').classList.contains('hidden');
     if (wasOnFlyer) previewTabBtn.click();
-    await new Promise(r => setTimeout(r, 500));
+
+    // Wait for the preview image to actually load before capturing
+    const previewImg = document.getElementById('preview-template-img');
+    if (previewImg && (!previewImg.complete || !previewImg.naturalWidth)) {
+      await new Promise(r => {
+        const t = setTimeout(r, 3000);
+        previewImg.onload = previewImg.onerror = () => { clearTimeout(t); r(); };
+      });
+    }
 
     const previewWrap = document.getElementById('preview-wrap');
     previewWrap.querySelectorAll('.drag-item').forEach(el => {
       el.dataset.origBorder = el.style.borderColor;
+      el.dataset.origBg = el.style.background;
       el.style.borderColor = 'transparent';
       el.style.background = 'transparent';
     });
@@ -909,12 +874,6 @@ async function sendForReview() {
       scale: previewScale,
       useCORS: true, allowTaint: false, backgroundColor: null, logging: false,
     });
-    previewWrap.querySelectorAll('.drag-item').forEach(el => {
-      el.style.borderColor = el.dataset.origBorder || 'transparent';
-    });
-
-    // Switch back to flyer tab
-    if (wasOnFlyer) flyerTabBtn.click();
 
     const ogBase64 = previewCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 
@@ -950,6 +909,12 @@ async function sendForReview() {
     btn.disabled = false;
     btn.textContent = '📤 Send for Review';
     showReviewStatus('❌ ' + err.message, false);
+    if (wasOnFlyer && flyerTabBtn) flyerTabBtn.click();
+  } finally {
+    // Always restore inline styles on drag items (borders + backgrounds)
+    // we transparentised during capture, regardless of success/failure.
+    try { renderDragItems(); } catch (e) {}
+    try { renderPreviewDragItems(); } catch (e) {}
   }
 }
 
@@ -997,9 +962,13 @@ function saveLog() {
   a.href = URL.createObjectURL(blob);
   a.download = 'flyer-positions.json';
   a.click();
-  
-  document.getElementById('dl-btn').textContent = '✅ Saved!';
-  setTimeout(() => document.getElementById('dl-btn').textContent = '💾 Save Position Log', 2000);
+
+  const saveBtn = document.querySelector('button[onclick="saveLog()"]');
+  if (saveBtn) {
+    const orig = saveBtn.textContent;
+    saveBtn.textContent = '✅ Saved!';
+    setTimeout(() => { saveBtn.textContent = orig; }, 2000);
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1108,13 +1077,4 @@ document.getElementById('template-img').onload = () => {
 };
 </script>
 </body>
-</html
-const PREVIEW_TEMPLATES = {
-  'scranton': '/flyer-builder/preview-templates/scranton.png',
-  'mountain-top': '/flyer-builder/preview-templates/mountain-top.png',
-  'moosic': '/flyer-builder/preview-templates/moosic.png',
-  'bloomsburg': '/flyer-builder/preview-templates/bloomsburg.png',
-  'satsang-sabha': '/flyer-builder/preview-templates/satsang-sabha.png',
-};
-
->
+</html>

@@ -58,7 +58,7 @@
     <div class="mandir-label">BAPS Scranton Mandir Event</div>
     <h1>Satsang Sabha</h1>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;">
+  <div id="share-bar" style="display:none;background:var(--maroon);padding:12px 16px;">
     <div style="width:100%;max-width:480px;">
       <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
       <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
@@ -75,7 +75,6 @@
   <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
   <script>
     const FLYER_URL = 'https://screvents.com/satsang-sabha/flyer.jpg';
-    
     // ── Native RSVP form (mandir slots) ──────────────────────────────────
     const RSVP_ZONE = 'satsang-sabha';
     const RSVP_EVENT_NAME = "Satsang Sabha";
@@ -117,7 +116,6 @@
         btn.textContent = 'Submit RSVP →';
       }
     }
-    
     // ── RSVP visibility check ────────────────────────────────────────────
     // Mirrors buildHtmlPage so the admin's RSVP on/off toggle hides the
     // section in real time without needing a redeploy.
@@ -125,7 +123,7 @@
       try {
         const res = await fetch('/.netlify/functions/rsvp-status');
         const settings = await res.json();
-        const zone = 'satsang-sabha';
+        const zone = "satsang-sabha";
         const globalEnabled = settings['global'] !== false;
         const zoneEnabled   = settings[zone]    !== false;
         if (!globalEnabled || !zoneEnabled) {
