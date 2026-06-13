@@ -63,7 +63,7 @@ exports.handler = async (event) => {
 
   let query = supabase
     .from('rsvps_archive')
-    .select('id, zone, name, guests, event_name, submitted_at, sheet_row_id, phone, ip, event_date, archived_at')
+    .select('id, zone, name, guests, event_name, submitted_at, sheet_row_id, event_date, archived_at')
     .order('archived_at', { ascending: false })
     .order('submitted_at', { ascending: false });
 
@@ -74,43 +74,17 @@ exports.handler = async (event) => {
   const { data, error } = await query;
   if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
 
-  // Dedup signals within the filtered scope — what's a duplicate depends on
-  // which slice of the archive you're looking at, so we recompute it here
-  // rather than precomputing on the entire archive.
-  const phoneCounts = new Map();
-  const ipCounts = new Map();
-  const normPhone = p => String(p || '').replace(/\D+/g, '').replace(/^1(?=\d{10}$)/, '');
-  for (const r of (data || [])) {
-    const np = normPhone(r.phone);
-    if (np && np.length >= 7) {
-      const k = r.zone + '|' + (r.event_date || '') + '|' + np;
-      phoneCounts.set(k, (phoneCounts.get(k) || 0) + 1);
-    }
-    if (r.ip && r.ip !== 'unknown') {
-      const k = r.zone + '|' + (r.event_date || '') + '|' + r.ip;
-      ipCounts.set(k, (ipCounts.get(k) || 0) + 1);
-    }
-  }
-  const rows = (data || []).map(r => {
-    const signals = [];
-    const np = normPhone(r.phone);
-    if (np && np.length >= 7 && phoneCounts.get(r.zone + '|' + (r.event_date || '') + '|' + np) > 1) signals.push('phone');
-    if (r.ip && r.ip !== 'unknown' && ipCounts.get(r.zone + '|' + (r.event_date || '') + '|' + r.ip) > 1) signals.push('ip');
-    return {
-      id:           r.id,
-      zone:         r.zone,
-      name:         r.name,
-      guests:       String(r.guests),
-      submitted:    r.submitted_at || '',
-      powerapps_id: r.sheet_row_id || '',
-      phone:        r.phone || '',
-      ip:           r.ip || '',
-      event_name:   r.event_name || '',
-      event_date:   r.event_date || '',
-      archived_at:  r.archived_at || '',
-      dup_signals:  signals
-    };
-  });
+  const rows = (data || []).map(r => ({
+    id:           r.id,
+    zone:         r.zone,
+    name:         r.name,
+    guests:       String(r.guests),
+    submitted:    r.submitted_at || '',
+    powerapps_id: r.sheet_row_id || '',
+    event_name:   r.event_name || '',
+    event_date:   r.event_date || '',
+    archived_at:  r.archived_at || ''
+  }));
 
   // Pull the distinct dropdown options separately so the admin can populate
   // them even when the current filter narrows the result set to one zone.

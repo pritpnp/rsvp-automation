@@ -122,7 +122,7 @@ async function main() {
   // can preserve id, name, etc. in the archive table.
   const { data: liveRows, error: readErr } = await supabase
     .from('rsvps')
-    .select('id, zone, name, guests, event_name, submitted_at, sheet_row_id, phone, ip')
+    .select('id, zone, name, guests, event_name, submitted_at, sheet_row_id')
     .in('zone', zoneList);
   if (readErr) throw new Error('Supabase pre-read failed: ' + readErr.message);
 
@@ -151,8 +151,6 @@ async function main() {
     event_name:   r.event_name,
     submitted_at: r.submitted_at,
     sheet_row_id: r.sheet_row_id,
-    phone:        r.phone || null,
-    ip:           r.ip || null,
     event_date:   eventDateByZone[r.zone] || '',
     archived_at:  archivedAt
   }));

@@ -88,7 +88,7 @@ exports.handler = async (event) => {
 
     const { data: supabaseRows, error: dbErr } = await supabase
       .from('rsvps')
-      .select('zone, name, guests, submitted_at, sheet_row_id, phone, ip')
+      .select('zone, name, guests, submitted_at, sheet_row_id')
       .order('submitted_at', { ascending: false });
 
     if (dbErr) {
@@ -105,9 +105,7 @@ exports.handler = async (event) => {
       name:         r.name,
       guests:       String(r.guests),
       submitted:    r.submitted_at || '',
-      powerapps_id: r.sheet_row_id || '',
-      phone:        r.phone || '',
-      ip:           r.ip || ''
+      powerapps_id: r.sheet_row_id || ''
     }));
 
     // Best-effort merge with Sheet — pulls in historical rows that haven't
@@ -127,36 +125,7 @@ exports.handler = async (event) => {
     }
 
     // Concat: Supabase rows (already newest-first) + Sheet-only legacy rows.
-    const merged = fromSupabase.concat(fromSheetOnly);
-
-    // Annotate each row with dup_signals — array of strings indicating which
-    // identifiers (phone, ip) appear on more than one row in the same zone.
-    // The admin UI uses this to flag "possible duplicate" without making the
-    // call (a family might legitimately share a phone/IP). Sheet-only rows
-    // have no phone/ip so they're naturally excluded from the matching.
-    const phoneCounts = new Map(); // key: zone|normalizedPhone → count
-    const ipCounts    = new Map(); // key: zone|ip → count
-    const normPhone = p => String(p || '').replace(/\D+/g, '').replace(/^1(?=\d{10}$)/, '');
-    for (const r of merged) {
-      const np = normPhone(r.phone);
-      if (np && np.length >= 7) {
-        const k = r.zone + '|' + np;
-        phoneCounts.set(k, (phoneCounts.get(k) || 0) + 1);
-      }
-      if (r.ip && r.ip !== 'unknown') {
-        const k = r.zone + '|' + r.ip;
-        ipCounts.set(k, (ipCounts.get(k) || 0) + 1);
-      }
-    }
-    for (const r of merged) {
-      const signals = [];
-      const np = normPhone(r.phone);
-      if (np && np.length >= 7 && phoneCounts.get(r.zone + '|' + np) > 1) signals.push('phone');
-      if (r.ip && r.ip !== 'unknown' && ipCounts.get(r.zone + '|' + r.ip) > 1) signals.push('ip');
-      r.dup_signals = signals;
-    }
-
-    return { statusCode: 200, headers, body: JSON.stringify(merged) };
+    return { statusCode: 200, headers, body: JSON.stringify(fromSupabase.concat(fromSheetOnly)) };
   }
 
   // PATCH — update guest count. Dual-write Supabase + Sheet.

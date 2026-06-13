@@ -61,7 +61,7 @@ exports.handler = async (event) => {
 
   let query = supabase
     .from('rsvps_archive')
-    .select('id, zone, name, guests, event_name, submitted_at, sheet_row_id, phone, ip, event_date');
+    .select('id, zone, name, guests, event_name, submitted_at, sheet_row_id, event_date');
   if (zoneFilter) query = query.eq('zone', zoneFilter);
   if (dateFilter) query = query.eq('event_date', dateFilter);
 
@@ -81,9 +81,7 @@ exports.handler = async (event) => {
     guests:       r.guests,
     event_name:   r.event_name,
     submitted_at: r.submitted_at,
-    sheet_row_id: r.sheet_row_id,
-    phone:        r.phone,
-    ip:           r.ip
+    sheet_row_id: r.sheet_row_id
   }));
   const { error: insertErr } = await supabase
     .from('rsvps')

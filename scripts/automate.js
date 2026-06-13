@@ -231,10 +231,8 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
       <div style="background:#fff;border-radius:20px;padding:28px 24px;box-shadow:0 4px 24px rgba(92,45,10,0.10);">
         <div id="rsvp-form" style="text-align:left;">
           <input id="rsvp-name" type="text" placeholder="Full Name" autocomplete="name" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
-          <input id="rsvp-guests" type="number" placeholder="Number of Guests" min="1" max="100" inputmode="numeric" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
-          <input id="rsvp-phone" type="tel" placeholder="Phone (optional)" autocomplete="tel" inputmode="tel" maxlength="14" oninput="formatPhoneInput(this)" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:14px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
+          <input id="rsvp-guests" type="number" placeholder="Number of Guests" min="1" max="100" inputmode="numeric" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:14px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
           <button id="rsvp-submit" onclick="submitRsvp()" style="width:100%;padding:14px;background:linear-gradient(135deg,#C8860A,#E6A817);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity 0.2s ease;">Submit RSVP →</button>
-          <p style="font-size:11px;color:#8B6040;text-align:center;margin-top:10px;line-height:1.5;">Phone is optional. We log basic submission info to prevent duplicate RSVPs.</p>
         </div>
         <div id="rsvp-success" style="display:none;text-align:center;padding:8px 0;">
           <div style="font-size:44px;margin-bottom:10px;">🙏</div>
@@ -332,27 +330,12 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
     // ── Native RSVP form (Phase 2 — replaces MS Forms iframe) ────────────
     const RSVP_ZONE = '${zone}';
     const RSVP_EVENT_NAME = ${JSON.stringify(eventInfo.eventName || '')};
-    // As-you-type US phone formatter. Strips non-digits, drops leading 1
-    // (so a pasted "+1 555…" still works), caps at 10 digits, and rewrites
-    // the visible value to (xxx) xxx-xxxx. Server-side validation still
-    // re-normalizes, so this is purely visual.
-    function formatPhoneInput(el) {
-      let d = el.value.replace(/\D/g, '');
-      if (d.length === 11 && d.startsWith('1')) d = d.slice(1);
-      d = d.slice(0, 10);
-      if (d.length <= 3)      el.value = d;
-      else if (d.length <= 6) el.value = '(' + d.slice(0, 3) + ') ' + d.slice(3);
-      else                    el.value = '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
-    }
-
     async function submitRsvp() {
       const nameEl = document.getElementById('rsvp-name');
-      const phoneEl = document.getElementById('rsvp-phone');
       const guestsEl = document.getElementById('rsvp-guests');
       const btn = document.getElementById('rsvp-submit');
       const errEl = document.getElementById('rsvp-error');
       const name = nameEl.value.trim();
-      const phone = phoneEl ? phoneEl.value.trim() : '';
       const guests = parseInt(guestsEl.value, 10);
       errEl.style.display = 'none';
       if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; nameEl.focus(); return; }
@@ -364,7 +347,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
         const res = await fetch('/.netlify/functions/submit-rsvp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ zone: RSVP_ZONE, name: name, phone: phone, guests: guests, eventName: RSVP_EVENT_NAME })
+          body: JSON.stringify({ zone: RSVP_ZONE, name: name, guests: guests, eventName: RSVP_EVENT_NAME })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
@@ -542,10 +525,8 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     <div style="background:#fff;border-radius:20px;padding:28px 24px;box-shadow:0 4px 24px rgba(122,31,46,0.10);">
       <div id="rsvp-form" style="text-align:left;">
         <input id="rsvp-name" type="text" placeholder="Full Name" autocomplete="name" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#3D1A00;" />
-        <input id="rsvp-guests" type="number" placeholder="Number of Guests" min="1" max="100" inputmode="numeric" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#3D1A00;" />
-        <input id="rsvp-phone" type="tel" placeholder="Phone (optional)" autocomplete="tel" inputmode="tel" maxlength="14" oninput="formatPhoneInput(this)" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:14px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#3D1A00;" />
+        <input id="rsvp-guests" type="number" placeholder="Number of Guests" min="1" max="100" inputmode="numeric" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:14px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#3D1A00;" />
         <button id="rsvp-submit" onclick="submitRsvp()" style="width:100%;padding:14px;background:linear-gradient(135deg,#7A1F2E,#A0304A);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity 0.2s ease;">Submit RSVP →</button>
-        <p style="font-size:11px;color:#8B6040;text-align:center;margin-top:10px;line-height:1.5;">Phone is optional. We log basic submission info to prevent duplicate RSVPs.</p>
       </div>
       <div id="rsvp-success" style="display:none;text-align:center;padding:8px 0;">
         <div style="font-size:44px;margin-bottom:10px;">🙏</div>
@@ -571,27 +552,12 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     // ── Native RSVP form (mandir slots) ──────────────────────────────────
     const RSVP_ZONE = '${slot}';
     const RSVP_EVENT_NAME = ${JSON.stringify(eventInfo.eventName || '')};
-    // As-you-type US phone formatter. Strips non-digits, drops leading 1
-    // (so a pasted "+1 555…" still works), caps at 10 digits, and rewrites
-    // the visible value to (xxx) xxx-xxxx. Server-side validation still
-    // re-normalizes, so this is purely visual.
-    function formatPhoneInput(el) {
-      let d = el.value.replace(/\D/g, '');
-      if (d.length === 11 && d.startsWith('1')) d = d.slice(1);
-      d = d.slice(0, 10);
-      if (d.length <= 3)      el.value = d;
-      else if (d.length <= 6) el.value = '(' + d.slice(0, 3) + ') ' + d.slice(3);
-      else                    el.value = '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
-    }
-
     async function submitRsvp() {
       const nameEl = document.getElementById('rsvp-name');
-      const phoneEl = document.getElementById('rsvp-phone');
       const guestsEl = document.getElementById('rsvp-guests');
       const btn = document.getElementById('rsvp-submit');
       const errEl = document.getElementById('rsvp-error');
       const name = nameEl.value.trim();
-      const phone = phoneEl ? phoneEl.value.trim() : '';
       const guests = parseInt(guestsEl.value, 10);
       errEl.style.display = 'none';
       if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; nameEl.focus(); return; }
@@ -603,7 +569,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
         const res = await fetch('/.netlify/functions/submit-rsvp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ zone: RSVP_ZONE, name: name, phone: phone, guests: guests, eventName: RSVP_EVENT_NAME })
+          body: JSON.stringify({ zone: RSVP_ZONE, name: name, guests: guests, eventName: RSVP_EVENT_NAME })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
