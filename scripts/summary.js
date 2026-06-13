@@ -1,34 +1,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-
-// ─── Proven download function (handles Google Sheets redirect chain) ───────────
-function download(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    const handleResponse = (res) => {
-      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
-        file.close();
-        fs.truncate(dest, 0, () => {});
-        const redirectUrl = res.headers.location;
-        const lib = redirectUrl.startsWith('https') ? https : require('http');
-        lib.get(redirectUrl, handleResponse).on('error', reject);
-        return;
-      }
-      if (res.statusCode !== 200) {
-        reject(new Error(`Download failed: HTTP ${res.statusCode}`));
-        return;
-      }
-      const newFile = fs.createWriteStream(dest);
-      res.pipe(newFile);
-      newFile.on('finish', () => newFile.close(resolve));
-    };
-    https.get(url, handleResponse).on('error', err => {
-      fs.unlink(dest, () => {});
-      reject(err);
-    });
-  });
-}
+const { createClient } = require('@supabase/supabase-js');
 
 // ─── Telegram sender ───────────────────────────────────────────────────────────
 function sendTelegram(token, chatId, message) {
@@ -74,7 +47,6 @@ async function main() {
   const TARGET_ZONE        = process.env.TARGET_ZONE || 'all';
   const TRIGGER_CHAT_ID    = process.env.TRIGGER_CHAT_ID || '';
   const TEST_MODE          = process.env.TEST_MODE === 'true';
-  const SHEET_ID           = process.env.GOOGLE_SHEET_ID;
 
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
     console.error('Missing required environment variables');
@@ -90,26 +62,22 @@ async function main() {
   const deadlines = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8'));
   console.log('Deadlines loaded:', JSON.stringify(deadlines, null, 2));
 
-  // Download CSV from Google Sheets
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-  console.log('Downloading responses from Google Sheets...');
-  const csvPath = '/tmp/responses.csv';
-  await download(csvUrl, csvPath);
-  console.log('Downloaded successfully');
-
-  const csvText = fs.readFileSync(csvPath, 'utf8');
-  const lines = csvText.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-  const responses = lines.slice(1).map(line => {
-    const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-    const row = {};
-    headers.forEach((h, i) => row[h] = vals[i] || '');
-    return row;
-  });
+  // Pull responses from Supabase (replaces Sheets CSV — the naive `line.split(',')`
+  // parser corrupted any name containing a comma).
+  console.log('Pulling responses from Supabase...');
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+  const { data: responses, error: supaError } = await supabase
+    .from('rsvps')
+    .select('zone, name, guests, sheet_row_id, event_name');
+  if (supaError) {
+    console.error('Supabase pull failed:', supaError.message);
+    process.exit(1);
+  }
   console.log(`${responses.length} responses loaded`);
   if (responses.length > 0) console.log('Sample row:', JSON.stringify(responses[0]));
 
-  const today = new Date().toISOString().split('T')[0];
+  // NY-local "today" — using UTC drifts to the wrong calendar day after ~8pm ET.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   console.log(`Today: ${today} | TARGET_ZONE: ${TARGET_ZONE} | TRIGGER_CHAT_ID: ${TRIGGER_CHAT_ID} | TEST_MODE: ${TEST_MODE}`);
 
   // Determine which zones to summarise

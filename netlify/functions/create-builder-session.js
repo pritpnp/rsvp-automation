@@ -36,6 +36,8 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to use flyer builder' }) };
 
     allowedZones = manager.permissions.flyer_zones || [];
+    if (allowedZones.length === 0)
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'No zones authorized for flyer builder' }) };
     allowAdvanced = !!manager.permissions.flyer_builder_advanced;
     managerId = manager.id;
   }

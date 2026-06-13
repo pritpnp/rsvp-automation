@@ -36,10 +36,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
         with:
-          # fetch enough history that we can diff back to the last
+          # fetch full history so we can reliably diff back to the last
           # "deploy: update dist" commit (see the FLYERS step below).
-          # 50 covers many days of activity without a full clone.
-          fetch-depth: 50
+          # Repo is small (~144MB), so a full clone is cheap and avoids
+          # silently missing the last-deploy marker on a shallow clone.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -72,6 +73,13 @@ jobs:
           # The last-deploy commit is a stable marker of "everything before
           # this has already been OCR'd"; anything since then needs OCR.
           LAST_DEPLOY=$(git log --pretty=%H --grep='^deploy: update dist' -1 || echo "")
+          # Guard against a LAST_DEPLOY that isn't an ancestor of HEAD (e.g.
+          # force-push rewrote history). Surface it in the workflow log rather
+          # than silently falling through to HEAD~1.
+          if [ -n "$LAST_DEPLOY" ] && ! git merge-base --is-ancestor "$LAST_DEPLOY" HEAD; then
+            echo "::warning::LAST_DEPLOY $LAST_DEPLOY not ancestor of HEAD, falling back"
+            LAST_DEPLOY=""
+          fi
           if [ -n "$LAST_DEPLOY" ] && [ "$LAST_DEPLOY" != "$(git rev-parse HEAD)" ]; then
             DIFF_BASE="$LAST_DEPLOY"
           else

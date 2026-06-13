@@ -5,6 +5,10 @@ on:
     - cron: '0 1 * * *'  # 9:00 PM EDT (UTC-4) daily
   workflow_dispatch:
 
+concurrency:
+  group: final-summary
+  cancel-in-progress: false
+
 jobs:
   send-final-summary:
     runs-on: ubuntu-latest

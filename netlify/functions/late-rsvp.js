@@ -32,7 +32,17 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: 'Missing required fields' };
   }
 
-  const message = `🔔 <b>Late RSVP</b>\n<b>${eventName}</b>\n${name} — ${guests || 1} guest(s)`;
+  if (!Object.prototype.hasOwnProperty.call(ZONE_CHAT_IDS, zone)) {
+    return { statusCode: 400, body: 'Invalid zone' };
+  }
+
+  const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const safeName = escapeHtml(String(name).slice(0, 80));
+  const safeEventName = escapeHtml(String(eventName).slice(0, 80));
+  const safeGuests = escapeHtml(guests || 1);
+
+  const message = `🔔 <b>Late RSVP</b>\n<b>${safeEventName}</b>\n${safeName} — ${safeGuests} guest(s)`;
 
   async function sendTelegram(chatId, text) {
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {

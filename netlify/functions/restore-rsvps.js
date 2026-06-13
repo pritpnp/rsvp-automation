@@ -42,6 +42,24 @@ async function appendBatchToSheet(rows) {
   });
 }
 
+async function fetchExistingSheetRowIds() {
+  const credsRaw = process.env.GOOG_SA_JSON;
+  if (!credsRaw || !SHEET_ID) {
+    throw new Error('Google Sheets env vars missing (GOOG_SA_JSON / GOOGLE_SHEET_ID)');
+  }
+  const auth = new google.auth.GoogleAuth({
+    credentials: JSON.parse(credsRaw),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+  });
+  const sheets = google.sheets({ version: 'v4', auth });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${SHEET_TAB}!E:E`
+  });
+  const rows = res.data.values || [];
+  return new Set(rows.map(r => (r[0] || '').toString().trim()).filter(Boolean));
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (event.httpMethod !== 'POST') {
@@ -96,16 +114,24 @@ exports.handler = async (event) => {
   // will flag drift until manually reconciled.
   let sheetRestored = 0;
   try {
-    const sheetRows = archived.map(r => [
-      r.zone,
-      r.name,
-      String(r.guests),
-      r.submitted_at
-        ? new Date(r.submitted_at).toLocaleString('en-US', { timeZone: 'America/New_York' })
-        : new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
-      r.sheet_row_id || r.id
-    ]);
-    await appendBatchToSheet(sheetRows);
+    // Dedup against column E so re-runs (or rows that were never removed
+    // from the Sheet during archive) don't create duplicate Sheet rows.
+    // Mirrors the pattern in backfill-rsvps.js.
+    const existingSheetIds = await fetchExistingSheetRowIds();
+    const sheetRows = archived
+      .filter(r => !existingSheetIds.has(String(r.sheet_row_id || r.id)))
+      .map(r => [
+        r.zone,
+        r.name,
+        String(r.guests),
+        r.submitted_at
+          ? new Date(r.submitted_at).toLocaleString('en-US', { timeZone: 'America/New_York' })
+          : new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+        r.sheet_row_id || r.id
+      ]);
+    if (sheetRows.length > 0) {
+      await appendBatchToSheet(sheetRows);
+    }
     sheetRestored = sheetRows.length;
   } catch (e) {
     console.warn('Sheet re-append failed:', e.message);

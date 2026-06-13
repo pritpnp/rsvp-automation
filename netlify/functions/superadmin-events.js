@@ -13,7 +13,7 @@ exports.handler = async (event) => {
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 
   // Check if superadmin (password or superadmin session token)
-  let isSuperadmin = adminPassword === process.env.ADMIN_PASSWORD;
+  let isSuperadmin = !!process.env.ADMIN_PASSWORD && !!adminPassword && adminPassword === process.env.ADMIN_PASSWORD;
   let authed = isSuperadmin;
 
   if (!authed && managerToken) {

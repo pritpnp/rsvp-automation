@@ -1,8 +1,50 @@
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
+
+// Constant-time string equality to prevent timing attacks on the webhook secret.
+const constantTimeEqual = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+};
+
+// Build ZONE_CHAT_MAP only from env vars that are actually defined,
+// so multiple undefined vars don't all collapse onto a single 'undefined' key.
+const ZONE_CHAT_PAIRS = [
+  [process.env.TELEGRAM_CHAT_ID_SCRANTON,     'scranton'],
+  [process.env.TELEGRAM_CHAT_ID_MOUNTAIN_TOP, 'mountain-top'],
+  [process.env.TELEGRAM_CHAT_ID_MOOSIC,       'moosic'],
+  [process.env.TELEGRAM_CHAT_ID_BLOOMSBURG,   'bloomsburg'],
+  [process.env.TELEGRAM_CHAT_ID_MANDIR,       'mandir'],
+];
+const MISSING_ZONE_ENV_VARS = [
+  ['TELEGRAM_CHAT_ID_SCRANTON',     process.env.TELEGRAM_CHAT_ID_SCRANTON],
+  ['TELEGRAM_CHAT_ID_MOUNTAIN_TOP', process.env.TELEGRAM_CHAT_ID_MOUNTAIN_TOP],
+  ['TELEGRAM_CHAT_ID_MOOSIC',       process.env.TELEGRAM_CHAT_ID_MOOSIC],
+  ['TELEGRAM_CHAT_ID_BLOOMSBURG',   process.env.TELEGRAM_CHAT_ID_BLOOMSBURG],
+  ['TELEGRAM_CHAT_ID_MANDIR',       process.env.TELEGRAM_CHAT_ID_MANDIR],
+].filter(([, v]) => !v).map(([name]) => name);
+if (MISSING_ZONE_ENV_VARS.length) {
+  console.error(`Missing TELEGRAM_CHAT_ID_* env vars (zone routing disabled for these): ${MISSING_ZONE_ENV_VARS.join(', ')}`);
+}
+const ZONE_CHAT_MAP = Object.fromEntries(ZONE_CHAT_PAIRS.filter(([k]) => k));
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 200, body: 'OK' };
+  }
+
+  // Verify Telegram webhook secret token (constant-time compare).
+  // Telegram sends this header when the webhook is registered with a secret_token.
+  // After deploy, call setWebhook with the matching secret_token parameter.
+  const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const providedSecret =
+    (event.headers && (event.headers['x-telegram-bot-api-secret-token'] || event.headers['X-Telegram-Bot-Api-Secret-Token'])) || '';
+  if (!expectedSecret || !constantTimeEqual(providedSecret, expectedSecret)) {
+    // Silently swallow unauthenticated requests so attackers can't probe.
+    return { statusCode: 200, body: '' };
   }
 
   let body;
@@ -51,14 +93,8 @@ exports.handler = async (event) => {
   };
 
   // ─── Constants ─────────────────────────────────────────────────────────────
-
-  const ZONE_CHAT_MAP = {
-    [process.env.TELEGRAM_CHAT_ID_SCRANTON]:     'scranton',
-    [process.env.TELEGRAM_CHAT_ID_MOUNTAIN_TOP]: 'mountain-top',
-    [process.env.TELEGRAM_CHAT_ID_MOOSIC]:       'moosic',
-    [process.env.TELEGRAM_CHAT_ID_BLOOMSBURG]:   'bloomsburg',
-    [process.env.TELEGRAM_CHAT_ID_MANDIR]:       'mandir',
-  };
+  // ZONE_CHAT_MAP is hoisted to module scope (see top of file) so undefined
+  // env vars don't collapse onto a single 'undefined' key.
 
   const MANDIR_ZONES = [
     'satsang-sabha',
@@ -405,17 +441,23 @@ exports.handler = async (event) => {
       await answerCallbackQuery(callbackQuery.id, 'Approving...');
       await clearButtons(cbChatId, msgId);
 
+      // Atomic claim: only one caller can flip pending -> processing.
+      // Prevents duplicate GitHub commits / spurious "Approval failed" messages
+      // on Telegram webhook redelivery or admin double-click.
+      const { data: review, error: claimErr } = await supabase
+        .from('flyer_reviews')
+        .update({ status: 'processing' })
+        .eq('id', reviewId)
+        .eq('status', 'pending')
+        .select()
+        .single();
+
+      if (claimErr || !review) {
+        // Lost the race (already processing/approved/rejected) or not found — silently ack.
+        return { statusCode: 200, body: 'OK' };
+      }
+
       try {
-        // Fetch review record
-        const { data: review } = await supabase
-          .from('flyer_reviews')
-          .select('*')
-          .eq('id', reviewId)
-          .single();
-
-        if (!review) throw new Error('Review not found');
-        if (review.status !== 'pending') throw new Error('Already processed');
-
         // Download main flyer from Supabase storage
         const { data: signedData } = await supabase.storage
           .from('flyer-reviews')
@@ -456,13 +498,17 @@ exports.handler = async (event) => {
           const existing = await listRes.json();
           for (const file of existing) {
             if (/\.(jpg|jpeg|png)$/i.test(file.name)) {
-              await fetch(file.url, {
+              const delRes = await fetch(file.url, {
                 method: 'DELETE', headers: ghHeaders,
                 body: JSON.stringify({
                   message: `Remove old flyer for ${zone} before approved upload`,
                   sha: file.sha,
                 }),
               });
+              if (!delRes.ok) {
+                const errText = await delRes.text();
+                throw new Error(`GitHub delete failed for ${file.name} (${delRes.status}): ${errText}`);
+              }
             }
           }
         }
@@ -520,6 +566,17 @@ exports.handler = async (event) => {
 
       } catch (err) {
         console.error('Review approve error:', err);
+        // Roll the claim back so the admin can retry. Use eq('status','processing')
+        // so we don't clobber a state set by another path (e.g. a manual reject).
+        try {
+          await supabase
+            .from('flyer_reviews')
+            .update({ status: 'pending' })
+            .eq('id', reviewId)
+            .eq('status', 'processing');
+        } catch (rollbackErr) {
+          console.error('Failed to roll back review status to pending:', rollbackErr);
+        }
         await editMessageCaption(cbChatId, msgId, `❌ Approval failed: ${err.message}`);
       }
 

@@ -14,7 +14,6 @@ exports.handler = async (event) => {
   let isSuperadmin = adminPassword === process.env.ADMIN_PASSWORD;
 
   if (!isSuperadmin && managerToken) {
-    const { createClient } = require('@supabase/supabase-js');
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
     const { data: session } = await supabase
       .from('manager_sessions')
@@ -87,6 +86,7 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'DELETE') {
     const { id } = JSON.parse(event.body);
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
+    await supabase.from('manager_sessions').delete().eq('manager_id', id);
     const { error } = await supabase.from('managers').delete().eq('id', id);
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };

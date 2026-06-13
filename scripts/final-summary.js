@@ -76,9 +76,7 @@ async function main() {
     return row;
   });
 
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const today = yesterday.toISOString().split('T')[0]; // "today" here means the event day (9pm EDT = 1am UTC next day)
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   console.log(`Final summary check | Today: ${today} | TEST_MODE: ${TEST_MODE}`);
 
   let sent = 0;

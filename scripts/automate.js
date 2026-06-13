@@ -22,19 +22,6 @@ const PARASABHA_ZONES = ['scranton', 'mountain-top', 'moosic', 'bloomsburg'];
 const MANDIR_ZONES = ['satsang-sabha', 'mandir-1', 'mandir-2', 'mandir-3', 'mandir-4', 'mandir-5'];
 const MANDIR_SLOTS = ['mandir-1', 'mandir-2', 'mandir-3', 'mandir-4', 'mandir-5'];
 
-function getGoogleForm(zone) {
-  const zoneForms = {
-    'mountain-top':  'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNUwxNTFRV0tSVTkyVDBGRVpYRE5QSDVBSi4u',
-    'scranton':      'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNThFNTFGMTRKVlE1SUM4MVJKR05JNlA2Ny4u',
-    'satsang-sabha': 'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUODdBRUVZM1pLRk8xRDZaN0JENkg3WUJRVi4u',
-    'moosic':        'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNjhXRUVMNkExVEVNQVZRNDhBRTRRUDFXRy4u',
-    'bloomsburg':    'https://forms.office.com/Pages/ResponsePage.aspx?id=vYPE0EyNF0uHS9KIombwfolzbVLOnpVGkHKVQVfq6HdUNlpMN09XTFBNUTBCMjRLSVNUOVcxVjkzRC4u'
-  };
-  const formUrl = zoneForms[zone];
-  if (!formUrl) throw new Error('No form found for zone: ' + zone);
-  return { formUrl, embedUrl: formUrl };
-}
-
 // ── Supabase: resolve canonical event name ────────────────────────────────
 // If a name has been set in zone_events, use it.
 // Otherwise, save the OCR-extracted name as the initial value and return it.
@@ -101,14 +88,14 @@ async function extractEventInfo(flyerPath) {
     max_tokens: 1000,
     messages: [{ role: 'user', content: [
       { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
-      { type: 'text', text: `The current year is 2026. Extract event info from this flyer. Return ONLY valid JSON with NO extra text.
+      { type: 'text', text: `The current year is ${new Date().getFullYear()}. Extract event info from this flyer. Return ONLY valid JSON with NO extra text.
 
 STRICT RULES:
 - date: Use format "Weekday, Month Day" e.g. "Friday, March 20". NEVER use ISO format. NEVER include year.
 - time: Use format "6:00 pm" (lowercase am/pm)
 - location: Address ONLY. No sponsor names, no host names. Just the street address, city, state, zip.
 - location: Read street numbers very carefully. Count each digit exactly as printed. Do not add or remove digits (e.g. "311" must not become "3111").
-- rsvpDeadline: YYYY-MM-DD format using year 2026 unless clearly stated otherwise. Empty string if not mentioned.
+- rsvpDeadline: YYYY-MM-DD format using year ${new Date().getFullYear()} unless clearly stated otherwise. Empty string if not mentioned.
 
 {"eventName":"...","date":"...","time":"...","location":"...","description":"...","rsvpDeadline":"..."}` }
     ]}]
@@ -127,7 +114,7 @@ STRICT RULES:
   return info;
 }
 
-function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview = false, ogSha1 = '') {
+function buildHtmlPage(eventInfo, zone, flyerPath, noPreview = false, ogSha1 = '') {
   const zoneLabel = zoneName(zone);
   const pageUrl = `https://screvents.com/${zone}`;
   const flyerUrl = `${pageUrl}/flyer.jpg`;
@@ -387,7 +374,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
       fetch('/.netlify/functions/late-rsvp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, guests: guests, zone: '${zone}', eventName: '${eventInfo.eventName}' })
+        body: JSON.stringify({ name: name, guests: guests, zone: ${JSON.stringify(zone)}, eventName: ${JSON.stringify(eventInfo.eventName || '')} })
       }).then(function(r) {
         if (r.ok) {
           document.getElementById('late-form').style.display = 'none';
@@ -404,7 +391,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
       try {
         const res = await fetch('/.netlify/functions/rsvp-status');
         const settings = await res.json();
-        const zone = '${zone}';
+        const zone = ${JSON.stringify(zone)};
         const globalEnabled = settings['global'] !== false;
         const zoneEnabled   = settings[zone]    !== false;
         if (!globalEnabled || !zoneEnabled) {
@@ -421,7 +408,7 @@ function buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl, noPreview 
 }
 
 
-function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPreview = false, overrideUrl = null, ogSha1 = '') {
+function buildMandirPage(eventInfo, slot, flyerPath, noPreview = false, overrideUrl = null, ogSha1 = '') {
   const pageUrl = overrideUrl || `https://screvents.com/mandir/${slot.replace('mandir-', '')}`;
   const flyerUrl = `${pageUrl}/flyer.jpg`;
   const logoPath = path.join(REPO_ROOT, 'images', 'baps-logo.png');
@@ -433,8 +420,6 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
   // directly to /submit-rsvp, eliminating the MS Forms → Power Automate →
   // Google Sheets pipeline. submit-rsvp writes Supabase first, then mirrors
   // to the Sheet so the existing admin RSVP view keeps working.
-  const useNativeForm = true;
-  const embedSrc = '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -504,7 +489,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     <div class="mandir-label">BAPS Scranton Mandir Event</div>
     <h1>${eventInfo.eventName}</h1>
   </div>
-  <div id="share-bar" style="display:none;background:var(--brown);padding:12px 16px;">
+  <div id="share-bar" style="display:none;background:var(--maroon);padding:12px 16px;">
     <div style="width:100%;max-width:480px;">
       <button id="share-btn" onclick="shareFlyerMobile()" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:800;letter-spacing:0.08em;cursor:pointer;font-family:'DM Sans',sans-serif;text-transform:uppercase;">&#128228; SHARE</button>
       <button id="copy-btn" onclick="copyFlyerDesktop()" style="display:none;width:100%;padding:12px;background:linear-gradient(135deg,#1a5f2a,#2e8b3e);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">&#128203; Copy Flyer</button>
@@ -517,10 +502,9 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
     ${eventInfo.location ? `<div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Location</div><div class="detail-value"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(eventInfo.location)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dotted currentColor;">${eventInfo.location}</a></div></div></div>` : ''}
     ${hasRsvp ? `<div class="detail-row"><div class="detail-icon">⏳</div><div class="detail-content"><div class="detail-label">RSVP By</div><div class="detail-value">${new Date(eventInfo.rsvpDeadline + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric'})}</div></div></div>` : ''}
   </div>
-  ${hasRsvp && (embedSrc || useNativeForm) ? `
+  ${hasRsvp ? `
   <div class="section-divider"><span>RSVP</span></div>
   <div class="rsvp-section">
-    ${useNativeForm ? `
     <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
     <div style="background:#fff;border-radius:20px;padding:28px 24px;box-shadow:0 4px 24px rgba(122,31,46,0.10);">
       <div id="rsvp-form" style="text-align:left;">
@@ -534,21 +518,11 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
         <p style="font-size:14px;color:#8B6040;line-height:1.5;">Your RSVP has been confirmed. We look forward to seeing you.</p>
       </div>
       <div id="rsvp-error" style="display:none;margin-top:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;font-size:13px;color:#991b1b;text-align:center;"></div>
-    </div>` : `
-    <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
-    <div class="form-container" style="position:relative;">
-      <div id="form-loader" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#fff;z-index:1;min-height:200px;">
-        <div style="width:36px;height:36px;border:3px solid #e0d5c8;border-top-color:#A0304A;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-        <span style="font-size:13px;color:#8B6040;">Loading form...</span>
-      </div>
-      <iframe src="${embedSrc}" title="RSVP Form" onload="document.getElementById('form-loader').style.display='none'">Loading…</iframe>
-      <div class="open-form-link"><a href="${formUrl}" target="_blank">Open form in browser ↗</a></div>
-    </div>`}
+    </div>
   </div>` : ''}
   <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
   <script>
     const FLYER_URL = '${flyerUrl}';
-    ${useNativeForm ? `
     // ── Native RSVP form (mandir slots) ──────────────────────────────────
     const RSVP_ZONE = '${slot}';
     const RSVP_EVENT_NAME = ${JSON.stringify(eventInfo.eventName || '')};
@@ -590,7 +564,6 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
         btn.textContent = 'Submit RSVP →';
       }
     }
-    ` : ''}
     // ── RSVP visibility check ────────────────────────────────────────────
     // Mirrors buildHtmlPage so the admin's RSVP on/off toggle hides the
     // section in real time without needing a redeploy.
@@ -598,7 +571,7 @@ function buildMandirPage(eventInfo, slot, flyerPath, embedUrl, formUrl, noPrevie
       try {
         const res = await fetch('/.netlify/functions/rsvp-status');
         const settings = await res.json();
-        const zone = '${slot}';
+        const zone = ${JSON.stringify(slot)};
         const globalEnabled = settings['global'] !== false;
         const zoneEnabled   = settings[zone]    !== false;
         if (!globalEnabled || !zoneEnabled) {
@@ -956,12 +929,10 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
 
     // HTML page — rebuilt here with ogSha1 for cache-busting
     const pageData = pages.find(p => p.zone === zone);
-    const embedUrl = pageData?.embedUrl || '';
-    const formUrl  = pageData?.formUrl  || '';
     const zoneOverrideUrl = (zone === 'satsang-sabha') ? `https://screvents.com/${zone}` : null;
     const html = isMandirStyle
-      ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, embedUrl, formUrl, false, zoneOverrideUrl, ogSha1)
-      : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, embedUrl, formUrl, false, ogSha1);
+      ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, false, zoneOverrideUrl, ogSha1)
+      : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, false, ogSha1);
 
     const htmlFilePath = `${basePath}/index.html`;
     const htmlContent  = Buffer.from(html);
@@ -972,8 +943,8 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     // No-preview version
     if (pageData) {
       const npHtml = isMandirStyle
-        ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, embedUrl, formUrl, true, zoneOverrideUrl, ogSha1)
-        : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, embedUrl, formUrl, true, ogSha1);
+        ? buildMandirPage(eventInfoMap[zone], zone, flyerPath, true, zoneOverrideUrl, ogSha1)
+        : buildHtmlPage(eventInfoMap[zone], zone, flyerPath, true, ogSha1);
       const npFilePath = `/np${basePath}/index.html`;
       const npContent  = Buffer.from(npHtml);
       const npSha1     = crypto.createHash('sha1').update(npContent).digest('hex');
@@ -1177,24 +1148,34 @@ async function main() {
     const isMandirSlot   = MANDIR_SLOTS.includes(zone);
     const isSatsangSabha = zone === 'satsang-sabha';
 
-    // Phase 2: native /submit-rsvp on every zone, so embedUrl/formUrl no
-    // longer need to be threaded through. Kept as empty strings to preserve
-    // existing function signatures (and the share-bar's footer URL fields).
-    let html, embedUrl = '', formUrl = '';
+    // Phase 2: native /submit-rsvp on every zone — MS Forms plumbing
+    // (embedUrl/formUrl) has been removed entirely.
+    let html;
     if (isMandirSlot) {
-      html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
+      html = buildMandirPage(eventInfo, zone, flyerPath);
     } else if (isSatsangSabha) {
-      html = buildMandirPage(eventInfo, zone, flyerPath, embedUrl, formUrl, false, `https://screvents.com/${zone}`);
+      html = buildMandirPage(eventInfo, zone, flyerPath, false, `https://screvents.com/${zone}`);
     } else {
-      html = buildHtmlPage(eventInfo, zone, flyerPath, embedUrl, formUrl);
+      html = buildHtmlPage(eventInfo, zone, flyerPath);
     }
-    pages.push({ zone, html, flyerPath, embedUrl, formUrl });
+    pages.push({ zone, html, flyerPath });
     console.log(`✅ Page ready for ${zone}`);
 
     let eventDateISO = '';
     if (eventInfo.date) {
       try {
-        const parsed = new Date(eventInfo.date + ', 2026');
+        const currentYear = new Date().getFullYear();
+        let parsed = new Date(eventInfo.date + ', ' + currentYear);
+        // If the parsed date is more than ~3 months in the past, bump to next
+        // year — so a November-uploaded January flyer correctly resolves to
+        // next year instead of being treated as already-past.
+        if (!isNaN(parsed)) {
+          const threeMonthsAgo = new Date();
+          threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+          if (parsed < threeMonthsAgo) {
+            parsed = new Date(eventInfo.date + ', ' + (currentYear + 1));
+          }
+        }
         if (!isNaN(parsed)) eventDateISO = parsed.toISOString().split('T')[0];
       } catch(e) {}
     }

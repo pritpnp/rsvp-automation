@@ -10,10 +10,10 @@ const headers = {
 const SHEET_ID  = process.env.GOOGLE_SHEET_ID;
 const SHEET_TAB = 'responses';
 
-// Best-effort append to the same Google Sheet the Power Automate flow
-// targets today, so the existing get-rsvps admin view keeps working
-// without any migration. Columns match the existing schema:
-//   A: zone, B: name, C: guests, D: submitted, E: sheet_row_id
+// Best-effort mirror to the legacy Google Sheet so the existing
+// get-rsvps Sheet-merge keeps working until the Sheet is fully retired.
+// Supabase is the source of truth (above). Columns:
+//   A=zone, B=name, C=guests, D=submitted_at, E=sheet_row_id
 async function appendToSheet(row) {
   const credsRaw = process.env.GOOG_SA_JSON;
   if (!credsRaw || !SHEET_ID) {
@@ -60,10 +60,15 @@ exports.handler = async (event) => {
   // Honor the admin's RSVP on/off toggle. Same logic the rendered page
   // uses, but enforced server-side so a stale tab can't slip submissions
   // through after RSVPs are closed.
-  const { data: settings } = await supabase
+  const { data: settings, error: settingsErr } = await supabase
     .from('rsvp_settings')
     .select('zone, enabled')
     .in('zone', ['global', zone]);
+
+  if (settingsErr) {
+    console.error('rsvp_settings read failed', settingsErr);
+    return { statusCode: 503, headers, body: JSON.stringify({ error: 'Could not verify RSVP status. Please try again in a moment.' }) };
+  }
 
   const globalEnabled = settings?.find(s => s.zone === 'global')?.enabled !== false;
   const zoneEnabled   = settings?.find(s => s.zone === zone)?.enabled    !== false;

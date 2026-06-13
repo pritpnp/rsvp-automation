@@ -55,11 +55,28 @@ exports.handler = async (event) => {
 
   const GITHUB_PAT = process.env.GITHUB_PAT;
   const filePath   = `flyers/${zone}/flyer.jpg`;
+  const ogPath     = `flyers/${zone}/og.jpg`;
   const apiUrl     = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${filePath}`;
+  const ogApiUrl   = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${ogPath}`;
   const ghHeaders  = {
     'Authorization': `Bearer ${GITHUB_PAT}`,
     'Accept': 'application/vnd.github.v3+json',
     'Content-Type': 'application/json',
+  };
+
+  // Delete og.jpg if it exists; ignored if missing. Lets automate.js regenerate it from the new flyer.
+  const deleteOgIfExists = async (commitMessage) => {
+    const ogGetRes = await fetch(ogApiUrl, { headers: ghHeaders });
+    if (!ogGetRes.ok) return;
+    const ogExisting = await ogGetRes.json();
+    await fetch(ogApiUrl, {
+      method: 'DELETE',
+      headers: ghHeaders,
+      body: JSON.stringify({
+        message: commitMessage,
+        sha: ogExisting.sha,
+      }),
+    });
   };
 
   // ── POST: Upload flyer ────────────────────────────────────────────────────
@@ -94,6 +111,9 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers, body: JSON.stringify({ error: `GitHub error: ${err}` }) };
     }
 
+    // Remove stale og.jpg so automate.js regenerates it from the new flyer
+    await deleteOgIfExists(`Remove stale og.jpg for ${zone} after flyer upload`);
+
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
   }
 
@@ -124,6 +144,9 @@ exports.handler = async (event) => {
       const err = await delRes.text();
       return { statusCode: 500, headers, body: JSON.stringify({ error: `GitHub error: ${err}` }) };
     }
+
+    // Also remove og.jpg so no orphan OG image remains
+    await deleteOgIfExists(`Remove og.jpg for ${zone} via admin portal`);
 
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
   }

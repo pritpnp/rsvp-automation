@@ -82,25 +82,7 @@ exports.handler = async (event) => {
     const token = event.queryStringParameters?.token;
     if (!token) return { statusCode: 401, headers, body: JSON.stringify({ error: 'No token' }) };
 
-    // First check if it's a superadmin session (no manager_id)
-    const { data: rawSession } = await supabase
-      .from('manager_sessions')
-      .select('manager_id, expires_at')
-      .eq('token', token)
-      .single();
-
-    if (!rawSession || new Date(rawSession.expires_at) < new Date()) {
-      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session expired' }) };
-    }
-
-    // Superadmin session — manager_id is null
-    if (!rawSession.manager_id) {
-      return { statusCode: 200, headers, body: JSON.stringify({
-        valid: true, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
-      })};
-    }
-
-    // Manager session — fetch manager details
+    // Fetch session + embedded manager details in one query
     const { data: session, error: sessionErr } = await supabase
       .from('manager_sessions')
       .select('manager_id, expires_at, managers(username, permissions)')
@@ -108,12 +90,23 @@ exports.handler = async (event) => {
       .single();
 
     if (sessionErr) console.error('Session fetch error:', sessionErr.message);
-    if (!session || !session.managers) {
-      // Fallback: fetch manager directly
+    if (!session || new Date(session.expires_at) < new Date()) {
+      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Session expired' }) };
+    }
+
+    // Superadmin session — manager_id is null (embedded managers will also be null)
+    if (!session.manager_id) {
+      return { statusCode: 200, headers, body: JSON.stringify({
+        valid: true, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
+      })};
+    }
+
+    if (!session.managers) {
+      // Fallback: FK points to a deleted manager (superadmin-managers.js DELETE does not cascade-clean sessions)
       const { data: manager } = await supabase
         .from('managers')
         .select('username, permissions')
-        .eq('id', rawSession.manager_id)
+        .eq('id', session.manager_id)
         .single();
       if (!manager) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Manager not found' }) };
       return { statusCode: 200, headers, body: JSON.stringify({

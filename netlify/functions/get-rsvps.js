@@ -28,7 +28,7 @@ async function authenticateSheets() {
 }
 
 async function authCheck(event) {
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
   const adminPassword = event.headers['x-admin-password'];
   const managerToken = event.headers['x-manager-token'];
   if (adminPassword === process.env.ADMIN_PASSWORD) {
@@ -76,11 +76,16 @@ function sheetRowToRsvp(r) {
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
+  if (!process.env.SUPABASE_SERVICE_KEY) {
+    console.error('SUPABASE_SERVICE_KEY not set');
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Service misconfigured' }) };
+  }
+
   const authResult = await authCheck(event);
   if (!authResult.ok) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
   const perms = authResult.permissions;
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
   // GET — Supabase primary, merge Sheet-only rows for historical visibility
   if (event.httpMethod === 'GET') {
@@ -131,7 +136,9 @@ exports.handler = async (event) => {
   // PATCH — update guest count. Dual-write Supabase + Sheet.
   if (event.httpMethod === 'PATCH') {
     if (!perms.edit_rsvps) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to edit RSVPs' }) };
-    const { powerapps_id, guests } = JSON.parse(event.body);
+    let body;
+    try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+    const { powerapps_id, guests } = body;
     if (!powerapps_id || guests === undefined) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
@@ -171,7 +178,9 @@ exports.handler = async (event) => {
   // DELETE — remove row from Supabase + Sheet
   if (event.httpMethod === 'DELETE') {
     if (!perms.delete_rsvps) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to delete RSVPs' }) };
-    const { powerapps_id } = JSON.parse(event.body);
+    let body;
+    try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+    const { powerapps_id } = body;
     if (!powerapps_id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
 
     const { error: dbErr } = await supabase

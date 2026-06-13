@@ -85,7 +85,9 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to create passes' }) };
     }
 
-    const body = JSON.parse(event.body);
+    let body;
+    try { body = JSON.parse(event.body || '{}'); }
+    catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
 
     // ── Batch create: { guests: [{name, phone}, ...], event_id } ────────────
     if (Array.isArray(body.guests)) {
@@ -136,6 +138,10 @@ exports.handler = async (event) => {
         .select('max_passes, event_name, start_date, end_date')
         .eq('id', event_id)
         .single();
+
+      if (!evt) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Event not found' }) };
+      }
 
       const { count } = await supabase
         .from('vip_passes')
@@ -191,8 +197,11 @@ exports.handler = async (event) => {
     }
 
     const { data: evt } = await supabase.from('events').select('max_passes, event_name, start_date, end_date').eq('id', event_id).single();
+    if (!evt) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Event not found' }) };
+    }
     const { count } = await supabase.from('vip_passes').select('*', { count: 'exact', head: true }).eq('event_id', event_id);
-    if (evt && count >= evt.max_passes) {
+    if (count >= evt.max_passes) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: `Max passes (${evt.max_passes}) reached for this event` }) };
     }
     const event_date = evt?.start_date === evt?.end_date
@@ -213,7 +222,9 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to delete passes' }) };
     }
 
-    const body = JSON.parse(event.body);
+    let body;
+    try { body = JSON.parse(event.body || '{}'); }
+    catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
 
     // ── Batch delete: { ids: ['id1', 'id2', ...] } ────────────────────────
     if (Array.isArray(body.ids)) {
@@ -236,7 +247,10 @@ exports.handler = async (event) => {
     if (!auth.permissions.edit_passes) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to edit passes' }) };
     }
-    const { id, guest_name, phone } = JSON.parse(event.body);
+    let body;
+    try { body = JSON.parse(event.body || '{}'); }
+    catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+    const { id, guest_name, phone } = body;
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
 
     const update = {};

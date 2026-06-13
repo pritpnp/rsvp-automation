@@ -11,34 +11,29 @@ exports.handler = async (event) => {
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-  // Standalone mode — superadmin only, no session validation
   let isSuperadmin = false;
   let managerName = 'Superadmin';
   let allowedZones = [];
 
-  if (builderSessionId === 'standalone') {
-    isSuperadmin = true;
-  } else {
-    const { data: bSession } = await supabase
-      .from('builder_sessions')
-      .select('*')
-      .eq('id', builderSessionId)
+  const { data: bSession } = await supabase
+    .from('builder_sessions')
+    .select('*')
+    .eq('id', builderSessionId)
+    .single();
+
+  if (!bSession || new Date(bSession.expires_at) < new Date())
+    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Builder session expired. Please reopen from the admin portal.' }) };
+
+  isSuperadmin = bSession.is_superadmin;
+  allowedZones = bSession.allowed_zones || [];
+
+  if (!isSuperadmin && bSession.manager_id) {
+    const { data: manager } = await supabase
+      .from('managers')
+      .select('username')
+      .eq('id', bSession.manager_id)
       .single();
-
-    if (!bSession || new Date(bSession.expires_at) < new Date())
-      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Builder session expired. Please reopen from the admin portal.' }) };
-
-    isSuperadmin = bSession.is_superadmin;
-    allowedZones = bSession.allowed_zones || [];
-
-    if (!isSuperadmin && bSession.manager_id) {
-      const { data: manager } = await supabase
-        .from('managers')
-        .select('username')
-        .eq('id', bSession.manager_id)
-        .single();
-      managerName = manager?.username || 'Manager';
-    }
+    managerName = manager?.username || 'Manager';
   }
 
   // ── Parse body ────────────────────────────────────────────────────────────
@@ -53,10 +48,10 @@ exports.handler = async (event) => {
   if (!zone || !VALID_ZONES.includes(zone))
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid zone' }) };
 
-  if (!isSuperadmin && allowedZones.length) {
+  if (!isSuperadmin) {
     const baseZone = zone.replace('-santos', '');
-    if (!allowedZones.includes(baseZone) && !allowedZones.includes(zone))
-      return { statusCode: 403, headers, body: JSON.stringify({ error: `Not permitted to submit flyers for ${zone}` }) };
+    if (!allowedZones.length || (!allowedZones.includes(baseZone) && !allowedZones.includes(zone)))
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Zone not authorized' }) };
   }
 
   if (!imageBase64)
@@ -105,7 +100,7 @@ exports.handler = async (event) => {
   const rejectUrl = `https://screvents.com/flyer-builder/?${params.toString()}`;
 
   // ── Save review record (with rejectUrl baked in from the start) ────────────
-  await supabase.from('flyer_reviews').insert({
+  const { error: insertErr } = await supabase.from('flyer_reviews').insert({
     id: reviewId,
     zone,
     storage_path: storagePath,
@@ -115,14 +110,25 @@ exports.handler = async (event) => {
     created_by: managerName,
   });
 
-  // ── Download image to send to Telegram ───────────────────────────────────
-  const { data: signedData } = await supabase.storage
-    .from('flyer-reviews')
-    .createSignedUrl(storagePath, 3600);
+  if (insertErr) {
+    // Roll back uploaded storage objects so we don't leave orphans
+    const toRemove = [storagePath];
+    if (ogStoragePath) toRemove.push(ogStoragePath);
+    await supabase.storage.from('flyer-reviews').remove(toRemove);
+    return { statusCode: 500, headers, body: JSON.stringify({ error: `DB insert failed: ${insertErr.message}` }) };
+  }
 
-  const imgRes = await fetch(signedData.signedUrl);
-  const imgBuffer2 = await imgRes.arrayBuffer();
-  const imgBytes = new Uint8Array(imgBuffer2);
+  // Helper: roll back this review (storage + DB row) on Telegram-prep failure
+  const rollbackReview = async () => {
+    try {
+      const toRemove = [storagePath];
+      if (ogStoragePath) toRemove.push(ogStoragePath);
+      await supabase.storage.from('flyer-reviews').remove(toRemove);
+      await supabase.from('flyer_reviews').delete().eq('id', reviewId);
+    } catch (e) {
+      console.error('Rollback failed for review', reviewId, e);
+    }
+  };
 
   // ── Send to Telegram admin group with Approve/Reject buttons ──────────────
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -143,32 +149,54 @@ exports.handler = async (event) => {
     ]]
   });
 
-  // Send as multipart photo
-  const boundary = '----ReviewBoundary' + Date.now();
-  const encoder = new TextEncoder();
-  const parts = [];
-  parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${ADMIN_CHAT_ID}\r\n`));
-  parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`));
-  parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="parse_mode"\r\n\r\nMarkdown\r\n`));
-  parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="reply_markup"\r\n\r\n${replyMarkup}\r\n`));
-  parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="flyer.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`));
-  parts.push(imgBytes);
-  parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
+  let tgData;
+  try {
+    // ── Download image to send to Telegram ─────────────────────────────────
+    const { data: signedData, error: signErr } = await supabase.storage
+      .from('flyer-reviews')
+      .createSignedUrl(storagePath, 3600);
+    if (!signedData?.signedUrl)
+      throw new Error('Could not sign flyer storage URL: ' + (signErr?.message || ''));
 
-  const totalLen = parts.reduce((s, p) => s + p.length, 0);
-  const multipart = new Uint8Array(totalLen);
-  let offset = 0;
-  for (const p of parts) { multipart.set(p, offset); offset += p.length; }
+    const imgRes = await fetch(signedData.signedUrl);
+    if (!imgRes.ok)
+      throw new Error(`Could not fetch flyer image: HTTP ${imgRes.status}`);
+    const imgBuffer2 = await imgRes.arrayBuffer();
+    const imgBytes = new Uint8Array(imgBuffer2);
 
-  const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-    method: 'POST',
-    headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-    body: multipart,
-  });
+    // Send as multipart photo
+    const boundary = '----ReviewBoundary' + Date.now();
+    const encoder = new TextEncoder();
+    const parts = [];
+    parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${ADMIN_CHAT_ID}\r\n`));
+    parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`));
+    parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="parse_mode"\r\n\r\nMarkdown\r\n`));
+    parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="reply_markup"\r\n\r\n${replyMarkup}\r\n`));
+    parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="flyer.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`));
+    parts.push(imgBytes);
+    parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
 
-  const tgData = await tgRes.json();
-  if (!tgData.ok)
+    const totalLen = parts.reduce((s, p) => s + p.length, 0);
+    const multipart = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const p of parts) { multipart.set(p, offset); offset += p.length; }
+
+    const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body: multipart,
+    });
+
+    tgData = await tgRes.json();
+  } catch (err) {
+    await rollbackReview();
+    return { statusCode: 500, headers, body: JSON.stringify({ error: `Telegram prep failed: ${err.message}` }) };
+  }
+
+  if (!tgData || !tgData.ok) {
+    await rollbackReview();
     return { statusCode: 500, headers, body: JSON.stringify({ error: `Telegram send failed: ${JSON.stringify(tgData)}` }) };
+  }
 
   return { statusCode: 200, headers, body: JSON.stringify({ ok: true, reviewId }) };
 };

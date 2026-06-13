@@ -46,11 +46,6 @@
   status = 200
 
 [[redirects]]
-  from = "/flyer-builder/*"
-  to = "/flyer-builder/index.html"
-  status = 200
-
-[[redirects]]
   from = "/flyer-builder/review-sent"
   to = "/flyer-builder/review-sent/index.html"
   status = 200
@@ -58,6 +53,11 @@
 [[redirects]]
   from = "/flyer-builder/review-sent/*"
   to = "/flyer-builder/review-sent/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/flyer-builder/*"
+  to = "/flyer-builder/index.html"
   status = 200
 [[headers]]
   for = "/flyer-builder/templates/*"
