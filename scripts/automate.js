@@ -1019,11 +1019,14 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     console.log('ℹ️  No changes to dist/, skipping commit');
   } else {
     run('git commit -m "deploy: update dist"');
-    const remote = `https://x-access-token:${process.env.GITHUB_PAT}@github.com/${process.env.GITHUB_REPOSITORY}.git`;
+    // Push via the ambient origin — actions/checkout@v5 already wrote
+    // `http.https://github.com/.extraheader: AUTHORIZATION: basic …` using
+    // the workflow's GITHUB_TOKEN (granted write access via the workflow's
+    // `permissions: contents: write`). No PAT in this script is needed.
     let pushed = false;
     for (let attempt = 1; attempt <= 3 && !pushed; attempt++) {
       try {
-        run(`git push "${remote}" HEAD:main`);
+        run('git push origin HEAD:main');
         pushed = true;
         console.log(`✅ dist/ pushed (attempt ${attempt}) — Netlify CI deploying...`);
       } catch (e) {
@@ -1032,7 +1035,7 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
         // write that happens earlier in main() and is still unstaged at
         // this point (the workflow's "Commit deadlines.json" step is what
         // eventually picks it up).
-        run(`git pull --rebase --autostash "${remote}" main`);
+        run('git pull --rebase --autostash origin main');
       }
     }
     if (!pushed) {
