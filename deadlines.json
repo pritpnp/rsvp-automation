@@ -38,5 +38,29 @@
     "eventDate": "2026-06-12",
     "time": "6:00 pm",
     "location": "22 Bond Lane, Bloomsburg, PA 17815"
+  },
+  "satsang-sabha": {
+    "deadline": "",
+    "eventName": "Satsang Sabha",
+    "date": "Sunday, May 3",
+    "eventDate": "2026-05-03",
+    "time": "4:00 pm",
+    "location": "311 Oak Street, Scranton, PA 18508"
+  },
+  "mountain-top": {
+    "deadline": "2026-05-29",
+    "eventName": "Para Satsang Sabha",
+    "date": "Friday, May 29",
+    "eventDate": "2026-05-29",
+    "time": "6:00 pm",
+    "location": "502 Robbins Way, Mountain Top, PA 18707"
+  },
+  "mandir-3": {
+    "deadline": "",
+    "eventName": "Walkathon",
+    "date": "Saturday, May 30",
+    "eventDate": "2026-05-30",
+    "time": "9:00 am - 12:00 pm",
+    "location": "500 Arthur Ave, Scranton, PA 18510"
   }
 }
