@@ -29,8 +29,15 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install dependencies
+        run: cd scripts && npm install
+
       - name: Send RSVP Summary
         env:
+          # summary.js was migrated from Google Sheets CSV to Supabase as
+          # source of truth; needs SUPABASE_URL + SUPABASE_SERVICE_KEY now.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_CHAT_ID_SCRANTON: ${{ secrets.TELEGRAM_CHAT_ID_SCRANTON }}
@@ -38,9 +45,7 @@ jobs:
           TELEGRAM_CHAT_ID_MOOSIC: ${{ secrets.TELEGRAM_CHAT_ID_MOOSIC }}
           TELEGRAM_CHAT_ID_BLOOMSBURG: ${{ secrets.TELEGRAM_CHAT_ID_BLOOMSBURG }}
           TELEGRAM_CHAT_ID_MANDIR: ${{ secrets.TELEGRAM_CHAT_ID_MANDIR }}
-          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           TARGET_ZONE: ${{ github.event.inputs.target_zone || 'all' }}
           TRIGGER_CHAT_ID: ${{ github.event.inputs.trigger_chat_id || '' }}
           TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
-        run: node scripts/summary.js
+        run: cd scripts && node summary.js
