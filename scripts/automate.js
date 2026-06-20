@@ -955,8 +955,8 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     // Flyer image
     const imgFilePath = `${basePath}/flyer.jpg`;
     const imgContent  = await sharp(flyerPath)
-      .resize({ width: 1080, withoutEnlargement: true })
-      .jpeg({ quality: 80, mozjpeg: true })
+      .resize({ width: 1200, withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
       .toBuffer();
     console.log(`🗜️ Compressed flyer: ${Math.round(imgContent.length / 1024)}KB`);
     const imgSha1 = crypto.createHash('sha1').update(imgContent).digest('hex');

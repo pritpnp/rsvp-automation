@@ -1,2 +1,10 @@
 node_modules/
 **/.DS_Store
+
+# Flyer-builder photo assets are sourced from public/ and re-synced into dist/
+# by build.sh on every Netlify deploy — don't double-commit the large copies.
+dist/flyer-builder/swami-photos/
+dist/flyer-builder/base/
+
+# Raw source photos (only the optimized public/flyer-builder/swami-photos/ is committed)
+*flyer photos/

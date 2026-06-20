@@ -7,7 +7,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
   <style>
 @font-face { font-family: 'AddingtonCF'; src: url('/flyer-builder/fonts/AddingtonCF.otf') format('opentype'); font-weight: normal; font-style: normal; }
 @font-face { font-family: 'GothamRegular'; src: url('/flyer-builder/fonts/GothamRegular.ttf') format('truetype'); font-weight: normal; font-style: normal; }
@@ -26,25 +26,19 @@
     .app-header h1 { font-family: "Cormorant Garamond", serif; font-size: 22px; font-weight: 700; }
     .app-header p { font-size: 12px; opacity: 0.6; margin-top: 2px; }
     .layout { display: flex; flex: 1; gap: 0; flex-direction: row; }
-
-    /* Controls */
     .controls { width: 320px; flex-shrink: 0; background: #fff; border-right: 1px solid var(--cream-dark); overflow-y: auto; padding: 20px 18px 40px; }
-
     @media (max-width: 700px) {
       .layout { flex-direction: column; }
       .controls { width: 100%; border-right: none; border-bottom: 1px solid var(--cream-dark); overflow-y: visible; padding: 16px 16px 24px; }
       .preview-panel { padding: 20px 16px 40px; }
-      .flyer-wrap img.template { width: 100% !important; max-width: 400px; }
     }
     .builder-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--cream-dark); margin-bottom: 16px; }
     .builder-tab { flex: 1; padding: 9px; background: none; border: none; font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
     .builder-tab.active { color: var(--brown); border-bottom-color: var(--saffron); }
     .preview-canvas-wrap { display: none; width: 100%; max-width: 600px; margin: 0 auto; }
     .preview-canvas-wrap.active { display: block; }
-    #preview-wrap { min-height: 0; }
     #preview-wrap { position: relative; overflow: hidden; }
     #preview-wrap .drag-item { left: 75%; }
-    .flyer-wrap-outer { }
     .flyer-wrap-outer.hidden { display: none; }
     .controls h2 { font-family: "Cormorant Garamond", serif; font-size: 18px; margin-bottom: 14px; }
     .section-label { font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin: 16px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--cream-dark); }
@@ -60,42 +54,23 @@
     .btn-dl { width: 100%; padding: 12px; background: linear-gradient(135deg, var(--saffron), var(--gold)); color: #fff; border: none; border-radius: 11px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: "DM Sans", sans-serif; margin-top: 18px; }
     .btn-dl:hover { opacity: 0.9; }
     .btn-dl:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-photo { width: 100%; padding: 10px; background: var(--cream); border: 1px solid var(--cream-dark); color: var(--brown); border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: "DM Sans", sans-serif; }
+    .btn-photo:hover { border-color: var(--gold); color: var(--gold); }
+    .photo-caption { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 6px; font-family: monospace; }
+    .adv-toggle { width: 100%; margin-top: 16px; padding: 10px; background: none; border: 1px solid var(--cream-dark); border-radius: 9px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; color: var(--text-muted); }
+    .adv-el { font-size: 11px; font-weight: 600; color: var(--brown); margin: 10px 0 3px; }
+    .adv-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+    .adv-row label { font-size: 10px; color: var(--text-muted); flex: 0 0 36px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .adv-row input[type=range] { flex: 1; accent-color: var(--gold); }
+    .adv-row span { font-size: 10px; font-family: monospace; color: var(--brown); width: 46px; text-align: right; }
     .hint { background: var(--cream); border-radius: 9px; padding: 10px 12px; font-size: 12px; color: var(--text-muted); line-height: 1.6; margin-top: 14px; }
-    .pos-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 8px 10px; background: var(--cream); border-radius: 9px; border: 1px solid var(--cream-dark); cursor: pointer; transition: border-color 0.15s; }
-    .pos-row:hover { border-color: var(--gold); }
-    .pos-row.focused { border-color: var(--saffron); background: #fff8f3; }
-    .pos-row-label { font-size: 11px; font-weight: 500; color: var(--brown); flex: 1; }
-    .pos-coords { font-size: 10px; color: var(--text-muted); font-family: monospace; }
-    .font-size-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-    .font-size-row label { font-size: 11px; color: var(--text-muted); flex: 1; }
-    .font-size-row input[type=range] { flex: 2; accent-color: var(--gold); }
-    .font-size-row span { font-size: 11px; color: var(--brown); width: 30px; text-align: right; }
-
-    /* Preview */
     .preview-panel { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 28px 20px; overflow-y: auto; gap: 12px; }
     .preview-label { font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
-
-    /* Flyer canvas */
     .flyer-wrap { position: relative; display: inline-block; border-radius: 6px; overflow: hidden; box-shadow: 0 8px 40px rgba(92,45,10,0.22); user-select: none; }
-    .flyer-wrap img.template { display: block; width: 360px; pointer-events: none; }
-
-    /* Draggable text overlays */
-    .drag-item {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      cursor: grab;
-      text-align: center;
-      white-space: nowrap;
-      padding: 3px 6px;
-      border-radius: 3px;
-      border: 1.5px dashed transparent;
-      transition: border-color 0.15s;
-      line-height: 1.4;
-    }
-    .drag-item:hover { border-color: rgba(232,101,10,0.5); }
+    #flyer-canvas { display: block; width: auto; max-width: 100%; max-height: 78vh; border-radius: 6px; }
+    .flyer-wrap img.template { display: block; width: 100%; pointer-events: none; }
+    .drag-item { position: absolute; left: 50%; transform: translateX(-50%); cursor: grab; text-align: center; white-space: nowrap; padding: 3px 6px; border-radius: 3px; border: 1.5px dashed transparent; line-height: 1.4; }
     .drag-item.active { border-color: var(--saffron); cursor: grabbing; background: rgba(255,255,255,0.15); }
-    .drag-item.focused { border-color: var(--saffron); }
   </style>
 </head>
 <body>
@@ -124,23 +99,20 @@
     </div>
 
     <div class="section-label">Event Details</div>
-    <div class="form-group"><label>Event Date</label><input type="date" id="f-date" oninput="updateDatetime();this.blur()" onchange="updateDatetime();this.blur()" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)" /></div>
+    <div class="form-group"><label>Event Date</label><input type="date" id="f-date" oninput="scheduleRender();this.blur()" onchange="scheduleRender();this.blur()" /></div>
     <div class="form-group"><label>Time (PM)</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <input type="number" id="f-hour" min="1" max="12" placeholder="HH" oninput="updateDatetime()"
-          style="width:70px;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown);text-align:center" />
+        <input type="number" id="f-hour" min="1" max="12" placeholder="HH" oninput="scheduleRender()" style="width:70px;text-align:center" />
         <span style="font-size:16px;color:var(--brown);font-weight:500">:</span>
-        <input type="number" id="f-minute" min="0" max="59" placeholder="MM" oninput="updateDatetime()"
-          style="width:70px;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown);text-align:center" />
+        <input type="number" id="f-minute" min="0" max="59" placeholder="MM" oninput="scheduleRender()" style="width:70px;text-align:center" />
         <span style="font-size:13px;color:var(--text-muted);font-weight:500">PM</span>
       </div>
     </div>
     <div id="para-fields">
-      <div class="form-group"><label>RSVP By Date</label><input type="date" id="f-rsvp-date" oninput="updateRsvp();this.blur()" onchange="updateRsvp();this.blur()" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)" /></div>
-      <div class="form-group"><label>Host Name(s)</label><input type="text" id="f-host" placeholder="Host Name(s)" oninput="updateText('hostname')"/></div>
-
+      <div class="form-group"><label>RSVP By Date</label><input type="date" id="f-rsvp-date" oninput="scheduleRender();this.blur()" onchange="scheduleRender();this.blur()" /></div>
+      <div class="form-group"><label>Host Name(s)</label><input type="text" id="f-host" placeholder="Host Name(s)" oninput="scheduleRender()"/></div>
     </div>
-    <!-- Mandir checkbox (shown for Scranton + Satsang Sabha) -->
+
     <div id="mandir-toggle" style="display:none;margin-bottom:10px;padding:10px 12px;background:var(--cream);border-radius:9px;border:1px solid var(--cream-dark)">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;font-weight:500;color:var(--brown)">
         <input type="checkbox" id="mandir-cb" checked onchange="toggleMandir(this.checked)" style="width:16px;height:16px;accent-color:var(--saffron);cursor:pointer" />
@@ -148,10 +120,9 @@
       </label>
     </div>
 
-    <!-- Mahaprasad (shown for para zones + satsang sabha) -->
     <div id="mahaprasad-field" style="display:none">
       <div class="form-group"><label>Mahaprasad</label>
-        <select id="f-mahaprasad" onchange="updateText('mahaprasad')" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
+        <select id="f-mahaprasad" onchange="scheduleRender()" style="width:100%;padding:9px 11px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
           <option value="Mahaprasad will be served after sabha.">...served after sabha.</option>
           <option value="Mahaprasad will be served before sabha.">...served before sabha.</option>
           <option value="Mahaprasad will be served.">...served.</option>
@@ -159,57 +130,30 @@
       </div>
     </div>
 
-        <div class="form-group"><label>Address Line 1</label><input type="text" id="f-addr1" placeholder="Street Address" oninput="updateText('address')"/></div>
-    <div class="form-group"><label>Address Line 2</label><input type="text" id="f-addr2" placeholder="City, PA ZIP" oninput="updateText('address')"/></div>
+    <div class="form-group"><label>Address Line 1</label><input type="text" id="f-addr1" placeholder="Street Address" oninput="scheduleRender()"/></div>
+    <div class="form-group"><label>Address Line 2</label><input type="text" id="f-addr2" placeholder="City, PA ZIP" oninput="scheduleRender()"/></div>
 
-    <!-- Advanced Settings (hidden by default, shown when allowAdvanced=true) -->
-    <button id="advanced-toggle" onclick="toggleAdvanced()" style="display:none;width:100%;margin-top:16px;padding:10px;background:none;border:1px solid var(--cream-dark);border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--text-muted)">
-      ⚙️ Advanced Settings <span id="advanced-arrow">▼</span>
-    </button>
-
+    <button class="adv-toggle" id="advanced-toggle" onclick="toggleAdvanced()" style="display:none">⚙️ More options <span id="adv-arrow">▼</span></button>
     <div id="advanced-section" style="display:none">
-      <div style="background:rgba(232,101,10,0.06);border:1px solid rgba(232,101,10,0.2);border-radius:10px;padding:12px 14px;margin:10px 0">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer;color:var(--brown);margin-bottom:8px">
-          <input type="checkbox" id="unlock-positions" onchange="togglePositionLock(this.checked)" style="accent-color:var(--saffron);width:15px;height:15px" />
-          Unlock element positions (drag to reposition)
-        </label>
-        <p style="font-size:11px;color:var(--text-muted);line-height:1.5">⚠️ Changes affect all flyers. Only modify if needed.</p>
-      </div>
 
-      <div id="adv-main-font-sizes">
-      <div class="section-label">Font Sizes</div>
-      <div id="fs-para-sliders">
-        <div class="font-size-row"><label>Date/Time</label><input type="range" min="8" max="40" value="28" id="fs-datetime" oninput="updateFontSize('datetime',this.value)"><span id="fs-datetime-val">28px</span></div>
-        <div class="font-size-row"><label>RSVP</label><input type="range" min="6" max="30" value="14" id="fs-rsvp" oninput="updateFontSize('rsvp',this.value)"><span id="fs-rsvp-val">14px</span></div>
-        <div class="font-size-row"><label>Host Name</label><input type="range" min="6" max="30" value="17" id="fs-hostname" oninput="updateFontSize('hostname',this.value)"><span id="fs-hostname-val">17px</span></div>
-        <div class="font-size-row"><label>Address</label><input type="range" min="6" max="30" value="16" id="fs-address" oninput="updateFontSize('address',this.value)"><span id="fs-address-val">16px</span></div>
-        <div class="font-size-row"><label>Addr Spacing</label><input type="range" min="0.7" max="2.0" step="0.05" value="1.15" id="lh-address" oninput="updateLineHeight('address',this.value)"><span id="lh-address-val">1.15</span></div>
-        <div class="font-size-row"><label>Mahaprasad</label><input type="range" min="6" max="22" value="11" id="fs-mahaprasad" oninput="updateFontSize('mahaprasad',this.value)"><span id="fs-mahaprasad-val">11px</span></div>
-      </div>
-      <div id="fs-ss-sliders" style="display:none">
-        <div class="font-size-row"><label>Date/Time</label><input type="range" min="8" max="40" value="26" id="fs-ss_datetime" oninput="updateFontSize('ss_datetime',this.value)"><span id="fs-ss_datetime-val">26px</span></div>
-        <div class="font-size-row"><label>Address</label><input type="range" min="6" max="30" value="17" id="fs-ss_address" oninput="updateFontSize('ss_address',this.value)"><span id="fs-ss_address-val">17px</span></div>
-        <div class="font-size-row"><label>Addr Spacing</label><input type="range" min="0.7" max="2.0" step="0.05" value="1.1" id="lh-ss_address" oninput="updateLineHeight('ss_address',this.value)"><span id="lh-ss_address-val">1.1</span></div>
-      </div>
-      </div><!-- /adv-main-font-sizes -->
+      <div class="section-label">Mahant Swami Maharaj Photo</div>
+      <button class="btn-photo" onclick="nextPhoto()">🔀 Next photo</button>
+      <div class="photo-caption" id="photo-caption">loading…</div>
 
-      <div class="section-label">Element Positions</div>
-      <div id="pos-list"></div>
-      <button class="btn-dl" style="margin-top:10px;background:linear-gradient(135deg,var(--brown),var(--brown-mid));font-size:13px;padding:10px" onclick="saveLog()">💾 Save Position Log</button>
-      <div id="adv-preview-section" style="display:none">
-        <div class="section-label">Font Sizes</div>
-        <div class="font-size-row"><label>Date/Time</label><input type="range" min="8" max="40" value="22" id="pfs-prev_datetime" oninput="updatePreviewFontSize('prev_datetime',this.value)"><span id="pfs-prev_datetime-val">22px</span></div>
-        <div class="font-size-row"><label>RSVP</label><input type="range" min="6" max="30" value="16" id="pfs-prev_rsvp" oninput="updatePreviewFontSize('prev_rsvp',this.value)"><span id="pfs-prev_rsvp-val">16px</span></div>
-        <div class="font-size-row"><label>Spacing</label><input type="range" min="0.8" max="2.5" step="0.05" value="1.3" id="plh-prev_datetime" oninput="updatePreviewLineHeight('prev_datetime',this.value)"><span id="plh-prev_datetime-val">1.30</span></div>
-        <div class="section-label" style="margin-top:12px">Element Positions</div>
-        <div id="preview-pos-list"></div>
-        <button class="btn-dl" style="margin-top:10px;background:linear-gradient(135deg,var(--brown),var(--brown-mid));font-size:13px;padding:10px" onclick="savePreviewPositionLog()">💾 Save Position Log</button>
-      </div>
+      <div class="section-label">Photo box</div>
+      <div class="adv-row"><label>Top</label><input type="range" id="adv-box-top" min="0" max="0.20" step="0.005" oninput="advBox('topPct',this.value)"><span id="adv-box-top-v"></span></div>
+      <div class="adv-row"><label>Btm</label><input type="range" id="adv-box-bottom" min="0.40" max="0.70" step="0.005" oninput="advBox('bottomPct',this.value)"><span id="adv-box-bottom-v"></span></div>
+
+      <div class="section-label">Text — size / position / leading</div>
+      <p style="font-size:10px;color:var(--text-muted);margin:-4px 0 6px;line-height:1.4">Edits the live layout for <strong id="adv-zone-note">all zones</strong>. Save when done.</p>
+      <div id="adv-text-rows"></div>
+
+      <button class="btn-dl" style="margin-top:12px;background:linear-gradient(135deg,var(--brown),var(--brown-mid));font-size:13px;padding:10px" onclick="saveLayout()">💾 Save layout</button>
     </div>
 
     <button class="btn-dl" id="review-btn" onclick="sendForReview()" style="margin-top:16px">📤 Send for Review</button>
     <div id="review-status" style="display:none;margin-top:10px;padding:10px 12px;border-radius:9px;font-size:13px;"></div>
-    <div class="hint">💡 Fill in the event details, then click <strong>Send for Review</strong>. An admin will review the flyer and approve or reject it.</div>
+    <div class="hint">💡 Fill in the details, pick a photo, then <strong>Send for Review</strong>. An admin approves or rejects from Telegram.</div>
   </div>
 
   <div class="preview-panel">
@@ -217,24 +161,23 @@
       <button class="builder-tab active" onclick="switchBuilderTab('flyer', this)">✏️ Flyer</button>
       <button class="builder-tab" onclick="switchBuilderTab('preview', this)">🖼 Preview</button>
     </div>
-    <div class="preview-label" id="preview-label">Live Preview — drag text to reposition</div>
-    <div id="debug-size" style="font-size:10px;color:var(--text-muted);font-family:monospace;margin-bottom:4px"></div>
+    <div class="preview-label" id="preview-label">Live Preview</div>
     <div class="flyer-wrap-outer" id="flyer-wrap-outer">
-    <div class="flyer-wrap" id="flyer-wrap">
-      <img class="template" id="template-img" src="" alt="" crossorigin="anonymous" />
-      <!-- Drag items injected by JS -->
+      <div class="flyer-wrap" id="flyer-wrap">
+        <canvas id="flyer-canvas" width="430" height="931"></canvas>
+      </div>
     </div>
-    </div><!-- /flyer-wrap-outer -->
     <div class="preview-canvas-wrap" id="preview-canvas-wrap">
       <div class="flyer-wrap" id="preview-wrap" style="max-width:100%;aspect-ratio:1200/630;height:auto;background:var(--cream-dark);border-radius:12px;overflow:hidden">
         <img class="template" id="preview-template-img" src="" alt="" crossorigin="anonymous" style="width:100%;height:auto;display:block;border-radius:12px" />
-        <!-- Preview drag items injected by JS -->
       </div>
     </div>
   </div>
 </div>
 
+<script src="/flyer-builder/flyer-render.js"></script>
 <script>
+// ── Zone config ───────────────────────────────────────────────────────────────
 const PREVIEW_TEMPLATES = {
   'scranton': '/flyer-builder/preview-templates/scranton.png',
   'mountain-top': '/flyer-builder/preview-templates/mountain-top.png',
@@ -242,563 +185,253 @@ const PREVIEW_TEMPLATES = {
   'bloomsburg': '/flyer-builder/preview-templates/bloomsburg.png',
   'satsang-sabha': '/flyer-builder/preview-templates/satsang-sabha.png',
 };
-
-const TEMPLATES = {
-  'moosic': '/flyer-builder/templates/moosic.png',
-  'scranton': '/flyer-builder/templates/scranton.png',
-  'mountain-top': '/flyer-builder/templates/mountain-top.png',
-  'bloomsburg': '/flyer-builder/templates/bloomsburg.png',
-  'satsang-sabha-santos': '/flyer-builder/templates/satsang-sabha-santos.png',
-  'satsang-sabha': '/flyer-builder/templates/satsang-sabha.png',
-};
-
-// ── State ─────────────────────────────────────────────────────────────────────
-let currentZone = 'moosic';
-let isSatsang = false;
-
-// Each element: { id, label, yPct, fontSizePx, bold, color, getText }
-// yPct = position as fraction of flyer height (0-1)
-// xPct is always 0.5 (centered)
-const ELEMENTS = {
-  datetime:    { label: 'Date & Time', yPct: 0.7366820512820513, canvasYPct: 0.7695, fontSizePx: 28, bold: false, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.4 },
-  rsvp:        { label: 'RSVP Line',   yPct: 0.7857820512820513, canvasYPct: 0.8035, fontSizePx: 14, bold: false, color: '#4c4c4b', font: 'AppleSDGothicNeoH', bevel: false, lineHeight: 1.4 },
-  hostname:    { label: 'Host Name',   yPct: 0.8275, canvasYPct: 0.8455, fontSizePx: 17, bold: false, color: '#4c4c4b', font: 'GothamRegular',      bevel: false, lineHeight: 1.4 },
-  address:     { label: 'Address',     yPct: 0.8614, canvasYPct: 0.8890, fontSizePx: 16, bold: false, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.15 },
-  // satsang-specific — calibrated from position log
-  mahaprasad:    { label: 'Mahaprasad',  yPct: 0.9142, canvasYPct: 0.9142, fontSizePx: 11, bold: true, color: '#4c4c4b', font: 'AddingtonCF', bevel: false, lineHeight: 1.4 },
-  ss_mahaprasad: { label: 'Mahaprasad',  yPct: 0.900097435897436, canvasYPct: 0.900097435897436, fontSizePx: 11, bold: true, color: '#4c4c4b', font: 'AddingtonCF', bevel: false, lineHeight: 1.4 },
-  ss_datetime: { label: 'Date & Time', yPct: 0.7779, canvasYPct: 0.7779, fontSizePx: 26, bold: false, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.4 },
-  ss_address:  { label: 'Address',     yPct: 0.8403538461538461, canvasYPct: 0.8403538461538461, fontSizePx: 17, bold: false, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.1 },
-};
-
-let focusedEl = null;
-
-// ── Zone switch ───────────────────────────────────────────────────────────────
+const ZONE_DISPLAY = { 'moosic':'Moosic', 'scranton':'Scranton', 'mountain-top':'Mountain Top', 'bloomsburg':'Bloomsburg', 'satsang-sabha':'Scranton' };
 const MANDIR_ZONES = ['scranton', 'satsang-sabha'];
 const MANDIR_ADDRESS = { line1: 'BAPS Scranton Mandir', line2: '311 Oak Street, Scranton, PA 18508' };
 
-function setZone(zone, btn) {
-  currentZone = zone;
-  isSatsang = zone === 'satsang-sabha';
-  document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  const tImg = document.getElementById('template-img');
-  tImg.crossOrigin = 'anonymous';
-  tImg.src = TEMPLATES[zone];
-  document.getElementById('para-fields').style.display = isSatsang ? 'none' : 'block';
-  document.getElementById('fs-para-sliders').style.display = isSatsang ? 'none' : 'block';
-  document.getElementById('fs-ss-sliders').style.display = isSatsang ? 'block' : 'none';
-  document.getElementById('santos-toggle').style.display = isSatsang ? 'block' : 'none';
-  if (!isSatsang) document.getElementById('santos-cb').checked = false;
+let currentZone = 'moosic';
+let isSatsang = false;
 
-  // Mandir checkbox
-  const isMandir = MANDIR_ZONES.includes(zone);
-  document.getElementById('mandir-toggle').style.display = isMandir ? 'block' : 'none';
-  const cb = document.getElementById('mandir-cb');
-  cb.checked = isMandir; // default checked when entering a mandir zone
-  toggleMandir(isMandir);
+// ── Flyer assets + photo deck ───────────────────────────────────────────────
+const A = {};            // loaded images: watercolor, header, footerBlack, footerWhite
+let assetsReady = false;
+let MANIFEST = null;     // { canvas, photos:[...] }
+let PHOTO_BY_ID = {};
+let ALL_IDS = [];
+let currentPhoto = null; // { id, entry, img }
+const DECK_KEY = 'scr_swami_deck_v1';
 
-  // Mahaprasad — show for para zones (non-satsang) AND satsang sabha
-  document.getElementById('mahaprasad-field').style.display = 'block';
-
-  renderDragItems();
-  renderPosList();
+async function loadFlyerAssets() {
+  if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+  MANIFEST = await (await fetch('/flyer-builder/swami-photos.json?t=' + Date.now())).json();
+  // Optional saved layout override (from the Advanced panel's "Save layout").
+  try { const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now()); if (lr.ok) FlyerRender.applyLayout(await lr.json()); } catch (e) {}
+  PHOTO_BY_ID = Object.fromEntries(MANIFEST.photos.map((p) => [p.id, p]));
+  ALL_IDS = MANIFEST.photos.map((p) => p.id);
+  [A.watercolor, A.header, A.footerBlack, A.footerWhite] = await Promise.all([
+    FlyerRender.loadImage('/flyer-builder/base/watercolor.png'),
+    FlyerRender.loadImage('/flyer-builder/base/header.png'),
+    FlyerRender.loadImage('/flyer-builder/base/footer-black.png'),
+    FlyerRender.loadImage('/flyer-builder/base/footer-white.png'),
+  ]);
+  assetsReady = true;
+  await nextPhoto();
 }
 
-function toggleMandir(checked) {
-  const addr1 = document.getElementById('f-addr1');
-  const addr2 = document.getElementById('f-addr2');
-  if (checked) {
-    addr1.value = MANDIR_ADDRESS.line1;
-    addr2.value = MANDIR_ADDRESS.line2;
-    addr1.disabled = true;
-    addr2.disabled = true;
-    addr1.style.opacity = '0.6';
-    addr2.style.opacity = '0.6';
-  } else {
-    addr1.value = '';
-    addr2.value = '';
-    addr1.disabled = false;
-    addr2.disabled = false;
-    addr1.style.opacity = '1';
-    addr2.style.opacity = '1';
+// Shuffle-bag: no repeat until every photo has been used, persisted per browser.
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function drawNextId() {
+  let deck;
+  try { deck = JSON.parse(localStorage.getItem(DECK_KEY)) || []; } catch (e) { deck = []; }
+  deck = deck.filter((id) => PHOTO_BY_ID[id]);          // drop ids no longer in manifest
+  if (!deck.length) deck = shuffle(ALL_IDS);
+  const id = deck.shift();
+  localStorage.setItem(DECK_KEY, JSON.stringify(deck));
+  return id;
+}
+async function nextPhoto() {
+  if (!ALL_IDS.length) return;
+  const id = drawNextId();
+  const entry = PHOTO_BY_ID[id];
+  try {
+    const img = await FlyerRender.loadImage('/flyer-builder/' + entry.file);
+    currentPhoto = { id, entry, img };
+    const n = ALL_IDS.indexOf(id) + 1;
+    document.getElementById('photo-caption').textContent = `${id}  (${n}/${ALL_IDS.length})`;
+    renderFlyerPreview();
+  } catch (e) {
+    document.getElementById('photo-caption').textContent = 'photo failed: ' + id;
   }
-  updateText('address');
-  updateText('ss_address');
 }
 
-// ── Santos toggle ─────────────────────────────────────────────────────────────
-function toggleSantos(checked) {
-  const template = checked ? 'satsang-sabha-santos' : 'satsang-sabha';
-  document.getElementById('template-img').src = TEMPLATES[template];
-}
-
-// ── Build drag items ──────────────────────────────────────────────────────────
-function getActiveEls() {
-  return isSatsang
-    ? ['ss_datetime', 'ss_address', 'ss_mahaprasad']
-    : ['datetime', 'rsvp', 'hostname', 'address', 'mahaprasad'];
-}
-
-// ── Date/time helpers ────────────────────────────────────────────────────────
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + 'T12:00:00');
+// ── Build the text fields for the compositor from the form ───────────────────
+function formatDate(s) {
+  if (!s) return '';
+  const d = new Date(s + 'T12:00:00');
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
 }
-
-function formatRsvpDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + 'T12:00:00');
+function formatRsvpDate(s) {
+  if (!s) return '';
+  const d = new Date(s + 'T12:00:00');
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   return `${months[d.getMonth()]} ${d.getDate()}`;
 }
-
-function updateDatetime() {
-  updateText('datetime');
-  updateText('ss_datetime');
-  if (document.getElementById('preview-canvas-wrap')?.classList.contains('active')) { updatePreviewText('prev_datetime'); updatePreviewText('prev_rsvp'); }
-}
-
-function updateRsvp() {
-  updateText('rsvp');
-  if (document.getElementById('preview-canvas-wrap')?.classList.contains('active')) updatePreviewText('prev_rsvp');
-}
-
-function getElText(id) {
-  const day   = formatDate(document.getElementById('f-date')?.value || '');
-  const hourVal = document.getElementById('f-hour')?.value || '';
-  const minVal  = document.getElementById('f-minute')?.value || '';
-  const time    = hourVal ? `${hourVal}:${minVal.padStart(2,'0')} pm` : '';
-  const rsvp  = formatRsvpDate(document.getElementById('f-rsvp-date')?.value || '');
-  const host  = document.getElementById('f-host')?.value.trim() || '';
-  const addr1 = document.getElementById('f-addr1')?.value.trim() || '';
-  const addr2 = document.getElementById('f-addr2')?.value.trim() || '';
-  const mahaprasad = document.getElementById('f-mahaprasad')?.value || 'Mahaprasad will be served after sabha.';
+function buildFields() {
+  const day = formatDate(document.getElementById('f-date').value);
+  const h = document.getElementById('f-hour').value;
+  const m = document.getElementById('f-minute').value || '00';
+  const time = h ? `${h}:${m.padStart(2,'0')} pm` : '';
   const dt = [day, time ? 'at ' + time : ''].filter(Boolean).join(' ');
-  const addr = [addr1, addr2].filter(Boolean).join('\n');
-  switch(id) {
-    case 'datetime':    return dt || 'Fri, April 10 at 5:00 pm';
-    case 'rsvp':        return rsvp ? 'Please RSVP by ' + rsvp : '';
-    case 'hostname':    return host || 'Host Name';
-    case 'address':     return addr || 'Address Line 1\nAddress Line 2';
-    case 'mahaprasad':  return mahaprasad;
-    case 'ss_mahaprasad': return mahaprasad;
-    case 'ss_datetime': return dt || 'Sat, April 12 at 4:30 pm';
-    case 'ss_address':  return addr || '311 Oak St\nScranton, PA 18508';
-  }
-  return '';
-}
-
-function renderDragItems() {
-  const wrap = document.getElementById('flyer-wrap');
-  wrap.querySelectorAll('.drag-item').forEach(el => el.remove());
-
-  getActiveEls().forEach(id => {
-    const el = ELEMENTS[id];
-    const text = getElText(id);
-    if (!text) return;
-
-    const div = document.createElement('div');
-    div.className = 'drag-item';
-    div.id = 'drag-' + id;
-    div.dataset.elId = id;
-
-    // Style
-    div.style.top = (el.yPct * 100) + '%';
-    div.style.fontSize = el.fontSizePx + 'px';
-    div.style.fontWeight = el.bold ? '700' : '400';
-    div.style.color = el.color;
-    if (el.bevel) div.style.textShadow = '-0.5px -0.5px 1.5px rgba(255,255,255,0.40), 0.8px 0.8px 2px rgba(0,0,0,0.22)';
-    else div.style.textShadow = '0.5px 0.5px 2px rgba(0,0,0,0.15)';
-    div.style.lineHeight = el.lineHeight || 1.4;
-    div.style.fontFamily = el.font + ', sans-serif';
-
-    // Multi-line
-    div.innerHTML = text.split('\n').join('<br>');
-
-    // Drag logic
-    makeDraggable(div, id);
-    wrap.appendChild(div);
-  });
-}
-
-function updateText(id) {
-  // Map para id to ss id if needed
-  const elId = isSatsang ? (id === 'datetime' ? 'ss_datetime' : id === 'address' ? 'ss_address' : id) : id;
-  const div = document.getElementById('drag-' + elId);
-  if (!div) { renderDragItems(); return; }
-  const text = getElText(elId);
-  div.innerHTML = text.split('\n').join('<br>');
-}
-
-function updateFontSize(id, val) {
-  val = parseInt(val);
-  ELEMENTS[id].fontSizePx = val;
-  document.getElementById('fs-' + id + '-val').textContent = val + 'px';
-  const div = document.getElementById('drag-' + id);
-  if (div) div.style.fontSize = val + 'px';
-}
-
-function updatePreviewFontSize(id, val) {
-  val = parseInt(val);
-  PREVIEW_ELEMENTS[id].fontSizePx = val;
-  document.getElementById('pfs-' + id + '-val').textContent = val + 'px';
-  const div = document.getElementById('pdrag-' + id);
-  if (div) div.style.fontSize = val + 'px';
-}
-
-function updatePreviewLineHeight(id, val) {
-  val = parseFloat(val);
-  PREVIEW_ELEMENTS[id].lineHeight = val;
-  document.getElementById('plh-' + id + '-val').textContent = val.toFixed(2);
-  const div = document.getElementById('pdrag-' + id);
-  if (div) div.style.lineHeight = val;
-}
-
-function updateLineHeight(id, val) {
-  val = parseFloat(val);
-  ELEMENTS[id].lineHeight = val;
-  document.getElementById('lh-' + id + '-val').textContent = val.toFixed(2);
-  const div = document.getElementById('drag-' + id);
-  if (div) div.style.lineHeight = val;
-}
-
-// ── Drag logic ────────────────────────────────────────────────────────────────
-function makeDraggable(div, id) {
-  let startY, startTop;
-
-  div.addEventListener('mousedown', e => {
-    if (positionsLocked) return;
-    e.preventDefault();
-    focusedEl = id;
-    div.classList.add('active', 'focused');
-    document.querySelectorAll('.drag-item').forEach(d => { if (d !== div) d.classList.remove('focused'); });
-    renderPosList();
-
-    const wrap = document.getElementById('flyer-wrap');
-    const imgH = document.getElementById('template-img').offsetHeight;
-    startY = e.clientY;
-    startTop = ELEMENTS[id].yPct * imgH;
-
-    const onMove = e => {
-      const dy = e.clientY - startY;
-      const newTop = Math.max(0, Math.min(imgH - 10, startTop + dy));
-      ELEMENTS[id].yPct = newTop / imgH;
-      div.style.top = (ELEMENTS[id].yPct * 100) + '%';
-      updatePosRow(id);
-    };
-    const onUp = () => {
-      div.classList.remove('active');
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-
-  // Touch support
-  div.addEventListener('touchstart', e => {
-    if (positionsLocked) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    focusedEl = id;
-    div.classList.add('active', 'focused');
-    const wrap = document.getElementById('flyer-wrap');
-    const imgH = document.getElementById('template-img').offsetHeight;
-    startY = touch.clientY;
-    startTop = ELEMENTS[id].yPct * imgH;
-
-    const onMove = e => {
-      const t = e.touches[0];
-      const dy = t.clientY - startY;
-      const newTop = Math.max(0, Math.min(imgH - 10, startTop + dy));
-      ELEMENTS[id].yPct = newTop / imgH;
-      div.style.top = (ELEMENTS[id].yPct * 100) + '%';
-      updatePosRow(id);
-    };
-    const onEnd = () => {
-      div.classList.remove('active');
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onEnd);
-    };
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onEnd);
-  }, { passive: false });
-}
-
-// ── Position list in sidebar ──────────────────────────────────────────────────
-
-function renderPreviewPosList() {
-  const container = document.getElementById('preview-pos-list');
-  if (!container) return;
-  container.innerHTML = Object.keys(PREVIEW_ELEMENTS).map(id => {
-    const el = PREVIEW_ELEMENTS[id];
-    return `<div class="pos-row" id="pposrow-${id}">
-      <span class="pos-row-label">${el.label}</span>
-      <span class="pos-coords" id="pposcoord-${id}">${(el.yPct * 100).toFixed(1)}%</span>
-    </div>`;
-  }).join('');
-}
-
-function renderPosList() {
-  const container = document.getElementById('pos-list');
-  container.innerHTML = getActiveEls().map(id => {
-    const el = ELEMENTS[id];
-    return `<div class="pos-row ${focusedEl === id ? 'focused' : ''}" id="posrow-${id}" onclick="focusEl('${id}')">
-      <span class="pos-row-label">${el.label}</span>
-      <span class="pos-coords" id="poscoord-${id}">${(el.yPct * 100).toFixed(1)}%</span>
-    </div>`;
-  }).join('');
-}
-
-function updatePosRow(id) {
-  const el = document.getElementById('poscoord-' + id);
-  if (el) el.textContent = (ELEMENTS[id].yPct * 100).toFixed(1) + '%';
-}
-
-function focusEl(id) {
-  focusedEl = id;
-  renderPosList();
-  document.querySelectorAll('.drag-item').forEach(d => d.classList.remove('focused'));
-  const div = document.getElementById('drag-' + id);
-  if (div) div.classList.add('focused');
-}
-
-// ── Draw element onto canvas ─────────────────────────────────────────────────────
-function drawEl(ctx, id, W, H, scale) {
-  const el = ELEMENTS[id];
-  const text = getElText(id);
-  if (!text) return;
-  const scaledFont = Math.round(el.fontSizePx * scale);
-  ctx.font = (el.bold ? 'bold ' : '') + scaledFont + 'px ' + el.font;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const lines = text.split('\n');
-  const yFrac = el.canvasYPct !== undefined ? el.canvasYPct : el.yPct;
-  const lineH = scaledFont * (el.lineHeight || 1.4);
-  const totalH = lineH * (lines.length - 1);
-  lines.forEach((line, i) => {
-    const x = W / 2;
-    const y = H * yFrac - totalH/2 + i * lineH;
-    if (el.bevel) {
-      ctx.globalAlpha = 0.18; ctx.fillStyle = '#ffffff';
-      ctx.fillText(line, x - 1.5, y - 1.5);
-      ctx.globalAlpha = 0.38; ctx.fillStyle = '#000000';
-      ctx.fillText(line, x + 1.5, y + 1.5);
-      ctx.globalAlpha = 1.0;
-    }
-    ctx.fillStyle = el.color;
-    ctx.fillText(line, x, y);
-    ctx.globalAlpha = 1.0;
-  });
-}
-
-// ── Advanced settings toggle ─────────────────────────────────────────────────
-let advancedOpen = false;
-function toggleAdvanced() {
-  advancedOpen = !advancedOpen;
-  const sec = document.getElementById('advanced-section');
-  sec.style.cssText = advancedOpen ? 'display:block' : 'display:none';
-  document.getElementById('advanced-arrow').textContent = advancedOpen ? '▲' : '▼';
-}
-
-// ── Position lock ─────────────────────────────────────────────────────────────
-let positionsLocked = true;
-function togglePositionLock(unlock) {
-  positionsLocked = !unlock;
-  document.querySelectorAll('.drag-item').forEach(el => {
-    el.style.cursor = positionsLocked ? 'default' : 'grab';
-    el.style.pointerEvents = positionsLocked ? 'none' : 'auto';
-  });
-  renderPosList();
-}
-
-// ── Read URL params to auto-populate fields ───────────────────────────────────
-let _urlParamsRead = false;
-function readUrlParams() {
-  if (_urlParamsRead) return;
-  _urlParamsRead = true;
-  const p = new URLSearchParams(window.location.search);
-
-  // Set zone first
-  const zoneParam = p.get('zone');
-  if (zoneParam) {
-    const zoneKey = zoneParam.replace('-santos','');
-    console.log('Setting zone:', zoneKey);
-    const zoneBtn = document.querySelector('.zone-btn[onclick*="' + "'" + zoneKey + "'" + '"]');
-    console.log('Zone button found:', !!zoneBtn);
-    if (zoneBtn) setZone(zoneKey, zoneBtn);
-  }
-
-  const setField = (id, val) => {
-    const el = document.getElementById(id);
-    console.log('Setting', id, '=', val, '| el found:', !!el);
-    if (el) el.value = val;
+  const rsvp = formatRsvpDate(document.getElementById('f-rsvp-date').value);
+  const host = document.getElementById('f-host').value.trim();
+  const addr1 = document.getElementById('f-addr1').value.trim();
+  const addr2 = document.getElementById('f-addr2').value.trim();
+  const mahaprasad = document.getElementById('f-mahaprasad').value || 'Mahaprasad will be served after sabha.';
+  const zoneName = ZONE_DISPLAY[currentZone] || currentZone;
+  return {
+    invitation: 'Invitation',
+    zoneLine: 'BAPS Swaminarayan Mandir | ' + zoneName + (isSatsang ? '' : ' Zone'),
+    cordially: 'Cordially invites you, your family, and friends to',
+    title: isSatsang ? 'Satsang\nSabha' : 'Para Satsang\nSabha',
+    datetime: dt || 'Fri, April 10 at 5:00 pm',
+    rsvp: isSatsang ? '' : (rsvp ? 'Please RSVP by ' + rsvp : ''),
+    locationLabel: 'Location:',
+    host: isSatsang ? '' : host,
+    address: [addr1, addr2].filter(Boolean).join('\n') || 'Address Line 1\nAddress Line 2',
+    mahaprasad,
   };
-
-  if (p.get('date'))       setField('f-date', p.get('date'));
-  if (p.get('rsvpDate'))   setField('f-rsvp-date', p.get('rsvpDate'));
-  if (p.get('host'))       setField('f-host', p.get('host'));
-  if (p.get('addr1'))      setField('f-addr1', p.get('addr1'));
-  if (p.get('addr2'))      setField('f-addr2', p.get('addr2'));
-  if (p.get('mahaprasad')) setField('f-mahaprasad', p.get('mahaprasad'));
-
-  if (p.get('time')) {
-    const t = p.get('time'); // e.g. "5:30 pm"
-    const match = t.match(/(\d+):(\d+)/);
-    if (match) {
-      const hEl = document.getElementById('f-hour');
-      const mEl = document.getElementById('f-minute');
-      if (hEl) hEl.value = parseInt(match[1], 10);
-      if (mEl) mEl.value = parseInt(match[2], 10);
-    }
-  }
-
-  if (p.get('santos') === 'true') {
-    const cb = document.getElementById('santos-cb');
-    if (cb) { cb.checked = true; toggleSantos(true); }
-  }
-
-  updateDatetime();
-  updateRsvp();
-  renderDragItems();
 }
 
-// ── Send for Review ───────────────────────────────────────────────────────────
-
-function switchBuilderTab(tab, btn) {
-  document.querySelectorAll('.builder-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  const flyerOuter  = document.getElementById('flyer-wrap-outer');
-  const previewWrap = document.getElementById('preview-canvas-wrap');
-  const label       = document.getElementById('preview-label');
-  const advPreview  = document.getElementById('adv-preview-section');
-  const advMainFS   = document.getElementById('adv-main-font-sizes');
-  if (tab === 'flyer') {
-    flyerOuter.classList.remove('hidden');
-    previewWrap.classList.remove('active');
-    label.textContent = 'Live Preview — drag text to reposition';
-    if (advPreview) advPreview.style.display = 'none';
-    if (advMainFS)  advMainFS.style.display  = '';
-  } else {
-    flyerOuter.classList.add('hidden');
-    previewWrap.classList.add('active');
-    label.textContent = 'Social Media Preview (1200×630)';
-    if (advPreview) advPreview.style.display = '';
-    if (advMainFS)  advMainFS.style.display  = 'none';
-    renderPreviewCanvas();
-    renderPreviewPosList();
-  }
+// ── Render the flyer onto a canvas (preview = #flyer-canvas, capture = offscreen)
+function renderFlyer(W, canvasEl) {
+  if (!assetsReady || !currentPhoto) return;
+  const ctx = canvasEl.getContext('2d');
+  FlyerRender.compositeFlyer(ctx, W, {
+    watercolorImg: A.watercolor,
+    variant: isSatsang ? 'satsang' : 'parasabha',
+    bgColor: currentPhoto.entry.bgColor,
+    textColor: currentPhoto.entry.textColor,
+    photoImg: currentPhoto.img,
+    photo: currentPhoto.entry.photo,
+    fade: currentPhoto.entry.fade,
+    headerImg: A.header,
+    footerImg: currentPhoto.entry.footer === 'white' ? A.footerWhite : A.footerBlack,
+    fields: buildFields(),
+  });
+}
+let _rafToken = 0;
+function renderFlyerPreview() {
+  const canvas = document.getElementById('flyer-canvas');
+  // Render at native width and let CSS scale it down → crisp preview.
+  renderFlyer((MANIFEST && MANIFEST.canvas.width) || 1125, canvas);
+}
+function scheduleRender() {
+  cancelAnimationFrame(_rafToken);
+  _rafToken = requestAnimationFrame(renderFlyerPreview);
 }
 
-
-function formatPreviewDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' });
+// ── Advanced ("More options") — live layout tuning ────────────────────────────
+let _advOpen = false;
+function showAdvancedToggle() { const b = document.getElementById('advanced-toggle'); if (b) b.style.display = 'block'; }
+function toggleAdvanced() {
+  _advOpen = !_advOpen;
+  document.getElementById('advanced-section').style.display = _advOpen ? 'block' : 'none';
+  document.getElementById('adv-arrow').textContent = _advOpen ? '▲' : '▼';
+  if (_advOpen) buildAdvancedPanel();
+}
+// When in Satsang Sabha, the keys with a satsang override are edited on that
+// override (per-zone); everything else edits the shared base layout.
+function advTarget(key) {
+  const L = FlyerRender.LAYOUT;
+  if (isSatsang && L.satsang[key]) return L.satsang[key];
+  return L.text.find((e) => e.key === key);
+}
+function buildAdvancedPanel() {
+  const host = document.getElementById('adv-text-rows');
+  if (!host || !window.FlyerRender) return;
+  const L = FlyerRender.LAYOUT;
+  const note = document.getElementById('adv-zone-note'); if (note) note.textContent = isSatsang ? 'Satsang Sabha' : 'all Parasabha zones';
+  host.innerHTML = L.text.map((base) => {
+    const k = base.key;
+    const eff = (isSatsang && L.satsang[k]) ? { ...base, ...L.satsang[k] } : base;
+    const lh = eff.lineHeight != null ? eff.lineHeight : 1.4;
+    return `<div class="adv-el">${k}</div>
+      <div class="adv-row"><label>Size</label><input type="range" min="12" max="240" step="1" value="${eff.sizePx}" oninput="advEdit('${k}','sizePx',this.value)"><span id="ae-${k}-size">${eff.sizePx}px</span></div>
+      <div class="adv-row"><label>Y</label><input type="range" min="0.50" max="0.97" step="0.001" value="${eff.yPct}" oninput="advEdit('${k}','yPct',this.value)"><span id="ae-${k}-y">${(+eff.yPct).toFixed(3)}</span></div>
+      <div class="adv-row"><label>Lead</label><input type="range" min="0.70" max="1.60" step="0.01" value="${lh}" oninput="advEdit('${k}','lineHeight',this.value)"><span id="ae-${k}-lh">${(+lh).toFixed(2)}</span></div>`;
+  }).join('');
+  const bt = document.getElementById('adv-box-top'), bb = document.getElementById('adv-box-bottom');
+  bt.value = L.photoBox.topPct; document.getElementById('adv-box-top-v').textContent = (+L.photoBox.topPct).toFixed(3);
+  bb.value = L.photoBox.bottomPct; document.getElementById('adv-box-bottom-v').textContent = (+L.photoBox.bottomPct).toFixed(3);
+}
+function advEdit(key, prop, val) {
+  val = parseFloat(val);
+  advTarget(key)[prop] = val;
+  const sfx = prop === 'sizePx' ? 'size' : prop === 'yPct' ? 'y' : 'lh';
+  const span = document.getElementById('ae-' + key + '-' + sfx);
+  if (span) span.textContent = prop === 'sizePx' ? val + 'px' : prop === 'yPct' ? val.toFixed(3) : val.toFixed(2);
+  scheduleRender();
+}
+function advBox(prop, val) {
+  FlyerRender.LAYOUT.photoBox[prop] = parseFloat(val);
+  document.getElementById('adv-box-' + (prop === 'topPct' ? 'top' : 'bottom') + '-v').textContent = (+val).toFixed(3);
+  scheduleRender();
+}
+function saveLayout() {
+  const blob = new Blob([JSON.stringify(FlyerRender.serializeLayout(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'flyer-layout.json'; a.click();
 }
 
-// ── Preview (1200×630 social media preview) ─────────────────────────────────
-// Independent element config — yPct is fraction of preview image height
-// Text is centered at x=75% (right half center) of the image
+// ── Zone / toggles ───────────────────────────────────────────────────────────
+function setZone(zone, btn) {
+  currentZone = zone;
+  isSatsang = zone === 'satsang-sabha';
+  document.querySelectorAll('.zone-btn').forEach((b) => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('para-fields').style.display = isSatsang ? 'none' : 'block';
+  document.getElementById('santos-toggle').style.display = isSatsang ? 'block' : 'none';
+  if (!isSatsang) document.getElementById('santos-cb').checked = false;
+  const isMandir = MANDIR_ZONES.includes(zone);
+  document.getElementById('mandir-toggle').style.display = isMandir ? 'block' : 'none';
+  const cb = document.getElementById('mandir-cb');
+  cb.checked = isMandir;
+  toggleMandir(isMandir);
+  document.getElementById('mahaprasad-field').style.display = 'block';
+  if (_advOpen) buildAdvancedPanel();
+  scheduleRender();
+}
+function toggleMandir(checked) {
+  const a1 = document.getElementById('f-addr1'), a2 = document.getElementById('f-addr2');
+  if (checked) { a1.value = MANDIR_ADDRESS.line1; a2.value = MANDIR_ADDRESS.line2; a1.disabled = a2.disabled = true; a1.style.opacity = a2.style.opacity = '0.6'; }
+  else { a1.value = a2.value = ''; a1.disabled = a2.disabled = false; a1.style.opacity = a2.style.opacity = '1'; }
+  scheduleRender();
+}
+function toggleSantos(checked) { renderPreviewCanvas(); }
+
+// ── OG / social preview tab (1200×630) — unchanged baked-template path ────────
 const PREVIEW_ELEMENTS = {
-  prev_datetime: { label: 'Date & Time', yPct: 0.6438, fontSizePx: 22, color: '#85381c', font: 'AddingtonCF',      bevel: true,  lineHeight: 1.3 },
-  prev_santos:   { label: 'Santos',       yPct: 0.71,   fontSizePx: 16, color: '#48467F', font: 'AddingtonCF',      bevel: false, lineHeight: 1.3 },
-  prev_rsvp:     { label: 'RSVP Line',   yPct: 0.7734, fontSizePx: 16, color: '#4c4c4b', font: 'AddingtonCF',      bevel: false, lineHeight: 1.3 },
+  prev_datetime: { label: 'Date & Time', yPct: 0.6438, fontSizePx: 22, color: '#85381c', font: 'AddingtonCF', bevel: true,  lineHeight: 1.3 },
+  prev_santos:   { label: 'Santos',      yPct: 0.71,   fontSizePx: 16, color: '#48467F', font: 'AddingtonCF', bevel: false, lineHeight: 1.3 },
+  prev_rsvp:     { label: 'RSVP Line',   yPct: 0.7734, fontSizePx: 16, color: '#4c4c4b', font: 'AddingtonCF', bevel: false, lineHeight: 1.3 },
 };
-
 function getPreviewElText(id) {
-  const day     = formatDate(document.getElementById('f-date')?.value || '');
-  const hourVal = document.getElementById('f-hour')?.value || '';
-  const minVal  = document.getElementById('f-minute')?.value || '00';
-  const time    = hourVal ? `${hourVal}:${minVal.padStart(2,'0')} pm` : '';
-  const rsvp    = formatRsvpDate(document.getElementById('f-rsvp-date')?.value || '');
+  const day = formatDate(document.getElementById('f-date').value);
+  const h = document.getElementById('f-hour').value;
+  const m = document.getElementById('f-minute').value || '00';
+  const time = h ? `${h}:${m.padStart(2,'0')} pm` : '';
+  const rsvp = formatRsvpDate(document.getElementById('f-rsvp-date').value);
   const map = {
     prev_datetime: (day && time) ? `${day} at ${time}` : (day || time),
-    prev_santos:   (isSatsang && document.getElementById('santos-cb')?.checked) ? 'In the presence of Pujya Santos' : '',
+    prev_santos:   (isSatsang && document.getElementById('santos-cb').checked) ? 'In the presence of Pujya Santos' : '',
     prev_rsvp:     rsvp ? `Please RSVP by ${rsvp}` : '',
   };
   return map[id] || '';
 }
-
 function renderPreviewDragItems() {
   const wrap = document.getElementById('preview-wrap');
   if (!wrap) return;
-  wrap.querySelectorAll('.drag-item').forEach(el => el.remove());
-
-  Object.keys(PREVIEW_ELEMENTS).forEach(id => {
+  wrap.querySelectorAll('.drag-item').forEach((el) => el.remove());
+  Object.keys(PREVIEW_ELEMENTS).forEach((id) => {
     const el = PREVIEW_ELEMENTS[id];
     const text = getPreviewElText(id);
     if (!text) return;
-
     const div = document.createElement('div');
     div.className = 'drag-item';
     div.id = 'pdrag-' + id;
-    div.dataset.elId = id;
-    div.dataset.isPreview = 'true';
-
     div.style.top = (el.yPct * 100) + '%';
     div.style.fontSize = el.fontSizePx + 'px';
-    div.style.fontWeight = '400';
     div.style.color = el.color;
     div.style.fontFamily = el.font + ', sans-serif';
     div.style.lineHeight = el.lineHeight || 1.3;
     if (el.bevel) div.style.textShadow = '-0.5px -0.5px 1.5px rgba(255,255,255,0.40), 0.8px 0.8px 2px rgba(0,0,0,0.22)';
-    else div.style.textShadow = '0.5px 0.5px 2px rgba(0,0,0,0.15)';
-
     div.innerHTML = text.split('\n').join('<br>');
-    makePreviewDraggable(div, id);
     wrap.appendChild(div);
   });
 }
-
-function makePreviewDraggable(div, id) {
-  let startY, startTop;
-
-  const onDragStart = (clientY) => {
-    if (positionsLocked) return;
-    startY = clientY;
-    startTop = PREVIEW_ELEMENTS[id].yPct * document.getElementById('preview-template-img').offsetHeight;
-    div.classList.add('active', 'focused');
-  };
-
-  const onDragMove = (clientY) => {
-    if (startY === undefined) return;
-    const imgH = document.getElementById('preview-template-img').offsetHeight;
-    const dy = clientY - startY;
-    const newTop = Math.max(0, Math.min(imgH - 10, startTop + dy));
-    PREVIEW_ELEMENTS[id].yPct = newTop / imgH;
-    div.style.top = (PREVIEW_ELEMENTS[id].yPct * 100) + '%';
-    const pc = document.getElementById('pposcoord-' + id);
-    if (pc) pc.textContent = (PREVIEW_ELEMENTS[id].yPct * 100).toFixed(1) + '%';
-  };
-
-  const onDragEnd = () => { startY = undefined; div.classList.remove('active'); };
-
-  div.addEventListener('mousedown', e => { e.preventDefault(); onDragStart(e.clientY); document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp, {once:true}); });
-  const onMove = e => onDragMove(e.clientY);
-  const onUp = () => { onDragEnd(); document.removeEventListener('mousemove', onMove); };
-
-  div.addEventListener('touchstart', e => { e.preventDefault(); onDragStart(e.touches[0].clientY); }, {passive:false});
-  div.addEventListener('touchmove',  e => { e.preventDefault(); onDragMove(e.touches[0].clientY); }, {passive:false});
-  div.addEventListener('touchend',   onDragEnd);
-}
-
-function updatePreviewText(id) {
-  const div = document.getElementById('pdrag-' + id);
-  if (!div) { renderPreviewDragItems(); return; }
-  const text = getPreviewElText(id);
-  if (text) { div.innerHTML = text.split('\n').join('<br>'); div.style.display = ''; }
-  else { div.style.display = 'none'; }
-}
-
 function renderPreviewCanvas() {
-  const zone = currentZone || 'scranton';
-  const templateSrc = PREVIEW_TEMPLATES[zone] || PREVIEW_TEMPLATES['scranton'];
+  const templateSrc = PREVIEW_TEMPLATES[currentZone] || PREVIEW_TEMPLATES['scranton'];
   const img = document.getElementById('preview-template-img');
   if (img) {
     img.crossOrigin = 'anonymous';
@@ -808,272 +441,145 @@ function renderPreviewCanvas() {
   }
 }
 
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchBuilderTab(tab, btn) {
+  document.querySelectorAll('.builder-tab').forEach((b) => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const flyerOuter = document.getElementById('flyer-wrap-outer');
+  const previewWrap = document.getElementById('preview-canvas-wrap');
+  const label = document.getElementById('preview-label');
+  if (tab === 'flyer') {
+    flyerOuter.classList.remove('hidden');
+    previewWrap.classList.remove('active');
+    label.textContent = 'Live Preview — full-resolution flyer';
+    scheduleRender();
+  } else {
+    flyerOuter.classList.add('hidden');
+    previewWrap.classList.add('active');
+    label.textContent = 'Social Media Preview (1200×630)';
+    renderPreviewCanvas();
+  }
+}
 
-
+// ── Send for Review ───────────────────────────────────────────────────────────
 async function sendForReview() {
   const btn = document.getElementById('review-btn');
   const token = new URLSearchParams(window.location.search).get('session') || 'standalone';
+  const date = document.getElementById('f-date').value;
+  const hour = document.getElementById('f-hour').value;
+  const addr1 = document.getElementById('f-addr1').value.trim();
+  if (!date || !hour || !addr1) { showReviewStatus('⚠️ Please fill in at least Date, Time, and Address before submitting.', false); return; }
+  if (!currentPhoto) { showReviewStatus('⚠️ No photo loaded yet — try again in a moment.', false); return; }
 
-  const date  = document.getElementById('f-date')?.value;
-  const hour  = document.getElementById('f-hour')?.value;
-  const addr1 = document.getElementById('f-addr1')?.value.trim();
-  if (!date || !hour || !addr1) {
-    showReviewStatus('⚠️ Please fill in at least Date, Time, and Address before submitting.', false);
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = '⏳ Capturing flyer...';
-
-  const previewTabBtn = document.querySelector('.builder-tab[onclick*="preview"]');
-  const flyerTabBtn   = document.querySelector('.builder-tab[onclick*="flyer"]');
-  const wasOnFlyer    = document.getElementById('flyer-wrap-outer') && !document.getElementById('flyer-wrap-outer').classList.contains('hidden');
-
+  btn.disabled = true; btn.textContent = '⏳ Capturing flyer...';
   try {
-    const santosChecked = document.getElementById('santos-cb')?.checked;
-    const wrap = document.getElementById('flyer-wrap');
+    // ── Flyer: full-resolution canvas composite (native 1125px wide) ──────
+    const flyerCanvas = document.createElement('canvas');
+    renderFlyer(1500, flyerCanvas); // capture above the deploy cap so it downsamples crisp
+    const base64 = flyerCanvas.toDataURL('image/jpeg', 0.92).split(',')[1];
 
-    // ── Step 1: Capture main flyer (always from flyer tab) ──────────────────
-    document.querySelectorAll('.drag-item').forEach(el => {
-      el.dataset.origBorder = el.style.borderColor;
-      el.dataset.origBg = el.style.background;
-      el.style.borderColor = 'transparent';
-      el.style.background = 'transparent';
-    });
-    const flyerCanvas = await html2canvas(wrap, {
-      scale: 923 / wrap.offsetWidth,
-      useCORS: true, allowTaint: false, backgroundColor: null, logging: false,
-    });
-    const base64 = flyerCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-
-    // ── Step 2: Capture preview tab (always, for og.jpg) ────────────────────
+    // ── OG card: existing 1200×630 baked-template path ───────────────────
     btn.textContent = '⏳ Capturing preview...';
-
-    // Switch to preview tab so offsetWidth is valid, then switch back
-    if (wasOnFlyer) previewTabBtn.click();
-
-    // Wait for the preview image to actually load before capturing
+    const previewTabBtn = document.querySelector('.builder-tab[onclick*="preview"]');
+    const wasOnFlyer = !document.getElementById('flyer-wrap-outer').classList.contains('hidden');
+    if (wasOnFlyer && previewTabBtn) previewTabBtn.click();
     const previewImg = document.getElementById('preview-template-img');
     if (previewImg && (!previewImg.complete || !previewImg.naturalWidth)) {
-      await new Promise(r => {
-        const t = setTimeout(r, 3000);
-        previewImg.onload = previewImg.onerror = () => { clearTimeout(t); r(); };
-      });
+      await new Promise((r) => { const t = setTimeout(r, 3000); previewImg.onload = previewImg.onerror = () => { clearTimeout(t); r(); }; });
     }
-
     const previewWrap = document.getElementById('preview-wrap');
-    previewWrap.querySelectorAll('.drag-item').forEach(el => {
-      el.dataset.origBorder = el.style.borderColor;
-      el.dataset.origBg = el.style.background;
-      el.style.borderColor = 'transparent';
-      el.style.background = 'transparent';
-    });
-    const previewScale  = 1200 / previewWrap.offsetWidth;
-    const previewCanvas = await html2canvas(previewWrap, {
-      scale: previewScale,
-      useCORS: true, allowTaint: false, backgroundColor: null, logging: false,
-    });
-
+    previewWrap.querySelectorAll('.drag-item').forEach((el) => { el.dataset.b = el.style.borderColor; el.style.borderColor = 'transparent'; });
+    const previewCanvas = await html2canvas(previewWrap, { scale: 1200 / previewWrap.offsetWidth, useCORS: true, allowTaint: false, backgroundColor: null, logging: false });
     const ogBase64 = previewCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 
+    const santosChecked = document.getElementById('santos-cb').checked;
     const zone = (santosChecked && currentZone === 'satsang-sabha') ? 'satsang-sabha-santos' : currentZone;
+    const m = document.getElementById('f-minute').value || '00';
     const eventData = {
-      date:       document.getElementById('f-date')?.value || '',
-      time:       (() => { const h = document.getElementById('f-hour')?.value; const m = document.getElementById('f-minute')?.value || '00'; return h ? `${h}:${m.padStart(2,'0')} pm` : ''; })(),
-      rsvpDate:   document.getElementById('f-rsvp-date')?.value || '',
-      host:       document.getElementById('f-host')?.value.trim() || '',
-      addr1:      document.getElementById('f-addr1')?.value.trim() || '',
-      addr2:      document.getElementById('f-addr2')?.value.trim() || '',
-      mahaprasad: document.getElementById('f-mahaprasad')?.value || '',
-      santos:     santosChecked ? 'true' : 'false',
-      zone:       zone,
+      date, time: hour ? `${hour}:${m.padStart(2,'0')} pm` : '',
+      rsvpDate: document.getElementById('f-rsvp-date').value || '',
+      host: document.getElementById('f-host').value.trim() || '',
+      addr1, addr2: document.getElementById('f-addr2').value.trim() || '',
+      mahaprasad: document.getElementById('f-mahaprasad').value || '',
+      santos: santosChecked ? 'true' : 'false',
+      photoId: currentPhoto.id,
+      zone,
     };
 
     btn.textContent = '⏳ Sending...';
-
     const res = await fetch('/.netlify/functions/review-flyer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-builder-session': token },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-builder-session': token },
       body: JSON.stringify({ zone, imageBase64: base64, ogBase64, eventData }),
     });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'Submission failed');
-    }
-
+    if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'Submission failed'); }
     window.location.href = '/flyer-builder/review-sent/';
-
   } catch (err) {
-    btn.disabled = false;
-    btn.textContent = '📤 Send for Review';
+    btn.disabled = false; btn.textContent = '📤 Send for Review';
     showReviewStatus('❌ ' + err.message, false);
-    if (wasOnFlyer && flyerTabBtn) flyerTabBtn.click();
   } finally {
-    // Always restore inline styles on drag items (borders + backgrounds)
-    // we transparentised during capture, regardless of success/failure.
-    try { renderDragItems(); } catch (e) {}
     try { renderPreviewDragItems(); } catch (e) {}
   }
 }
-
-
-function showReviewStatus(msg, success) {
+function showReviewStatus(msg, ok) {
   const el = document.getElementById('review-status');
-  el.textContent = msg;
-  el.style.background = success ? '#f0fdf4' : '#fef2f2';
-  el.style.color = success ? '#166534' : '#991b1b';
-  el.style.display = 'block';
+  el.textContent = msg; el.style.background = ok ? '#f0fdf4' : '#fef2f2'; el.style.color = ok ? '#166534' : '#991b1b'; el.style.display = 'block';
 }
 
-// ── Save Position Log ─────────────────────────────────────────────────────────
-function savePreviewPositionLog() {
-  const log = {};
-  Object.keys(PREVIEW_ELEMENTS).forEach(id => {
-    log[id] = { yPct: +PREVIEW_ELEMENTS[id].yPct.toFixed(4), fontSizePx: PREVIEW_ELEMENTS[id].fontSizePx, lineHeight: PREVIEW_ELEMENTS[id].lineHeight };
-  });
-  const blob = new Blob([JSON.stringify(log, null, 2)], {type:'application/json'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = 'preview-positions.json'; a.click();
-}
-
-function saveLog() {
-  const log = {
-    canvasSize: { width: 923, height: 2000 },
-    previewWidth: 360,
-    scaleToCanvas: (923 / 360).toFixed(4),
-    parasabha: {
-      datetime: { yPct: ELEMENTS.datetime.yPct, fontSizePx: ELEMENTS.datetime.fontSizePx, bold: ELEMENTS.datetime.bold, color: ELEMENTS.datetime.color, font: ELEMENTS.datetime.font, lineHeight: ELEMENTS.datetime.lineHeight },
-      rsvp:     { yPct: ELEMENTS.rsvp.yPct,     fontSizePx: ELEMENTS.rsvp.fontSizePx,     bold: ELEMENTS.rsvp.bold,     color: ELEMENTS.rsvp.color,     font: ELEMENTS.rsvp.font,     lineHeight: ELEMENTS.rsvp.lineHeight },
-      hostname: { yPct: ELEMENTS.hostname.yPct, fontSizePx: ELEMENTS.hostname.fontSizePx, bold: ELEMENTS.hostname.bold, color: ELEMENTS.hostname.color, font: ELEMENTS.hostname.font, lineHeight: ELEMENTS.hostname.lineHeight },
-      address:    { yPct: ELEMENTS.address.yPct,     fontSizePx: ELEMENTS.address.fontSizePx,     bold: ELEMENTS.address.bold,     color: ELEMENTS.address.color,     font: ELEMENTS.address.font,     lineHeight: ELEMENTS.address.lineHeight },
-      mahaprasad: { yPct: ELEMENTS.mahaprasad.yPct,  fontSizePx: ELEMENTS.mahaprasad.fontSizePx,  bold: ELEMENTS.mahaprasad.bold,  color: ELEMENTS.mahaprasad.color,  font: ELEMENTS.mahaprasad.font,  lineHeight: ELEMENTS.mahaprasad.lineHeight },
-    },
-    satsang_sabha: {
-      datetime: { yPct: ELEMENTS.ss_datetime.yPct, fontSizePx: ELEMENTS.ss_datetime.fontSizePx, bold: ELEMENTS.ss_datetime.bold, color: ELEMENTS.ss_datetime.color, font: ELEMENTS.ss_datetime.font, lineHeight: ELEMENTS.ss_datetime.lineHeight },
-      address:  { yPct: ELEMENTS.ss_address.yPct,  fontSizePx: ELEMENTS.ss_address.fontSizePx,  bold: ELEMENTS.ss_address.bold,  color: ELEMENTS.ss_address.color,  font: ELEMENTS.ss_address.font,  lineHeight: ELEMENTS.ss_address.lineHeight },
-    },
-    notes: 'yPct is position as fraction of image height (0=top, 1=bottom). fontSizePx is preview size — multiply by scaleToCanvas for full-res canvas.'
-  };
-
-  const blob = new Blob([JSON.stringify(log, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'flyer-positions.json';
-  a.click();
-
-  const saveBtn = document.querySelector('button[onclick="saveLog()"]');
-  if (saveBtn) {
-    const orig = saveBtn.textContent;
-    saveBtn.textContent = '✅ Saved!';
-    setTimeout(() => { saveBtn.textContent = orig; }, 2000);
+// ── URL params autofill ───────────────────────────────────────────────────────
+function readUrlParams() {
+  const p = new URLSearchParams(window.location.search);
+  const zoneParam = p.get('zone');
+  if (zoneParam) {
+    const zoneKey = zoneParam.replace('-santos','');
+    const zoneBtn = document.querySelector('.zone-btn[onclick*="\'' + zoneKey + '\'"]');
+    if (zoneBtn) setZone(zoneKey, zoneBtn);
   }
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+  set('f-date', p.get('date')); set('f-rsvp-date', p.get('rsvpDate')); set('f-host', p.get('host'));
+  set('f-addr1', p.get('addr1')); set('f-addr2', p.get('addr2')); set('f-mahaprasad', p.get('mahaprasad'));
+  if (p.get('time')) { const mt = p.get('time').match(/(\d+):(\d+)/); if (mt) { set('f-hour', parseInt(mt[1],10)); set('f-minute', parseInt(mt[2],10)); } }
+  if (p.get('santos') === 'true') { const cb = document.getElementById('santos-cb'); if (cb) { cb.checked = true; } }
+  scheduleRender();
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
 // ── Session verification ─────────────────────────────────────────────────────
-window.ADMIN_TOKEN = null;
-window.BUILDER_SESSION_ID = null;
-
+window.ADMIN_TOKEN = null; window.BUILDER_SESSION_ID = null;
 async function verifyBuilderSession() {
-  const params = new URLSearchParams(window.location.search);
-  const sessionId = params.get('session');
-
-  if (!sessionId) {
-    // Already handled above before this function was called
-    return;
-  }
-
+  const sessionId = new URLSearchParams(window.location.search).get('session');
+  if (!sessionId) return;
   window.BUILDER_SESSION_ID = sessionId;
-  console.log('Verifying session:', sessionId);
-
   try {
-    const res = await fetch('/.netlify/functions/verify-builder-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId }),
-    });
+    const res = await fetch('/.netlify/functions/verify-builder-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId }) });
     const data = await res.json();
-    console.log('Session verify response:', res.status, data);
-
-    if (!res.ok) {
-      showSessionError(data.error || 'Invalid session');
-      return;
-    }
-
-    // Store session id as the auth token for review submissions
-    window.ADMIN_TOKEN = sessionId;
-    console.log('ADMIN_TOKEN set to:', sessionId);
-    window.BUILDER_MANAGER_ID = data.managerId;
-
-    // Restrict zone buttons
+    if (!res.ok) { showSessionError(data.error || 'Invalid session'); return; }
+    window.ADMIN_TOKEN = sessionId; window.BUILDER_MANAGER_ID = data.managerId;
+    if (data.allowAdvanced) showAdvancedToggle();
     try {
       const allowed = data.allowedZones || [];
       if (!data.isSuperadmin && allowed.length) {
-        document.querySelectorAll('.zone-btn').forEach(btn => {
-          const match = (btn.getAttribute('onclick') || '').match(/'([^']+)'/);
-          const zone = match ? match[1] : '';
-          const baseZone = zone.replace('-santos','');
-          if (!allowed.includes(baseZone) && !allowed.includes(zone)) {
-            btn.style.display = 'none';
-          }
+        document.querySelectorAll('.zone-btn').forEach((btn) => {
+          const mt = (btn.getAttribute('onclick') || '').match(/'([^']+)'/);
+          const zone = mt ? mt[1] : ''; const base = zone.replace('-santos','');
+          if (!allowed.includes(base) && !allowed.includes(zone)) btn.style.display = 'none';
         });
         const firstAllowed = document.querySelector('.zone-btn:not([style*="display: none"])');
         if (firstAllowed) firstAllowed.click();
       }
-    } catch(zoneErr) {
-      console.warn('Zone restriction error:', zoneErr);
-    }
-
-    // Show advanced toggle if permitted
-    const advToggle = document.getElementById('advanced-toggle');
-    if (data.allowAdvanced && advToggle) {
-      advToggle.style.display = 'flex';
-    }
-
-  } catch (err) {
-    console.error('Session verification error:', err);
-    // Only show error screen for actual auth failures, not JS errors
-    if (err.message && !err.message.includes('Cannot read')) {
-      showSessionError('Could not verify session: ' + err.message);
-    }
-  }
+    } catch (e) {}
+  } catch (err) { if (err.message && !err.message.includes('Cannot read')) showSessionError('Could not verify session: ' + err.message); }
 }
-
 function showSessionError(msg) {
-  document.body.innerHTML = `
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F7F0E8;font-family:'DM Sans',sans-serif">
-      <div style="background:#fff;border-radius:16px;padding:40px 32px;max-width:400px;text-align:center;box-shadow:0 8px 32px rgba(92,45,10,0.12)">
-        <div style="font-size:40px;margin-bottom:16px">🔒</div>
-        <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#5C2D0A;margin-bottom:12px">Session Invalid</h2>
-        <p style="font-size:14px;color:#8B6040;line-height:1.6;margin-bottom:24px">${msg}</p>
-        <p style="font-size:13px;color:#8B6040">Please go back to the admin portal and click <strong>Open Flyer Builder</strong> again.</p>
-      </div>
-    </div>`;
+  document.body.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F7F0E8;font-family:'DM Sans',sans-serif"><div style="background:#fff;border-radius:16px;padding:40px 32px;max-width:400px;text-align:center;box-shadow:0 8px 32px rgba(92,45,10,0.12)"><div style="font-size:40px;margin-bottom:16px">🔒</div><h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#5C2D0A;margin-bottom:12px">Session Invalid</h2><p style="font-size:14px;color:#8B6040;line-height:1.6;margin-bottom:24px">${msg}</p><p style="font-size:13px;color:#8B6040">Please go back to the admin portal and click <strong>Open Flyer Builder</strong> again.</p></div></div>`;
 }
-
-// ── Standalone mode (no ?session param) ──────────────────────────────────────
-const _urlParams = new URLSearchParams(window.location.search);
-if (!_urlParams.get('session')) {
-  window.ADMIN_TOKEN = 'standalone';
-  setTimeout(() => {
-    const adv = document.getElementById('advanced-toggle');
-    if (adv) adv.style.display = 'flex';
-  }, 100);
-}
+if (!new URLSearchParams(window.location.search).get('session')) { window.ADMIN_TOKEN = 'standalone'; showAdvancedToggle(); }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-verifyBuilderSession();
-
-const _tImg = document.getElementById('template-img');
-_tImg.crossOrigin = 'anonymous';
-_tImg.src = TEMPLATES['moosic'];
-document.getElementById('template-img').onload = () => {
-  renderDragItems();
-  renderPosList();
-  // Delay readUrlParams slightly so time dropdown is built
+(async function init() {
+  verifyBuilderSession();
+  setZone('moosic', document.querySelector('.zone-btn'));
+  try { await loadFlyerAssets(); } catch (e) { document.getElementById('photo-caption').textContent = 'asset load failed: ' + e.message; }
   setTimeout(readUrlParams, 150);
-};
+})();
 </script>
 </body>
 </html>
