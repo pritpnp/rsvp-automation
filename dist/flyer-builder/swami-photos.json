@@ -1,0 +1,784 @@
+{
+  "canvas": {
+    "width": 1125,
+    "height": 2436
+  },
+  "photos": [
+    {
+      "id": "030",
+      "file": "swami-photos/030.jpg",
+      "bgColor": "#F4C9D6",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.5,
+        "focusY": 0.26,
+        "zoom": 1.15
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.1
+      },
+      "footer": "black",
+      "textColor": "#a82d00"
+    },
+    {
+      "id": "09182017-vicharan-robbinsville-0030",
+      "file": "swami-photos/09182017-vicharan-robbinsville-0030.jpg",
+      "bgColor": "#b9a59c",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.75,
+        "focusY": 0.5,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.04
+      },
+      "footer": "black"
+    },
+    {
+      "id": "20170906-vicharan-robbinsville-27",
+      "file": "swami-photos/20170906-vicharan-robbinsville-27.jpg",
+      "bgColor": "#c4a893",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.61,
+        "focusY": 0.5,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#9e0000"
+    },
+    {
+      "id": "20170927-southlondon-31",
+      "file": "swami-photos/20170927-southlondon-31.jpg",
+      "bgColor": "#F4C9D6",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.38,
+        "focusY": 0.33,
+        "zoom": 1.15
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.05
+      },
+      "footer": "black",
+      "textColor": "#912e0d"
+    },
+    {
+      "id": "2018-02-17-030-auckland",
+      "file": "swami-photos/2018-02-17-030-auckland.jpg",
+      "bgColor": "#dec0aa",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.13,
+        "focusY": 0,
+        "zoom": 1.45
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.06
+      },
+      "footer": "black",
+      "textColor": "#d12a00"
+    },
+    {
+      "id": "2018-02-18-029-auckland",
+      "file": "swami-photos/2018-02-18-029-auckland.jpg",
+      "bgColor": "#efc5a4",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.49,
+        "focusY": 0.31,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#c40e0e"
+    },
+    {
+      "id": "2025-02-06-037-johannesburg",
+      "file": "swami-photos/2025-02-06-037-johannesburg.jpg",
+      "bgColor": "#e7ba84",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0,
+        "focusY": 0.37,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#c20000"
+    },
+    {
+      "id": "2025-02-17-023-melbourne",
+      "file": "swami-photos/2025-02-17-023-melbourne.jpg",
+      "bgColor": "#787bae",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.7,
+        "focusY": 0.7,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#4100f5"
+    },
+    {
+      "id": "2025-02-23-049-melbourne",
+      "file": "swami-photos/2025-02-23-049-melbourne.jpg",
+      "bgColor": "#140c07",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 1,
+        "focusY": 0.42,
+        "zoom": 1.1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#d10034"
+    },
+    {
+      "id": "2025-02-25-023-melbourne",
+      "file": "swami-photos/2025-02-25-023-melbourne.jpg",
+      "bgColor": "#7c5654",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.42,
+        "focusY": 0.43,
+        "zoom": 1.2
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#d60020"
+    },
+    {
+      "id": "2025-02-28-024-melbourne",
+      "file": "swami-photos/2025-02-28-024-melbourne.jpg",
+      "bgColor": "#ac9589",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.61,
+        "focusY": 0.07,
+        "zoom": 1.6
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#e03c00"
+    },
+    {
+      "id": "2025-03-11-026-sydney",
+      "file": "swami-photos/2025-03-11-026-sydney.jpg",
+      "bgColor": "#d3af86",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.3,
+        "focusY": 0.39,
+        "zoom": 1.3
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#d72619"
+    },
+    {
+      "id": "2025-03-14-028-sydney",
+      "file": "swami-photos/2025-03-14-028-sydney.jpg",
+      "bgColor": "#7f1a29",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.2,
+        "focusY": 0.34,
+        "zoom": 1.25
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#e00000"
+    },
+    {
+      "id": "2025-03-24-022-sydney",
+      "file": "swami-photos/2025-03-24-022-sydney.jpg",
+      "bgColor": "#120032",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.5,
+        "focusY": 0,
+        "zoom": 1.05
+      },
+      "fade": {
+        "startPct": 0.66,
+        "endPct": 1,
+        "topPct": 0.04
+      },
+      "footer": "black",
+      "textColor": "#5000e6"
+    },
+    {
+      "id": "2025-05-026-020-kanad",
+      "file": "swami-photos/2025-05-026-020-kanad.jpg",
+      "bgColor": "#a99583",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.54,
+        "focusY": 0.13,
+        "zoom": 1.75
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#0082ad"
+    },
+    {
+      "id": "2025-05-026-022-kanad",
+      "file": "swami-photos/2025-05-026-022-kanad.jpg",
+      "bgColor": "#8f534e",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.56,
+        "focusY": 0,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.83,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#c73500"
+    },
+    {
+      "id": "2025-05-026-023-kanad",
+      "file": "swami-photos/2025-05-026-023-kanad.jpg",
+      "bgColor": "#1f1600",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.61,
+        "focusY": 0,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.77,
+        "endPct": 1,
+        "topPct": 0.05
+      },
+      "footer": "black",
+      "textColor": "#006cd1"
+    },
+    {
+      "id": "2025-05-09-018-kanad",
+      "file": "swami-photos/2025-05-09-018-kanad.jpg",
+      "bgColor": "#928582",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.59,
+        "focusY": 0,
+        "zoom": 1.6
+      },
+      "fade": {
+        "startPct": 0.8,
+        "endPct": 1,
+        "topPct": 0.06
+      },
+      "footer": "black",
+      "textColor": "#b30000"
+    },
+    {
+      "id": "2025-05-24-031-kanad",
+      "file": "swami-photos/2025-05-24-031-kanad.jpg",
+      "bgColor": "#d1ced5",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.5,
+        "focusY": 0.09,
+        "zoom": 1.2
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#ff4d00"
+    },
+    {
+      "id": "2025-05-30-075-kanad",
+      "file": "swami-photos/2025-05-30-075-kanad.jpg",
+      "bgColor": "#832e7d",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.55,
+        "focusY": 0.46,
+        "zoom": 1.3
+      },
+      "fade": {
+        "startPct": 0.68,
+        "endPct": 1,
+        "topPct": 0.11
+      },
+      "footer": "black",
+      "textColor": "#8000ff"
+    },
+    {
+      "id": "2025-09-05-041-himmatnagar",
+      "file": "swami-photos/2025-09-05-041-himmatnagar.jpg",
+      "bgColor": "#000e2b",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.78,
+        "focusY": 0.28,
+        "zoom": 2.45
+      },
+      "fade": {
+        "startPct": 0.82,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#0400ff"
+    },
+    {
+      "id": "2025-09-09-079-mahesana",
+      "file": "swami-photos/2025-09-09-079-mahesana.jpg",
+      "bgColor": "#dab381",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.85,
+        "focusY": 0.46,
+        "zoom": 1.2
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#ef1707"
+    },
+    {
+      "id": "2025-09-20-023-jodhpur",
+      "file": "swami-photos/2025-09-20-023-jodhpur.jpg",
+      "bgColor": "#d6d6d6",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.28,
+        "focusY": 0.26,
+        "zoom": 1.15
+      },
+      "fade": {
+        "startPct": 0.82,
+        "endPct": 1,
+        "topPct": 0.05
+      },
+      "footer": "black",
+      "textColor": "#ff5900"
+    },
+    {
+      "id": "2025-09-26-064-jodhpur",
+      "file": "swami-photos/2025-09-26-064-jodhpur.jpg",
+      "bgColor": "#61b8f0",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.5,
+        "focusY": 0.53,
+        "zoom": 1.1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#ff0000"
+    },
+    {
+      "id": "2025-11-03-023-gondal",
+      "file": "swami-photos/2025-11-03-023-gondal.jpg",
+      "bgColor": "#d2baa8",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.89,
+        "focusY": 0.5,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black"
+    },
+    {
+      "id": "2025-11-17-034-jamnagar",
+      "file": "swami-photos/2025-11-17-034-jamnagar.jpg",
+      "bgColor": "#ceb7af",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.58,
+        "focusY": 0.5,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#e00000"
+    },
+    {
+      "id": "2025-11-26-047-ahmedabad",
+      "file": "swami-photos/2025-11-26-047-ahmedabad.jpg",
+      "bgColor": "#d0b694",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.53,
+        "focusY": 0.46,
+        "zoom": 1.15
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#b83100"
+    },
+    {
+      "id": "2025-12-11-043-ahmedabad",
+      "file": "swami-photos/2025-12-11-043-ahmedabad.jpg",
+      "bgColor": "#d5b797",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.48,
+        "focusY": 0,
+        "zoom": 1.1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#005c06"
+    },
+    {
+      "id": "2025-12-16-035-ahmedabad",
+      "file": "swami-photos/2025-12-16-035-ahmedabad.jpg",
+      "bgColor": "#edcc9e",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0,
+        "focusY": 0.74,
+        "zoom": 1.05
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#6b1910"
+    },
+    {
+      "id": "2025-12-21-036-ahmedabad",
+      "file": "swami-photos/2025-12-21-036-ahmedabad.jpg",
+      "bgColor": "#205ebe",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.63,
+        "focusY": 0.5,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#000485"
+    },
+    {
+      "id": "2026-01-04-042-ahmedabad",
+      "file": "swami-photos/2026-01-04-042-ahmedabad.jpg",
+      "bgColor": "#b9c5cb",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.44,
+        "focusY": 0.5,
+        "zoom": 1.1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#1d2987"
+    },
+    {
+      "id": "2026-01-14-061-ahmedabad",
+      "file": "swami-photos/2026-01-14-061-ahmedabad.jpg",
+      "bgColor": "#d0b18a",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.47,
+        "focusY": 0.29,
+        "zoom": 1.25
+      },
+      "fade": {
+        "startPct": 0.85,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#990052"
+    },
+    {
+      "id": "2026-01-28-032-atladara",
+      "file": "swami-photos/2026-01-28-032-atladara.jpg",
+      "bgColor": "#bca38e",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.53,
+        "focusY": 0.18,
+        "zoom": 1.65
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black"
+    },
+    {
+      "id": "2026-03-05-043-sarangpur",
+      "file": "swami-photos/2026-03-05-043-sarangpur.jpg",
+      "bgColor": "#cfa9d0",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.52,
+        "focusY": 0,
+        "zoom": 1.1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.03
+      },
+      "footer": "black",
+      "textColor": "#8100bd"
+    },
+    {
+      "id": "2026-03-05-044-sarangpur",
+      "file": "swami-photos/2026-03-05-044-sarangpur.jpg",
+      "bgColor": "#F4C9D6",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.31,
+        "focusY": 0.08,
+        "zoom": 1.95
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black"
+    },
+    {
+      "id": "2026-03-13-071-sarangpur",
+      "file": "swami-photos/2026-03-13-071-sarangpur.jpg",
+      "bgColor": "#e6b189",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.28,
+        "focusY": 0,
+        "zoom": 1.1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#964217"
+    },
+    {
+      "id": "2026-06-11-158-sarangpur",
+      "file": "swami-photos/2026-06-11-158-sarangpur.jpg",
+      "bgColor": "#cdb28a",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.95,
+        "focusY": 0.5,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#d13f00"
+    },
+    {
+      "id": "23-024",
+      "file": "swami-photos/23-024.jpg",
+      "bgColor": "#bfa4a3",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.44,
+        "focusY": 0.5,
+        "zoom": 1
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#c73500"
+    },
+    {
+      "id": "img-3001",
+      "file": "swami-photos/img-3001.jpg",
+      "bgColor": "#F4C9D6",
+      "photo": {
+        "xPct": 0.5,
+        "topPct": 0.085,
+        "widthPct": 1,
+        "focusX": 0.53,
+        "focusY": 0.65,
+        "zoom": 1.25
+      },
+      "fade": {
+        "startPct": 0.72,
+        "endPct": 1,
+        "topPct": 0.08
+      },
+      "footer": "black",
+      "textColor": "#8000ff"
+    }
+  ]
+}

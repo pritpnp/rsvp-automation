@@ -73,3 +73,13 @@
   for = "/flyer-builder/fonts/*"
   [headers.values]
     Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/swami-photos/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/base/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"

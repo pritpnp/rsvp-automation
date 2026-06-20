@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Flyer Photo Vetter — SCREvents (local tool)</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+@font-face { font-family: 'AddingtonCF'; src: url('/flyer-builder/fonts/AddingtonCF.otf') format('opentype'); }
+@font-face { font-family: 'GothamRegular'; src: url('/flyer-builder/fonts/GothamRegular.ttf') format('truetype'); }
+@font-face { font-family: 'AppleSDGothicNeoH'; src: url('/flyer-builder/fonts/AppleSDGothicNeoH.ttf') format('truetype'); }
+:root { --brown:#5C2D0A; --saffron:#E8650A; --gold:#C8860A; --cream:#FDF6EC; --cream-dark:#F5E6CC; --muted:#8B6040; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: #2a2320; color: #eee; display: flex; min-height: 100vh; }
+.panel { width: 360px; flex-shrink: 0; background: #fff; color: var(--brown); padding: 18px; overflow-y: auto; height: 100vh; }
+.panel h1 { font-family: 'Cormorant Garamond', serif; font-size: 22px; margin-bottom: 2px; }
+.panel .sub { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+.nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.nav button { padding: 8px 10px; border: 1px solid var(--cream-dark); background: var(--cream); border-radius: 8px; cursor: pointer; font-size: 14px; }
+.nav select { flex: 1; padding: 8px; border: 1px solid var(--cream-dark); border-radius: 8px; font-size: 12px; }
+.counter { font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 12px; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.row label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); flex: 1; }
+.row input[type=range] { flex: 2; accent-color: var(--gold); }
+.row .val { font-size: 11px; font-family: monospace; width: 42px; text-align: right; }
+.row input[type=color] { width: 48px; height: 32px; border: 1px solid var(--cream-dark); border-radius: 6px; background: none; cursor: pointer; }
+.seg { display: flex; gap: 0; border: 1px solid var(--cream-dark); border-radius: 8px; overflow: hidden; }
+.seg button { flex: 1; padding: 8px; border: none; background: var(--cream); cursor: pointer; font-size: 12px; }
+.seg button.active { background: var(--saffron); color: #fff; }
+.section { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 16px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--cream-dark); }
+.btn { width: 100%; padding: 11px; border: none; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: 'DM Sans'; }
+.btn-primary { background: linear-gradient(135deg, var(--saffron), var(--gold)); color: #fff; margin-top: 12px; }
+.btn-ghost { background: var(--cream); color: var(--brown); border: 1px solid var(--cream-dark); margin-top: 8px; }
+.stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.stage canvas { max-height: 92vh; box-shadow: 0 10px 50px rgba(0,0,0,0.5); border-radius: 6px; background: #fff; }
+#err { color: #ffb4a0; font-size: 12px; padding: 8px; }
+.hint { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 12px; background: var(--cream); padding: 9px 11px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1>✦ Photo Vetter</h1>
+  <div class="sub">Tune each photo's color, footer, placement & fade. Local tool — not deployed.</div>
+
+  <div class="nav">
+    <button onclick="go(-1)">‹</button>
+    <select id="photo-select" onchange="select(this.selectedIndex)"></select>
+    <button onclick="go(1)">›</button>
+  </div>
+  <div class="counter" id="counter"></div>
+
+  <div class="section">Background tint</div>
+  <div class="row">
+    <label>Color</label>
+    <input type="color" id="bg-color" oninput="setField('bgColor', this.value)">
+    <button class="btn-ghost" style="width:auto;margin:0;padding:6px 9px;font-size:11px" onclick="sampleColor()">⤓ from photo</button>
+  </div>
+
+  <div class="section">Text color</div>
+  <div class="row"><label>Color</label><input type="color" id="text-color" oninput="setField('textColor', this.value)"></div>
+
+  <div class="section">Footer variant</div>
+  <div class="seg" id="footer-seg">
+    <button data-v="black" onclick="setFooter('black')">Black text</button>
+    <button data-v="white" onclick="setFooter('white')">White text</button>
+  </div>
+
+  <div class="section">Photo crop</div>
+  <div class="row"><label>Position X</label><input type="range" id="r-fx" min="0" max="1" step="0.01" oninput="setPhoto('focusX',this.value)"><span class="val" id="v-fx"></span></div>
+  <div class="row"><label>Position Y</label><input type="range" id="r-fy" min="0" max="1" step="0.01" oninput="setPhoto('focusY',this.value)"><span class="val" id="v-fy"></span></div>
+  <div class="row"><label>Zoom</label><input type="range" id="r-z" min="0.4" max="4" step="0.05" oninput="setPhoto('zoom',this.value)"><span class="val" id="v-z"></span></div>
+
+  <div class="section">Photo fade</div>
+  <div class="row"><label>Top fade</label><input type="range" id="r-tf" min="0" max="0.40" step="0.01" oninput="setFade('topPct',this.value)"><span class="val" id="v-tf"></span></div>
+  <div class="row"><label>Fade start</label><input type="range" id="r-fs" min="0.30" max="1.0" step="0.01" oninput="setFade('startPct',this.value)"><span class="val" id="v-fs"></span></div>
+  <div class="row"><label>Fade end</label><input type="range" id="r-fe" min="0.50" max="1.0" step="0.01" oninput="setFade('endPct',this.value)"><span class="val" id="v-fe"></span></div>
+
+  <button class="btn btn-primary" onclick="saveNext()">✓ Save & Next</button>
+  <button class="btn btn-ghost" onclick="exportManifest()">⬇ Export swami-photos.json</button>
+  <div id="err"></div>
+  <div class="hint">Serve locally: <code>cd public &amp;&amp; python3 -m http.server 8000</code> → open <code>localhost:8000/flyer-builder/vetter.html</code>. Edits live in memory until you Export and replace the file.</div>
+</div>
+
+<div class="stage"><canvas id="preview"></canvas></div>
+
+<script src="/flyer-builder/flyer-render.js"></script>
+<script>
+const SAMPLE = {
+  invitation: 'Invitation',
+  zoneLine: 'BAPS Swaminarayan Mandir | Moosic Zone',
+  cordially: 'Cordially invites you, your family, and friends to',
+  title: 'Para Satsang\nSabha',
+  datetime: 'Fri, June 19 at 6:00 pm',
+  rsvp: 'Please RSVP by June 18',
+  locationLabel: 'Location:',
+  host: 'Mehulbhai & Archanaben Patel',
+  address: '522 Orchid Drive\nMoosic, PA 18507',
+  mahaprasad: 'Mahaprasad will be served after sabha.',
+};
+const PREVIEW_W = 1125; // render at native res; CSS scales it down → crisp preview
+
+let manifest = null, idx = 0, assets = {}, photoCache = {};
+const $ = (id) => document.getElementById(id);
+function err(m) { $('err').textContent = m || ''; }
+
+async function boot() {
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    manifest = await (await fetch('/flyer-builder/swami-photos.json?t=' + Date.now())).json();
+    try { const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now()); if (lr.ok) FlyerRender.applyLayout(await lr.json()); } catch (e) {}
+    assets.watercolor = await FlyerRender.loadImage('/flyer-builder/base/watercolor.png');
+    assets.header     = await FlyerRender.loadImage('/flyer-builder/base/header.png');
+    assets.footerBlack = await FlyerRender.loadImage('/flyer-builder/base/footer-black.png');
+    assets.footerWhite = await FlyerRender.loadImage('/flyer-builder/base/footer-white.png');
+    const sel = $('photo-select');
+    sel.innerHTML = manifest.photos.map((p, i) => `<option>${i + 1}. ${p.id}</option>`).join('');
+    select(0);
+  } catch (e) { err('Boot failed: ' + e.message + ' — are you serving this folder over http?'); }
+}
+
+async function loadPhoto(entry) {
+  if (photoCache[entry.id]) return photoCache[entry.id];
+  const img = await FlyerRender.loadImage('/flyer-builder/' + entry.file);
+  photoCache[entry.id] = img;
+  return img;
+}
+
+function cur() { return manifest.photos[idx]; }
+
+async function select(i) {
+  idx = Math.max(0, Math.min(manifest.photos.length - 1, i));
+  const e = cur();
+  $('photo-select').selectedIndex = idx;
+  $('counter').textContent = `${idx + 1} / ${manifest.photos.length} — ${e.id}`;
+  // sync controls
+  $('bg-color').value = e.bgColor || '#F4C9D6';
+  $('text-color').value = e.textColor || '#85381c';
+  setSeg(e.footer || 'black');
+  if (e.photo.focusX === undefined) e.photo.focusX = 0.5;
+  if (e.photo.focusY === undefined) e.photo.focusY = 0.5;
+  if (e.photo.zoom === undefined) e.photo.zoom = 1.0;
+  $('r-fx').value = e.photo.focusX; $('v-fx').textContent = (+e.photo.focusX).toFixed(2);
+  $('r-fy').value = e.photo.focusY; $('v-fy').textContent = (+e.photo.focusY).toFixed(2);
+  $('r-z').value = e.photo.zoom; $('v-z').textContent = (+e.photo.zoom).toFixed(2);
+  if (e.fade.topPct === undefined) e.fade.topPct = 0.08;
+  $('r-tf').value = e.fade.topPct; $('v-tf').textContent = (+e.fade.topPct).toFixed(2);
+  $('r-fs').value = e.fade.startPct; $('v-fs').textContent = (+e.fade.startPct).toFixed(2);
+  $('r-fe').value = e.fade.endPct; $('v-fe').textContent = (+e.fade.endPct).toFixed(2);
+  await render();
+}
+
+function setSeg(v) { document.querySelectorAll('#footer-seg button').forEach((b) => b.classList.toggle('active', b.dataset.v === v)); }
+function setFooter(v) { cur().footer = v; setSeg(v); render(); }
+function setField(k, v) { cur()[k] = v; render(); }
+function setPhoto(k, v) { cur().photo[k] = parseFloat(v); $('v-' + ({ focusX: 'fx', focusY: 'fy', zoom: 'z' }[k])).textContent = (+v).toFixed(2); render(); }
+function setFade(k, v) { cur().fade[k] = parseFloat(v); $('v-' + ({ startPct: 'fs', endPct: 'fe', topPct: 'tf' }[k])).textContent = (+v).toFixed(2); render(); }
+
+let renderToken = 0;
+async function render() {
+  const token = ++renderToken;
+  const e = cur();
+  let photoImg;
+  try { photoImg = await loadPhoto(e); } catch (x) { err('photo load failed: ' + e.id); }
+  if (token !== renderToken) return; // a newer render started
+  const ctx = $('preview').getContext('2d');
+  FlyerRender.compositeFlyer(ctx, PREVIEW_W, {
+    watercolorImg: assets.watercolor,
+    bgColor: e.bgColor,
+    textColor: e.textColor,
+    photoImg,
+    photo: e.photo,
+    fade: e.fade,
+    headerImg: assets.header,
+    footerImg: e.footer === 'white' ? assets.footerWhite : assets.footerBlack,
+    fields: SAMPLE,
+  });
+  err('');
+}
+
+function sampleColor() {
+  const img = photoCache[cur().id];
+  if (!img) return;
+  const c = document.createElement('canvas'); c.width = 40; c.height = 40;
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0, 40, 40);
+  // average the bottom third (where photo meets the background)
+  const d = x.getImageData(0, 27, 40, 13).data;
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+  // lighten toward a pastel tint
+  const mix = (v) => Math.round((v / n) * 0.55 + 255 * 0.45);
+  const hex = '#' + [mix(r), mix(g), mix(b)].map((v) => v.toString(16).padStart(2, '0')).join('');
+  cur().bgColor = hex; $('bg-color').value = hex; render();
+}
+
+function go(d) { saveCurrentControls(); select(idx + d); }
+function saveCurrentControls() { /* controls already write straight to manifest entry */ }
+function saveNext() { go(1); }
+
+function exportManifest() {
+  const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'swami-photos.json'; a.click();
+}
+
+document.addEventListener('keydown', (ev) => {
+  if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
+  if (ev.key === 'ArrowRight') go(1);
+  if (ev.key === 'ArrowLeft') go(-1);
+});
+
+boot();
+</script>
+</body>
+</html>
