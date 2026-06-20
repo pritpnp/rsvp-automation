@@ -84,7 +84,7 @@ async function extractEventInfo(flyerPath) {
   }
   const base64Image = imageBuffer.toString('base64');
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1000,
     messages: [{ role: 'user', content: [
       { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
