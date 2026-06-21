@@ -344,26 +344,6 @@
       "textColor": "#006cd1"
     },
     {
-      "id": "2025-05-09-018-kanad",
-      "file": "swami-photos/2025-05-09-018-kanad.jpg",
-      "bgColor": "#928582",
-      "photo": {
-        "xPct": 0.5,
-        "topPct": 0.085,
-        "widthPct": 1,
-        "focusX": 0.59,
-        "focusY": 0,
-        "zoom": 1.6
-      },
-      "fade": {
-        "startPct": 0.8,
-        "endPct": 1,
-        "topPct": 0.06
-      },
-      "footer": "black",
-      "textColor": "#b30000"
-    },
-    {
       "id": "2025-05-24-031-kanad",
       "file": "swami-photos/2025-05-24-031-kanad.jpg",
       "bgColor": "#d1ced5",
@@ -392,8 +372,8 @@
         "topPct": 0.085,
         "widthPct": 1,
         "focusX": 0.55,
-        "focusY": 0.46,
-        "zoom": 1.3
+        "focusY": 0.41,
+        "zoom": 1.7
       },
       "fade": {
         "startPct": 0.68,
@@ -401,27 +381,7 @@
         "topPct": 0.11
       },
       "footer": "black",
-      "textColor": "#8000ff"
-    },
-    {
-      "id": "2025-09-05-041-himmatnagar",
-      "file": "swami-photos/2025-09-05-041-himmatnagar.jpg",
-      "bgColor": "#000e2b",
-      "photo": {
-        "xPct": 0.5,
-        "topPct": 0.085,
-        "widthPct": 1,
-        "focusX": 0.78,
-        "focusY": 0.28,
-        "zoom": 2.45
-      },
-      "fade": {
-        "startPct": 0.82,
-        "endPct": 1,
-        "topPct": 0.08
-      },
-      "footer": "black",
-      "textColor": "#0400ff"
+      "textColor": "#0056b3"
     },
     {
       "id": "2025-09-09-079-mahesana",
@@ -431,14 +391,14 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.85,
+        "focusX": 0.88,
         "focusY": 0.46,
         "zoom": 1.2
       },
       "fade": {
         "startPct": 0.72,
         "endPct": 1,
-        "topPct": 0.08
+        "topPct": 0.09
       },
       "footer": "black",
       "textColor": "#ef1707"
@@ -466,7 +426,7 @@
     {
       "id": "2025-09-26-064-jodhpur",
       "file": "swami-photos/2025-09-26-064-jodhpur.jpg",
-      "bgColor": "#61b8f0",
+      "bgColor": "#a7cbe2",
       "photo": {
         "xPct": 0.5,
         "topPct": 0.085,
@@ -491,12 +451,12 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.89,
+        "focusX": 0.96,
         "focusY": 0.5,
         "zoom": 1
       },
       "fade": {
-        "startPct": 0.72,
+        "startPct": 0.8,
         "endPct": 1,
         "topPct": 0.08
       },
@@ -531,13 +491,13 @@
         "topPct": 0.085,
         "widthPct": 1,
         "focusX": 0.53,
-        "focusY": 0.46,
-        "zoom": 1.15
+        "focusY": 0.56,
+        "zoom": 1.1
       },
       "fade": {
-        "startPct": 0.72,
+        "startPct": 0.83,
         "endPct": 1,
-        "topPct": 0.08
+        "topPct": 0.13
       },
       "footer": "black",
       "textColor": "#b83100"
@@ -555,7 +515,7 @@
         "zoom": 1.1
       },
       "fade": {
-        "startPct": 0.72,
+        "startPct": 0.79,
         "endPct": 1,
         "topPct": 0.08
       },
@@ -585,7 +545,7 @@
     {
       "id": "2025-12-21-036-ahmedabad",
       "file": "swami-photos/2025-12-21-036-ahmedabad.jpg",
-      "bgColor": "#205ebe",
+      "bgColor": "#94bfff",
       "photo": {
         "xPct": 0.5,
         "topPct": 0.085,
@@ -600,7 +560,7 @@
         "topPct": 0.08
       },
       "footer": "black",
-      "textColor": "#000485"
+      "textColor": "#94006c"
     },
     {
       "id": "2026-01-04-042-ahmedabad",
@@ -611,16 +571,16 @@
         "topPct": 0.085,
         "widthPct": 1,
         "focusX": 0.44,
-        "focusY": 0.5,
+        "focusY": 0.2,
         "zoom": 1.1
       },
       "fade": {
         "startPct": 0.72,
         "endPct": 1,
-        "topPct": 0.08
+        "topPct": 0.09
       },
       "footer": "black",
-      "textColor": "#1d2987"
+      "textColor": "#7a00b3"
     },
     {
       "id": "2026-01-14-061-ahmedabad",
@@ -630,7 +590,7 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.47,
+        "focusX": 0.44,
         "focusY": 0.29,
         "zoom": 1.25
       },
@@ -643,64 +603,6 @@
       "textColor": "#990052"
     },
     {
-      "id": "2026-01-28-032-atladara",
-      "file": "swami-photos/2026-01-28-032-atladara.jpg",
-      "bgColor": "#bca38e",
-      "photo": {
-        "xPct": 0.5,
-        "topPct": 0.085,
-        "widthPct": 1,
-        "focusX": 0.53,
-        "focusY": 0.18,
-        "zoom": 1.65
-      },
-      "fade": {
-        "startPct": 0.72,
-        "endPct": 1,
-        "topPct": 0.08
-      },
-      "footer": "black"
-    },
-    {
-      "id": "2026-03-05-043-sarangpur",
-      "file": "swami-photos/2026-03-05-043-sarangpur.jpg",
-      "bgColor": "#cfa9d0",
-      "photo": {
-        "xPct": 0.5,
-        "topPct": 0.085,
-        "widthPct": 1,
-        "focusX": 0.52,
-        "focusY": 0,
-        "zoom": 1.1
-      },
-      "fade": {
-        "startPct": 0.72,
-        "endPct": 1,
-        "topPct": 0.03
-      },
-      "footer": "black",
-      "textColor": "#8100bd"
-    },
-    {
-      "id": "2026-03-05-044-sarangpur",
-      "file": "swami-photos/2026-03-05-044-sarangpur.jpg",
-      "bgColor": "#F4C9D6",
-      "photo": {
-        "xPct": 0.5,
-        "topPct": 0.085,
-        "widthPct": 1,
-        "focusX": 0.31,
-        "focusY": 0.08,
-        "zoom": 1.95
-      },
-      "fade": {
-        "startPct": 0.72,
-        "endPct": 1,
-        "topPct": 0.08
-      },
-      "footer": "black"
-    },
-    {
       "id": "2026-03-13-071-sarangpur",
       "file": "swami-photos/2026-03-13-071-sarangpur.jpg",
       "bgColor": "#e6b189",
@@ -708,17 +610,17 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.28,
+        "focusX": 0.17,
         "focusY": 0,
-        "zoom": 1.1
+        "zoom": 1
       },
       "fade": {
         "startPct": 0.72,
         "endPct": 1,
-        "topPct": 0.08
+        "topPct": 0.05
       },
       "footer": "black",
-      "textColor": "#964217"
+      "textColor": "#b2420a"
     },
     {
       "id": "2026-06-11-158-sarangpur",
@@ -728,7 +630,7 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.95,
+        "focusX": 1,
         "focusY": 0.5,
         "zoom": 1
       },
@@ -738,7 +640,7 @@
         "topPct": 0.08
       },
       "footer": "black",
-      "textColor": "#d13f00"
+      "textColor": "#bb3902"
     },
     {
       "id": "23-024",

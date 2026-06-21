@@ -1,0 +1,317 @@
+{
+  "header": {
+    "widthPct": 0.205,
+    "topPct": 0.054,
+    "shadow": {
+      "color": "#000000",
+      "size": 0.012,
+      "opacity": 0.9
+    }
+  },
+  "footer": {
+    "widthPct": 0.5,
+    "bottomPct": 0.012
+  },
+  "photoBox": {
+    "topPct": 0.085,
+    "bottomPct": 0.575
+  },
+  "fade": {
+    "topPct": 0.04,
+    "startPct": 0.86,
+    "endPct": 1
+  },
+  "satsang": {
+    "datetime": {
+      "yPct": 0.792,
+      "sizePx": 86
+    },
+    "locationLabel": {
+      "yPct": 0.834
+    },
+    "address": {
+      "yPct": 0.856,
+      "sizePx": 53,
+      "lineHeight": 1.12
+    },
+    "mahaprasad": {
+      "yPct": 0.92,
+      "sizePx": 36
+    }
+  },
+  "text": [
+    {
+      "key": "invitation",
+      "yPct": 0.582,
+      "font": "Cormorant Garamond",
+      "sizePx": 66,
+      "weight": 700,
+      "color": "#85381c",
+      "align": "center",
+      "maxWidthPct": 0.9,
+      "lineHeight": 1.1,
+      "tint": true
+    },
+    {
+      "key": "zoneLine",
+      "yPct": 0.61,
+      "font": "Cormorant Garamond",
+      "sizePx": 50,
+      "weight": 600,
+      "color": "#85381c",
+      "align": "center",
+      "maxWidthPct": 0.94,
+      "lineHeight": 1.1,
+      "tint": true
+    },
+    {
+      "key": "cordially",
+      "yPct": 0.633,
+      "font": "DM Sans",
+      "sizePx": 36,
+      "weight": 400,
+      "color": "#4b4b4a",
+      "align": "center",
+      "maxWidthPct": 0.92,
+      "lineHeight": 1.2
+    },
+    {
+      "key": "title",
+      "yPct": 0.65,
+      "font": "Cormorant Garamond",
+      "sizePx": 148,
+      "weight": 700,
+      "color": "#85381c",
+      "align": "center",
+      "maxWidthPct": 0.96,
+      "lineHeight": 0.82,
+      "wrap": true,
+      "tint": true
+    },
+    {
+      "key": "datetime",
+      "yPct": 0.756,
+      "font": "AddingtonCF",
+      "sizePx": 84,
+      "weight": 400,
+      "color": "#85381c",
+      "align": "center",
+      "maxWidthPct": 0.96,
+      "lineHeight": 1.4,
+      "bevel": true,
+      "tint": true
+    },
+    {
+      "key": "rsvp",
+      "yPct": 0.8,
+      "font": "AppleSDGothicNeoH",
+      "sizePx": 42,
+      "weight": 400,
+      "color": "#4c4c4b",
+      "align": "center",
+      "maxWidthPct": 0.9,
+      "lineHeight": 1.4
+    },
+    {
+      "key": "locationLabel",
+      "yPct": 0.821,
+      "font": "AddingtonCF",
+      "sizePx": 37,
+      "weight": 400,
+      "color": "#4b4b4a",
+      "align": "center",
+      "maxWidthPct": 0.9,
+      "lineHeight": 1.3
+    },
+    {
+      "key": "host",
+      "yPct": 0.84,
+      "font": "GothamRegular",
+      "sizePx": 48,
+      "weight": 400,
+      "color": "#4c4c4b",
+      "align": "center",
+      "maxWidthPct": 0.9,
+      "lineHeight": 1.4
+    },
+    {
+      "key": "address",
+      "yPct": 0.866,
+      "font": "AddingtonCF",
+      "sizePx": 44,
+      "weight": 400,
+      "color": "#85381c",
+      "align": "center",
+      "maxWidthPct": 0.9,
+      "lineHeight": 1.12,
+      "bevel": true,
+      "tint": true
+    },
+    {
+      "key": "mahaprasad",
+      "yPct": 0.912,
+      "font": "AddingtonCF",
+      "sizePx": 36,
+      "weight": 700,
+      "color": "#4b4b4a",
+      "align": "center",
+      "maxWidthPct": 0.9,
+      "lineHeight": 1.4
+    }
+  ],
+  "og": {
+    "canvas": {
+      "width": 1200,
+      "height": 630
+    },
+    "photoPanel": {
+      "leftPct": 0,
+      "widthPct": 0.44,
+      "topPct": 0,
+      "bottomPct": 1
+    },
+    "photoFeatherPct": 0.22,
+    "header": {
+      "widthPct": 0.072,
+      "cxPct": 0.7,
+      "topPct": 0.035
+    },
+    "text": [
+      {
+        "key": "invitation",
+        "cxPct": 0.7,
+        "yPct": 0.096,
+        "font": "Cormorant Garamond",
+        "sizePx": 30,
+        "weight": 700,
+        "color": "#85381c",
+        "maxWidthPct": 0.5,
+        "lineHeight": 1.1,
+        "tint": true
+      },
+      {
+        "key": "zoneLine",
+        "cxPct": 0.7,
+        "yPct": 0.146,
+        "font": "Cormorant Garamond",
+        "sizePx": 32,
+        "weight": 600,
+        "color": "#85381c",
+        "maxWidthPct": 0.54,
+        "lineHeight": 1.1,
+        "tint": true
+      },
+      {
+        "key": "cordially",
+        "cxPct": 0.7,
+        "yPct": 0.208,
+        "font": "DM Sans",
+        "sizePx": 15,
+        "weight": 400,
+        "color": "#4b4b4a",
+        "maxWidthPct": 0.5,
+        "lineHeight": 1.2
+      },
+      {
+        "key": "title",
+        "cxPct": 0.7,
+        "yPct": 0.242,
+        "font": "Cormorant Garamond",
+        "sizePx": 93,
+        "weight": 700,
+        "color": "#85381c",
+        "maxWidthPct": 0.54,
+        "lineHeight": 0.85,
+        "wrap": true,
+        "tint": true
+      },
+      {
+        "key": "datetime",
+        "cxPct": 0.7,
+        "yPct": 0.506,
+        "font": "AddingtonCF",
+        "sizePx": 48,
+        "weight": 400,
+        "color": "#85381c",
+        "maxWidthPct": 0.54,
+        "lineHeight": 1.3,
+        "bevel": true,
+        "tint": true
+      },
+      {
+        "key": "rsvp",
+        "cxPct": 0.7,
+        "yPct": 0.6,
+        "font": "AppleSDGothicNeoH",
+        "sizePx": 29,
+        "weight": 400,
+        "color": "#4c4c4b",
+        "maxWidthPct": 0.5,
+        "lineHeight": 1.3
+      },
+      {
+        "key": "locationLabel",
+        "cxPct": 0.7,
+        "yPct": 0.662,
+        "font": "AddingtonCF",
+        "sizePx": 20,
+        "weight": 400,
+        "color": "#4b4b4a",
+        "maxWidthPct": 0.5,
+        "lineHeight": 1.3
+      },
+      {
+        "key": "host",
+        "cxPct": 0.7,
+        "yPct": 0.712,
+        "font": "GothamRegular",
+        "sizePx": 24,
+        "weight": 400,
+        "color": "#4c4c4b",
+        "maxWidthPct": 0.5,
+        "lineHeight": 1.3
+      },
+      {
+        "key": "address",
+        "cxPct": 0.7,
+        "yPct": 0.766,
+        "font": "AddingtonCF",
+        "sizePx": 30,
+        "weight": 400,
+        "color": "#85381c",
+        "maxWidthPct": 0.5,
+        "lineHeight": 1.12,
+        "bevel": true,
+        "tint": true
+      },
+      {
+        "key": "mahaprasad",
+        "cxPct": 0.7,
+        "yPct": 0.886,
+        "font": "AddingtonCF",
+        "sizePx": 20,
+        "weight": 700,
+        "color": "#4b4b4a",
+        "maxWidthPct": 0.5,
+        "lineHeight": 1.3
+      }
+    ],
+    "satsang": {
+      "datetime": {
+        "yPct": 0.6,
+        "sizePx": 38
+      },
+      "locationLabel": {
+        "yPct": 0.7
+      },
+      "address": {
+        "yPct": 0.742,
+        "sizePx": 24,
+        "lineHeight": 1.12
+      },
+      "mahaprasad": {
+        "yPct": 0.88
+      }
+    }
+  }
+}
