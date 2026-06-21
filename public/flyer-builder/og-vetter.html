@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Preview Card Vetter — SCREvents (local tool)</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+@font-face { font-family: 'AddingtonCF'; src: url('/flyer-builder/fonts/AddingtonCF.otf') format('opentype'); }
+@font-face { font-family: 'GothamRegular'; src: url('/flyer-builder/fonts/GothamRegular.ttf') format('truetype'); }
+@font-face { font-family: 'AppleSDGothicNeoH'; src: url('/flyer-builder/fonts/AppleSDGothicNeoH.ttf') format('truetype'); }
+:root { --brown:#5C2D0A; --saffron:#E8650A; --gold:#C8860A; --cream:#FDF6EC; --cream-dark:#F5E6CC; --muted:#8B6040; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: #2a2320; color: #eee; display: flex; min-height: 100vh; }
+.panel { width: 380px; flex-shrink: 0; background: #fff; color: var(--brown); padding: 18px; overflow-y: auto; height: 100vh; }
+.panel h1 { font-family: 'Cormorant Garamond', serif; font-size: 22px; margin-bottom: 2px; }
+.panel .sub { font-size: 11px; color: var(--muted); margin-bottom: 14px; line-height: 1.4; }
+.row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.row label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); flex: 0 0 42px; }
+.row input[type=range] { flex: 1; accent-color: var(--gold); }
+.row .val { font-size: 10px; font-family: monospace; width: 40px; text-align: right; }
+.row select { flex: 1; padding: 7px; border: 1px solid var(--cream-dark); border-radius: 8px; font-size: 12px; }
+.seg { display: flex; border: 1px solid var(--cream-dark); border-radius: 8px; overflow: hidden; margin-bottom: 4px; }
+.seg button { flex: 1; padding: 8px; border: none; background: var(--cream); cursor: pointer; font-size: 12px; }
+.seg button.active { background: var(--saffron); color: #fff; }
+.section { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 16px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--cream-dark); }
+.line-el { font-size: 11px; font-weight: 700; color: var(--brown); margin: 12px 0 4px; }
+.btn { width: 100%; padding: 11px; border: none; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: 'DM Sans'; }
+.btn-primary { background: linear-gradient(135deg, var(--saffron), var(--gold)); color: #fff; margin-top: 14px; }
+.btn-ghost { background: var(--cream); color: var(--brown); border: 1px solid var(--cream-dark); margin-top: 8px; }
+.stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.stage canvas { width: 100%; max-width: 1000px; height: auto; box-shadow: 0 10px 50px rgba(0,0,0,0.5); border-radius: 10px; background: #fff; }
+#err { color: #ffb4a0; font-size: 12px; padding: 8px 0; }
+.hint { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 12px; background: var(--cream); padding: 9px 11px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1>✦ Preview Card Vetter</h1>
+  <div class="sub">Position every line of the landscape social / OG card (1200×630). Local tool — not deployed. Tuning is saved in this browser; Export when done.</div>
+
+  <div class="section">Zone</div>
+  <div class="seg" id="zone-seg">
+    <button data-z="parasabha" class="active" onclick="setZone('parasabha')">Parasabha</button>
+    <button data-z="satsang" onclick="setZone('satsang')">Satsang</button>
+  </div>
+
+  <div class="section">Sample photo</div>
+  <div class="row"><select id="photo-select" onchange="selectPhoto(this.selectedIndex)"></select></div>
+
+  <div class="section">Photo panel (global)</div>
+  <div class="row"><label>Width</label><input type="range" id="pp-w" min="0.20" max="0.60" step="0.005" oninput="setPanel('widthPct',this.value)"><span class="val" id="pp-w-v"></span></div>
+  <div class="row"><label>Feather</label><input type="range" id="pp-f" min="0" max="0.50" step="0.01" oninput="setFeather(this.value)"><span class="val" id="pp-f-v"></span></div>
+
+  <div class="section">Text lines — size / X / Y / leading</div>
+  <div id="line-rows"></div>
+
+  <button class="btn btn-primary" onclick="exportLayout()">⬇ Export layout (flyer-layout.json)</button>
+  <button class="btn btn-ghost" onclick="resetLayout()">↺ Reset to defaults</button>
+  <div id="err"></div>
+  <div class="hint">Open <code>localhost:8000/flyer-builder/og-vetter.html</code>. Each line: <b>Size</b>, <b>X</b> (left↔right), <b>Y</b> (up↕down), <b>Lead</b> (line spacing). Satsang edits are kept separate per line. Export overwrites <code>flyer-layout.json</code> (flyer + preview), or just send me the file.</div>
+</div>
+
+<div class="stage"><canvas id="preview"></canvas></div>
+
+<script src="/flyer-builder/flyer-render.js?v=10"></script>
+<script>
+const PREVIEW_W = 1200;
+const SAMPLE = {
+  parasabha: {
+    invitation: 'Invitation',
+    zoneLine: 'BAPS Swaminarayan Mandir | Moosic Zone',
+    cordially: 'Cordially invites you, your family, and friends to',
+    title: 'Para Satsang\nSabha',
+    datetime: 'Sat, June 6 at 4:00 pm',
+    rsvp: 'Please RSVP by June 12',
+    locationLabel: 'Location:',
+    host: 'Mehulbhai & Archanaben Patel',
+    address: '522 Orchid Drive\nMoosic, PA 18507',
+    mahaprasad: 'Mahaprasad will be served after sabha.',
+  },
+  satsang: {
+    invitation: 'Invitation',
+    zoneLine: 'BAPS Swaminarayan Mandir | Scranton',
+    cordially: 'Cordially invites you, your family, and friends to',
+    title: 'Satsang\nSabha',
+    datetime: 'Fri, July 17 at 6:00 pm',
+    rsvp: '',
+    locationLabel: 'Location:',
+    host: '',
+    address: 'BAPS Scranton Mandir\n311 Oak Street, Scranton, PA 18508',
+    mahaprasad: 'Mahaprasad will be served after sabha.',
+  },
+};
+
+let manifest = null, assets = {}, photoCache = {}, curPhoto = null, zone = 'parasabha';
+const $ = (id) => document.getElementById(id);
+function err(m) { $('err').textContent = m || ''; }
+
+async function boot() {
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    manifest = await (await fetch('/flyer-builder/swami-photos.json?t=' + Date.now())).json();
+    // start from any saved flyer-layout.json, then this browser's live OG tuning
+    try { const r = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now()); if (r.ok) FlyerRender.applyLayout(await r.json()); } catch (e) {}
+    try { const og = JSON.parse(localStorage.getItem('scr_og_layout') || 'null'); if (og) FlyerRender.applyLayout({ og }); } catch (e) {}
+    assets.watercolor = await FlyerRender.loadImage('/flyer-builder/base/watercolor.png');
+    $('photo-select').innerHTML = manifest.photos.map((p, i) => `<option>${i + 1}. ${p.id}</option>`).join('');
+    syncPanelControls();
+    buildRows();
+    await selectPhoto(0);
+  } catch (e) { err('Boot failed: ' + e.message); }
+}
+
+async function loadPhoto(entry) {
+  if (photoCache[entry.id]) return photoCache[entry.id];
+  const img = await FlyerRender.loadImage('/flyer-builder/' + entry.file);
+  photoCache[entry.id] = img;
+  return img;
+}
+async function selectPhoto(i) {
+  const entry = manifest.photos[Math.max(0, Math.min(manifest.photos.length - 1, i))];
+  $('photo-select').selectedIndex = manifest.photos.indexOf(entry);
+  try { curPhoto = { entry, img: await loadPhoto(entry) }; } catch (e) { err('photo load failed: ' + entry.id); return; }
+  render();
+}
+
+function setZone(z) {
+  zone = z;
+  document.querySelectorAll('#zone-seg button').forEach((b) => b.classList.toggle('active', b.dataset.z === z));
+  buildRows();
+  render();
+}
+
+// zone-aware target: satsang edits get their own per-line override (created on demand)
+function lineTarget(key) {
+  const G = FlyerRender.LAYOUT.og;
+  if (zone === 'satsang') { if (!G.satsang[key]) G.satsang[key] = {}; return G.satsang[key]; }
+  return G.text.find((e) => e.key === key);
+}
+function effLine(base) {
+  const ov = FlyerRender.LAYOUT.og.satsang[base.key];
+  return (zone === 'satsang' && ov) ? { ...base, ...ov } : base;
+}
+
+function buildRows() {
+  const G = FlyerRender.LAYOUT.og;
+  $('line-rows').innerHTML = G.text.map((base) => {
+    const k = base.key, e = effLine(base), lh = e.lineHeight != null ? e.lineHeight : 1.3;
+    return `<div class="line-el">${k}</div>
+      <div class="row"><label>Size</label><input type="range" min="8" max="140" step="1" value="${e.sizePx}" oninput="setLine('${k}','sizePx',this.value)"><span class="val" id="l-${k}-size">${e.sizePx}</span></div>
+      <div class="row"><label>X</label><input type="range" min="0.30" max="0.95" step="0.005" value="${e.cxPct}" oninput="setLine('${k}','cxPct',this.value)"><span class="val" id="l-${k}-x">${(+e.cxPct).toFixed(3)}</span></div>
+      <div class="row"><label>Y</label><input type="range" min="0" max="0.97" step="0.002" value="${e.yPct}" oninput="setLine('${k}','yPct',this.value)"><span class="val" id="l-${k}-y">${(+e.yPct).toFixed(3)}</span></div>
+      <div class="row"><label>Lead</label><input type="range" min="0.70" max="1.60" step="0.01" value="${lh}" oninput="setLine('${k}','lineHeight',this.value)"><span class="val" id="l-${k}-lh">${(+lh).toFixed(2)}</span></div>`;
+  }).join('');
+}
+function setLine(key, prop, val) {
+  lineTarget(key)[prop] = parseFloat(val);
+  const sfx = { sizePx: 'size', cxPct: 'x', yPct: 'y', lineHeight: 'lh' }[prop];
+  const span = $('l-' + key + '-' + sfx);
+  if (span) span.textContent = prop === 'sizePx' ? Math.round(val) : prop === 'lineHeight' ? (+val).toFixed(2) : (+val).toFixed(3);
+  persist(); render();
+}
+
+function setPanel(prop, val) { FlyerRender.LAYOUT.og.photoPanel[prop] = parseFloat(val); $('pp-w-v').textContent = (+val).toFixed(3); persist(); render(); }
+function setFeather(val) { FlyerRender.LAYOUT.og.photoFeatherPct = parseFloat(val); $('pp-f-v').textContent = (+val).toFixed(2); persist(); render(); }
+function syncPanelControls() {
+  const G = FlyerRender.LAYOUT.og;
+  $('pp-w').value = G.photoPanel.widthPct; $('pp-w-v').textContent = (+G.photoPanel.widthPct).toFixed(3);
+  $('pp-f').value = G.photoFeatherPct; $('pp-f-v').textContent = (+G.photoFeatherPct).toFixed(2);
+}
+
+function persist() { localStorage.setItem('scr_og_layout', JSON.stringify(FlyerRender.LAYOUT.og)); }
+
+function render() {
+  if (!curPhoto) return;
+  const ctx = $('preview').getContext('2d');
+  FlyerRender.compositeOG(ctx, PREVIEW_W, {
+    watercolorImg: assets.watercolor,
+    variant: zone,
+    bgColor: curPhoto.entry.bgColor,
+    textColor: curPhoto.entry.textColor,
+    photoImg: curPhoto.img,
+    photo: curPhoto.entry.photo,
+    fields: SAMPLE[zone],
+  });
+  err('');
+}
+
+function exportLayout() {
+  const blob = new Blob([JSON.stringify(FlyerRender.serializeLayout(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'flyer-layout.json'; a.click();
+}
+function resetLayout() {
+  if (!confirm('Reset the preview-card layout to the built-in defaults? (clears your local tuning)')) return;
+  localStorage.removeItem('scr_og_layout');
+  location.reload();
+}
+
+boot();
+</script>
+</body>
+</html>
