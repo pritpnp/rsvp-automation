@@ -42,27 +42,100 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
 
-  const { zone, imageBase64 } = body;
+  const { zone, zones, imageBase64 } = body;
 
   const VALID_ZONES = [
     'scranton', 'mountain-top', 'moosic', 'bloomsburg',
     'satsang-sabha', 'mandir-1', 'mandir-2', 'mandir-3', 'mandir-4', 'mandir-5'
   ];
 
-  if (!zone || !VALID_ZONES.includes(zone)) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid zone' }) };
-  }
-
   const GITHUB_PAT = process.env.GITHUB_PAT;
-  const filePath   = `flyers/${zone}/flyer.jpg`;
-  const ogPath     = `flyers/${zone}/og.jpg`;
-  const apiUrl     = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${filePath}`;
-  const ogApiUrl   = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${ogPath}`;
+  const REPO       = 'pritpnp/rsvp-automation';
   const ghHeaders  = {
     'Authorization': `Bearer ${GITHUB_PAT}`,
     'Accept': 'application/vnd.github.v3+json',
     'Content-Type': 'application/json',
   };
+
+  // ── DELETE (bulk): remove several zones' flyers in ONE commit ─────────────
+  // One commit = one RSVP Automation run, so deleting multiple flyers can't race
+  // concurrent "deploy: update dist" pushes against each other. (The per-file
+  // delete below fires 2 commits per zone → many parallel runs → rebase conflicts.)
+  if (event.httpMethod === 'DELETE' && Array.isArray(zones)) {
+    if (!isSuperadmin && !permissions.remove_flyers) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to remove flyers' }) };
+    }
+    const valid = [...new Set(zones)].filter((z) => VALID_ZONES.includes(z));
+    if (!valid.length) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'No valid zones provided' }) };
+    }
+
+    const api = `https://api.github.com/repos/${REPO}`;
+    // Only delete paths that actually exist (flyer.jpg + og.jpg per zone).
+    const candidates = valid.flatMap((z) => [`flyers/${z}/flyer.jpg`, `flyers/${z}/og.jpg`]);
+    const toDelete = [];
+    for (const p of candidates) {
+      const r = await fetch(`${api}/contents/${p}`, { headers: ghHeaders });
+      if (r.ok) toDelete.push(p);
+    }
+    if (!toDelete.length) {
+      return { statusCode: 404, headers, body: JSON.stringify({ error: 'No flyers found for the selected zones' }) };
+    }
+
+    try {
+      // 1. latest commit on main + its base tree
+      const refRes = await fetch(`${api}/git/ref/heads/main`, { headers: ghHeaders });
+      if (!refRes.ok) throw new Error(`ref ${await refRes.text()}`);
+      const latestSha = (await refRes.json()).object.sha;
+
+      const commitRes = await fetch(`${api}/git/commits/${latestSha}`, { headers: ghHeaders });
+      if (!commitRes.ok) throw new Error(`commit ${await commitRes.text()}`);
+      const baseTree = (await commitRes.json()).tree.sha;
+
+      // 2. new tree with each file removed (sha: null deletes a path)
+      const treeRes = await fetch(`${api}/git/trees`, {
+        method: 'POST', headers: ghHeaders,
+        body: JSON.stringify({
+          base_tree: baseTree,
+          tree: toDelete.map((p) => ({ path: p, mode: '100644', type: 'blob', sha: null })),
+        }),
+      });
+      if (!treeRes.ok) throw new Error(`tree ${await treeRes.text()}`);
+      const newTreeSha = (await treeRes.json()).sha;
+
+      // 3. ONE commit removing them all
+      const newCommitRes = await fetch(`${api}/git/commits`, {
+        method: 'POST', headers: ghHeaders,
+        body: JSON.stringify({
+          message: `Remove ${valid.length} flyer(s) via admin portal: ${valid.join(', ')}`,
+          tree: newTreeSha,
+          parents: [latestSha],
+        }),
+      });
+      if (!newCommitRes.ok) throw new Error(`new commit ${await newCommitRes.text()}`);
+      const newCommitSha = (await newCommitRes.json()).sha;
+
+      // 4. advance main
+      const updRes = await fetch(`${api}/git/refs/heads/main`, {
+        method: 'PATCH', headers: ghHeaders,
+        body: JSON.stringify({ sha: newCommitSha }),
+      });
+      if (!updRes.ok) throw new Error(`update ref ${await updRes.text()}`);
+
+      return { statusCode: 200, headers, body: JSON.stringify({ ok: true, removed: valid }) };
+    } catch (e) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: `Bulk remove failed: ${e.message}` }) };
+    }
+  }
+
+  if (!zone || !VALID_ZONES.includes(zone)) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid zone' }) };
+  }
+
+  const filePath   = `flyers/${zone}/flyer.jpg`;
+  const ogPath     = `flyers/${zone}/og.jpg`;
+  const apiUrl     = `https://api.github.com/repos/${REPO}/contents/${filePath}`;
+  const ogApiUrl   = `https://api.github.com/repos/${REPO}/contents/${ogPath}`;
 
   // Delete og.jpg if it exists; ignored if missing. Lets automate.js regenerate it from the new flyer.
   const deleteOgIfExists = async (commitMessage) => {
