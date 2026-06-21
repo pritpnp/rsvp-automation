@@ -46,6 +46,8 @@
     .form-group input { width: 100%; padding: 11px 13px; border: 1px solid var(--cream-dark); border-radius: 10px; font-size: 14px; font-family: 'DM Sans', sans-serif; background: var(--cream); }
     .form-group input:focus { outline: none; border-color: var(--gold); }
     .btn-create { margin-top: 14px; padding: 12px 24px; background: linear-gradient(135deg, var(--saffron), var(--gold)); color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+    .zone-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--brown); cursor: pointer; padding: 7px 10px; border: 1px solid var(--cream-dark); border-radius: 8px; background: var(--cream); }
+    .zone-check input { accent-color: #dc2626; cursor: pointer; }
     .success-msg { display: none; margin-top: 12px; padding: 12px 14px; background: #f0fdf4; border-radius: 10px; font-size: 13px; color: #166534; }
     .success-msg a { color: var(--gold); font-weight: 500; }
     .item-list { display: flex; flex-direction: column; gap: 10px; }
@@ -450,25 +452,24 @@
         </div>
 
         <div class="card" id="flyer-remove-card">
-          <h2>Remove Flyer</h2>
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Select a zone to remove its current flyer from the site. This will delete the file from GitHub and trigger a redeploy.</p>
-          <div class="form-group" style="margin-bottom:16px">
-            <label>Zone</label>
-            <select id="flyer-remove-zone" style="width:100%;padding:11px 13px;border:1px solid var(--cream-dark);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
-              <option value="">— Select a zone —</option>
-              <option value="scranton">Scranton</option>
-              <option value="mountain-top">Mountain Top</option>
-              <option value="moosic">Moosic</option>
-              <option value="bloomsburg">Bloomsburg</option>
-              <option value="satsang-sabha">Satsang Sabha</option>
-              <option value="mandir-1">Mandir 1</option>
-              <option value="mandir-2">Mandir 2</option>
-              <option value="mandir-3">Mandir 3</option>
-              <option value="mandir-4">Mandir 4</option>
-              <option value="mandir-5">Mandir 5</option>
-            </select>
+          <h2>Remove Flyer(s)</h2>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Tick one or more zones and remove them together. Removing several at once uses a <strong>single commit</strong>, so it deploys cleanly — no more "non-fast-forward" rebuild errors from deleting one-by-one.</p>
+          <div id="flyer-remove-checks" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:8px">
+            <label class="zone-check"><input type="checkbox" value="scranton"> Scranton</label>
+            <label class="zone-check"><input type="checkbox" value="mountain-top"> Mountain Top</label>
+            <label class="zone-check"><input type="checkbox" value="moosic"> Moosic</label>
+            <label class="zone-check"><input type="checkbox" value="bloomsburg"> Bloomsburg</label>
+            <label class="zone-check"><input type="checkbox" value="satsang-sabha"> Satsang Sabha</label>
+            <label class="zone-check"><input type="checkbox" value="mandir-1"> Mandir 1</label>
+            <label class="zone-check"><input type="checkbox" value="mandir-2"> Mandir 2</label>
+            <label class="zone-check"><input type="checkbox" value="mandir-3"> Mandir 3</label>
+            <label class="zone-check"><input type="checkbox" value="mandir-4"> Mandir 4</label>
+            <label class="zone-check"><input type="checkbox" value="mandir-5"> Mandir 5</label>
           </div>
-          <button id="flyer-remove-btn" class="btn-create" onclick="removeFlyer()" style="background:linear-gradient(135deg,#991b1b,#dc2626)">Remove Flyer →</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);margin-bottom:14px;cursor:pointer">
+            <input type="checkbox" id="flyer-remove-all" onchange="toggleAllRemoveZones(this.checked)"> Select all
+          </label>
+          <button id="flyer-remove-btn" class="btn-create" onclick="removeFlyers()" style="background:linear-gradient(135deg,#991b1b,#dc2626)">Remove Selected →</button>
           <div id="flyer-remove-status" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
         </div>
 
@@ -1789,12 +1790,16 @@
       }
     }
 
-    async function removeFlyer() {
-      const zone   = document.getElementById('flyer-remove-zone').value;
-      const btn    = document.getElementById('flyer-remove-btn');
+    function toggleAllRemoveZones(checked) {
+      document.querySelectorAll('#flyer-remove-checks input[type=checkbox]').forEach((c) => { c.checked = checked; });
+    }
 
-      if (!zone) { showFlyerStatus('remove', '⚠️ Please select a zone.', false); return; }
-      if (!confirm(`Remove the flyer for ${zone}? This will delete it from the site.`)) return;
+    async function removeFlyers() {
+      const zones = [...document.querySelectorAll('#flyer-remove-checks input:checked')].map((c) => c.value);
+      const btn   = document.getElementById('flyer-remove-btn');
+
+      if (!zones.length) { showFlyerStatus('remove', '⚠️ Please tick at least one zone.', false); return; }
+      if (!confirm(`Remove the flyer${zones.length > 1 ? 's' : ''} for: ${zones.join(', ')}?\nThis deletes them from the site (one rebuild).`)) return;
 
       btn.disabled = true;
       btn.textContent = '⏳ Removing...';
@@ -1803,17 +1808,19 @@
         const res = await fetch(MANAGE_FLYERS_API, {
           method: 'DELETE',
           headers: authHeaders(),
-          body: JSON.stringify({ zone })
+          body: JSON.stringify({ zones })   // array → single-commit bulk delete
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Remove failed');
-        showFlyerStatus('remove', `✅ Flyer removed for ${zone}! GitHub Actions will process it now.`, true);
-        document.getElementById('flyer-remove-zone').value = '';
+        const removed = (data.removed || zones).join(', ');
+        showFlyerStatus('remove', `✅ Removed: ${removed}. One rebuild is running now.`, true);
+        toggleAllRemoveZones(false);
+        const all = document.getElementById('flyer-remove-all'); if (all) all.checked = false;
       } catch (err) {
         showFlyerStatus('remove', '❌ ' + err.message, false);
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Remove Flyer →';
+        btn.textContent = 'Remove Selected →';
       }
     }
 
