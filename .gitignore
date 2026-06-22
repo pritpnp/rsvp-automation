@@ -1,6 +1,12 @@
 node_modules/
 **/.DS_Store
 
+# Secrets / local env — real credentials live in the Netlify dashboard, never in git.
+# (.env.example may be committed as a non-secret template.)
+.env
+.env.*
+!.env.example
+
 # Flyer-builder photo assets are sourced from public/ and re-synced into dist/
 # by build.sh on every Netlify deploy — don't double-commit the large copies.
 dist/flyer-builder/swami-photos/
