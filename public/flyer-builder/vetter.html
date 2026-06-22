@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Flyer Photo Vetter — SCREvents (local tool)</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -52,6 +54,7 @@ body { font-family: 'DM Sans', sans-serif; background: #2a2320; color: #eee; dis
   <div class="section">Header — global (all photos)</div>
   <div class="row"><label>Position Y</label><input type="range" id="r-hy" min="0" max="0.12" step="0.002" oninput="setHeaderY(this.value)"><span class="val" id="v-hy"></span></div>
   <div class="row"><label>Size</label><input type="range" id="r-hw" min="0.10" max="0.40" step="0.005" oninput="setHeaderW(this.value)"><span class="val" id="v-hw"></span></div>
+  <div class="row"><label>Photo move ↕ (all)</label><input type="range" id="r-oy" min="-0.25" max="0.25" step="0.005" oninput="setBoxOffsetY(this.value)"><span class="val" id="v-oy"></span></div>
   <div class="row"><label>Shadow color</label><input type="color" id="sh-color" oninput="setShadow('color',this.value)"></div>
   <div class="row"><label>Shadow size</label><input type="range" id="r-shs" min="0" max="0.05" step="0.002" oninput="setShadow('size',this.value)"><span class="val" id="v-shs"></span></div>
   <div class="row"><label>Shadow opacity</label><input type="range" id="r-sho" min="0" max="1" step="0.05" oninput="setShadow('opacity',this.value)"><span class="val" id="v-sho"></span></div>
@@ -63,8 +66,9 @@ body { font-family: 'DM Sans', sans-serif; background: #2a2320; color: #eee; dis
     <button class="btn-ghost" style="width:auto;margin:0;padding:6px 9px;font-size:11px" onclick="sampleColor()">⤓ from photo</button>
   </div>
 
-  <div class="section">Text color</div>
-  <div class="row"><label>Color</label><input type="color" id="text-color" oninput="setField('textColor', this.value)"></div>
+  <div class="section">Text colors</div>
+  <div class="row"><label>Color 1 (headline)</label><input type="color" id="text-color" oninput="setField('textColor', this.value)"></div>
+  <div class="row"><label>Color 2 (secondary)</label><input type="color" id="text-color2" oninput="setField('textColor2', this.value)"></div>
 
   <div class="section">Footer variant</div>
   <div class="seg" id="footer-seg">
@@ -85,13 +89,14 @@ body { font-family: 'DM Sans', sans-serif; background: #2a2320; color: #eee; dis
   <button class="btn btn-primary" onclick="saveNext()">✓ Save & Next</button>
   <button class="btn btn-ghost" style="color:#b00;border-color:#e7b4b4" onclick="removeCurrent()">🗑 Remove this photo from set</button>
   <button class="btn btn-ghost" onclick="exportManifest()">⬇ Export swami-photos.json</button>
+  <button class="btn btn-ghost" onclick="exportLayout()">⬇ Export layout (flyer-layout.json)</button>
   <div id="err"></div>
   <div class="hint">Serve locally: <code>cd public &amp;&amp; python3 -m http.server 8000</code> → open <code>localhost:8000/flyer-builder/vetter.html</code>. Edits live in memory until you Export and replace the file.</div>
 </div>
 
 <div class="stage"><canvas id="preview"></canvas></div>
 
-<script src="/flyer-builder/flyer-render.js?v=10"></script>
+<script src="/flyer-builder/flyer-render.js?v=26"></script>
 <script>
 const SAMPLE = {
   invitation: 'Invitation',
@@ -118,6 +123,8 @@ async function boot() {
     try { const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now()); if (lr.ok) FlyerRender.applyLayout(await lr.json()); } catch (e) {}
     // restore any header tuning from a previous session (local convenience)
     try { const savedH = JSON.parse(localStorage.getItem('scr_vetter_header') || 'null'); if (savedH && typeof savedH === 'object') Object.assign(FlyerRender.LAYOUT.header, savedH); } catch (e) {}
+    // global photo vertical offset (like the header — one value for all photos)
+    const savedOff = localStorage.getItem('scr_vetter_boxoffset'); if (savedOff !== null) FlyerRender.LAYOUT.photoBox.offsetY = parseFloat(savedOff);
     assets.watercolor = await FlyerRender.loadImage('/flyer-builder/base/watercolor.png');
     assets.header     = await FlyerRender.loadImage('/flyer-builder/base/header.png');
     assets.footerBlack = await FlyerRender.loadImage('/flyer-builder/base/footer-black.png');
@@ -128,6 +135,7 @@ async function boot() {
     $('sh-color').value = sh0.color || '#000000';
     $('r-shs').value = sh0.size; $('v-shs').textContent = (+sh0.size).toFixed(3);
     $('r-sho').value = sh0.opacity; $('v-sho').textContent = (+sh0.opacity).toFixed(2);
+    const off0 = FlyerRender.LAYOUT.photoBox.offsetY || 0; $('r-oy').value = off0; $('v-oy').textContent = (+off0).toFixed(3);
     const sel = $('photo-select');
     sel.innerHTML = manifest.photos.map((p, i) => `<option>${i + 1}. ${p.id}</option>`).join('');
     select(0);
@@ -151,6 +159,7 @@ async function select(i) {
   // sync controls
   $('bg-color').value = e.bgColor || '#F4C9D6';
   $('text-color').value = e.textColor || '#85381c';
+  $('text-color2').value = e.textColor2 || '#4c4c4b';
   setSeg(e.footer || 'black');
   if (e.photo.focusX === undefined) e.photo.focusX = 0.5;
   if (e.photo.focusY === undefined) e.photo.focusY = 0.5;
@@ -180,6 +189,8 @@ function setSeg(v) { document.querySelectorAll('#footer-seg button').forEach((b)
 function setFooter(v) { cur().footer = v; setSeg(v); render(); }
 function setField(k, v) { cur()[k] = v; render(); }
 function setPhoto(k, v) { cur().photo[k] = parseFloat(v); $('v-' + ({ focusX: 'fx', focusY: 'fy', zoom: 'z' }[k])).textContent = (+v).toFixed(2); render(); }
+// global photo vertical offset (one value for all photos, like the header)
+function setBoxOffsetY(v) { FlyerRender.LAYOUT.photoBox.offsetY = parseFloat(v); $('v-oy').textContent = (+v).toFixed(3); localStorage.setItem('scr_vetter_boxoffset', v); render(); }
 function setFade(k, v) { cur().fade[k] = parseFloat(v); $('v-' + ({ startPct: 'fs', endPct: 'fe', topPct: 'tf' }[k])).textContent = (+v).toFixed(2); render(); }
 
 let renderToken = 0;
@@ -194,6 +205,7 @@ async function render() {
     watercolorImg: assets.watercolor,
     bgColor: e.bgColor,
     textColor: e.textColor,
+    textColor2: e.textColor2 || '#4c4c4b',
     photoImg,
     photo: e.photo,
     fade: e.fade,
@@ -236,6 +248,14 @@ function exportManifest() {
   const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'swami-photos.json'; a.click();
+}
+
+// Export the GLOBAL layout (header position/size/shadow + photo move + text + OG)
+// so the tuning persists to the live site, not just this browser's localStorage.
+function exportLayout() {
+  const blob = new Blob([JSON.stringify(FlyerRender.serializeLayout(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'flyer-layout.json'; a.click();
 }
 
 document.addEventListener('keydown', (ev) => {

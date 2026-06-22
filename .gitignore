@@ -8,3 +8,7 @@ dist/flyer-builder/base/
 
 # Raw source photos (only the optimized public/flyer-builder/swami-photos/ is committed)
 *flyer photos/
+
+# Local-only vetting helpers (not deployed / not on GitHub)
+/vet-photos.command
+/HOW-TO-ADD-PHOTOS.md

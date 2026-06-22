@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Preview Card Vetter — SCREvents (local tool)</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -63,7 +65,7 @@ body { font-family: 'DM Sans', sans-serif; background: #2a2320; color: #eee; dis
 
 <div class="stage"><canvas id="preview"></canvas></div>
 
-<script src="/flyer-builder/flyer-render.js?v=10"></script>
+<script src="/flyer-builder/flyer-render.js?v=26"></script>
 <script>
 const PREVIEW_W = 1200;
 const SAMPLE = {
@@ -84,6 +86,7 @@ const SAMPLE = {
     zoneLine: 'BAPS Swaminarayan Mandir | Scranton',
     cordially: 'Cordially invites you, your family, and friends to',
     title: 'Satsang\nSabha',
+    santos: 'In the presence of Pujya Swamis',
     datetime: 'Fri, July 17 at 6:00 pm',
     rsvp: '',
     locationLabel: 'Location:',
@@ -180,6 +183,7 @@ function render() {
     variant: zone,
     bgColor: curPhoto.entry.bgColor,
     textColor: curPhoto.entry.textColor,
+    textColor2: curPhoto.entry.textColor2 || '#4c4c4b',
     photoImg: curPhoto.img,
     photo: curPhoto.entry.photo,
     fields: SAMPLE[zone],

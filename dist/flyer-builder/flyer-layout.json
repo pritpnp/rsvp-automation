@@ -1,11 +1,11 @@
 {
   "header": {
-    "widthPct": 0.205,
-    "topPct": 0.054,
+    "widthPct": 0.16,
+    "topPct": 0.056,
     "shadow": {
       "color": "#000000",
-      "size": 0.012,
-      "opacity": 0.9
+      "size": 0,
+      "opacity": 0.6
     }
   },
   "footer": {
@@ -14,7 +14,8 @@
   },
   "photoBox": {
     "topPct": 0.085,
-    "bottomPct": 0.575
+    "bottomPct": 0.575,
+    "offsetY": 0.02
   },
   "fade": {
     "topPct": 0.04,
@@ -22,141 +23,192 @@
     "endPct": 1
   },
   "satsang": {
+    "invitation": {
+      "yPct": 0.5644,
+      "sizePx": 79
+    },
+    "cordially": {
+      "yPct": 0.5998,
+      "sizePx": 33
+    },
+    "title": {
+      "yPct": 0.606,
+      "sizePx": 209,
+      "lineHeight": 0.92,
+      "lineCxPct": [
+        0.06,
+        0.94
+      ],
+      "lineAlign": [
+        "left",
+        "right"
+      ]
+    },
+    "santos": {
+      "yPct": 0.771,
+      "sizePx": 42
+    },
     "datetime": {
-      "yPct": 0.792,
-      "sizePx": 86
+      "yPct": 0.789,
+      "sizePx": 102
     },
     "locationLabel": {
-      "yPct": 0.834
+      "yPct": 0.841,
+      "sizePx": 33
     },
     "address": {
-      "yPct": 0.856,
-      "sizePx": 53,
-      "lineHeight": 1.12
+      "yPct": 0.862,
+      "sizePx": 63,
+      "lineHeight": 1.06
     },
     "mahaprasad": {
-      "yPct": 0.92,
-      "sizePx": 36
+      "yPct": 0.921,
+      "sizePx": 33
     }
   },
   "text": [
     {
       "key": "invitation",
-      "yPct": 0.582,
-      "font": "Cormorant Garamond",
-      "sizePx": 66,
-      "weight": 700,
+      "yPct": 0.5575,
+      "font": "AddingtonCF",
+      "sizePx": 79,
+      "weight": 400,
       "color": "#85381c",
       "align": "center",
       "maxWidthPct": 0.9,
       "lineHeight": 1.1,
+      "tracking": -25,
       "tint": true
     },
     {
       "key": "zoneLine",
-      "yPct": 0.61,
-      "font": "Cormorant Garamond",
+      "yPct": 0.5907,
+      "font": "AddingtonCF",
       "sizePx": 50,
-      "weight": 600,
+      "weight": 400,
       "color": "#85381c",
       "align": "center",
       "maxWidthPct": 0.94,
       "lineHeight": 1.1,
+      "tracking": -40,
       "tint": true
     },
     {
       "key": "cordially",
-      "yPct": 0.633,
-      "font": "DM Sans",
-      "sizePx": 36,
+      "yPct": 0.6162,
+      "font": "GothamRegular",
+      "sizePx": 33,
       "weight": 400,
       "color": "#4b4b4a",
       "align": "center",
       "maxWidthPct": 0.92,
-      "lineHeight": 1.2
+      "lineHeight": 1.2,
+      "tracking": -40,
+      "tint2": true
     },
     {
       "key": "title",
-      "yPct": 0.65,
-      "font": "Cormorant Garamond",
-      "sizePx": 148,
-      "weight": 700,
+      "yPct": 0.6367,
+      "font": "AddingtonCF",
+      "sizePx": 167,
+      "weight": 400,
       "color": "#85381c",
       "align": "center",
       "maxWidthPct": 0.96,
-      "lineHeight": 0.82,
+      "lineHeight": 0.814,
       "wrap": true,
+      "tracking": -25,
       "tint": true
     },
     {
+      "key": "santos",
+      "yPct": 0.73,
+      "font": "GothamRegular",
+      "sizePx": 42,
+      "weight": 400,
+      "color": "#4a4882",
+      "align": "center",
+      "maxWidthPct": 0.92,
+      "lineHeight": 1.3,
+      "tracking": -40
+    },
+    {
       "key": "datetime",
-      "yPct": 0.756,
+      "yPct": 0.7545,
       "font": "AddingtonCF",
-      "sizePx": 84,
+      "sizePx": 86,
       "weight": 400,
       "color": "#85381c",
       "align": "center",
       "maxWidthPct": 0.96,
       "lineHeight": 1.4,
-      "bevel": true,
+      "tracking": -25,
       "tint": true
     },
     {
       "key": "rsvp",
-      "yPct": 0.8,
+      "yPct": 0.7964,
       "font": "AppleSDGothicNeoH",
-      "sizePx": 42,
+      "sizePx": 52,
       "weight": 400,
       "color": "#4c4c4b",
       "align": "center",
       "maxWidthPct": 0.9,
-      "lineHeight": 1.4
+      "lineHeight": 1.4,
+      "tracking": -50,
+      "tint2": true
     },
     {
       "key": "locationLabel",
-      "yPct": 0.821,
+      "yPct": 0.8202,
       "font": "AddingtonCF",
-      "sizePx": 37,
+      "sizePx": 33,
       "weight": 400,
       "color": "#4b4b4a",
       "align": "center",
       "maxWidthPct": 0.9,
-      "lineHeight": 1.3
+      "lineHeight": 1.3,
+      "tracking": -25,
+      "tint2": true
     },
     {
       "key": "host",
-      "yPct": 0.84,
+      "yPct": 0.828,
       "font": "GothamRegular",
-      "sizePx": 48,
+      "sizePx": 52,
       "weight": 400,
       "color": "#4c4c4b",
       "align": "center",
       "maxWidthPct": 0.9,
-      "lineHeight": 1.4
+      "lineHeight": 1.4,
+      "tracking": -50,
+      "tint2": true
     },
     {
       "key": "address",
-      "yPct": 0.866,
+      "yPct": 0.8654,
       "font": "AddingtonCF",
-      "sizePx": 44,
+      "sizePx": 63,
       "weight": 400,
       "color": "#85381c",
       "align": "center",
       "maxWidthPct": 0.9,
-      "lineHeight": 1.12,
-      "bevel": true,
+      "lineHeight": 1.06,
+      "tracking": -25,
       "tint": true
     },
     {
       "key": "mahaprasad",
-      "yPct": 0.912,
+      "yPct": 0.9216,
       "font": "AddingtonCF",
-      "sizePx": 36,
-      "weight": 700,
+      "sizePx": 33,
+      "weight": 400,
       "color": "#4b4b4a",
       "align": "center",
       "maxWidthPct": 0.9,
-      "lineHeight": 1.4
+      "lineHeight": 1.4,
+      "tracking": -25,
+      "tint2": true
     }
   ],
   "og": {
@@ -173,61 +225,78 @@
     "photoFeatherPct": 0.22,
     "header": {
       "widthPct": 0.072,
-      "cxPct": 0.7,
+      "cxPct": 0.72,
       "topPct": 0.035
     },
     "text": [
       {
         "key": "invitation",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.096,
-        "font": "Cormorant Garamond",
+        "font": "AddingtonCF",
         "sizePx": 30,
-        "weight": 700,
+        "weight": 400,
         "color": "#85381c",
         "maxWidthPct": 0.5,
         "lineHeight": 1.1,
+        "tracking": -25,
         "tint": true
       },
       {
         "key": "zoneLine",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.146,
-        "font": "Cormorant Garamond",
+        "font": "AddingtonCF",
         "sizePx": 32,
-        "weight": 600,
+        "weight": 400,
         "color": "#85381c",
         "maxWidthPct": 0.54,
         "lineHeight": 1.1,
+        "tracking": -40,
         "tint": true
       },
       {
         "key": "cordially",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.208,
-        "font": "DM Sans",
+        "font": "GothamRegular",
         "sizePx": 15,
         "weight": 400,
         "color": "#4b4b4a",
         "maxWidthPct": 0.5,
-        "lineHeight": 1.2
+        "lineHeight": 1.2,
+        "tracking": -40,
+        "tint2": true
       },
       {
         "key": "title",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.242,
-        "font": "Cormorant Garamond",
+        "font": "AddingtonCF",
         "sizePx": 93,
-        "weight": 700,
+        "weight": 400,
         "color": "#85381c",
         "maxWidthPct": 0.54,
         "lineHeight": 0.85,
         "wrap": true,
+        "tracking": -25,
         "tint": true
       },
       {
+        "key": "santos",
+        "cxPct": 0.72,
+        "yPct": 0.54,
+        "font": "GothamRegular",
+        "sizePx": 18,
+        "weight": 400,
+        "color": "#4a4882",
+        "maxWidthPct": 0.54,
+        "lineHeight": 1.3,
+        "tracking": -40
+      },
+      {
         "key": "datetime",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.506,
         "font": "AddingtonCF",
         "sizePx": 48,
@@ -235,45 +304,51 @@
         "color": "#85381c",
         "maxWidthPct": 0.54,
         "lineHeight": 1.3,
-        "bevel": true,
+        "tracking": -25,
         "tint": true
       },
       {
         "key": "rsvp",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.6,
         "font": "AppleSDGothicNeoH",
         "sizePx": 29,
         "weight": 400,
         "color": "#4c4c4b",
         "maxWidthPct": 0.5,
-        "lineHeight": 1.3
+        "lineHeight": 1.3,
+        "tracking": -50,
+        "tint2": true
       },
       {
         "key": "locationLabel",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.662,
         "font": "AddingtonCF",
         "sizePx": 20,
         "weight": 400,
         "color": "#4b4b4a",
         "maxWidthPct": 0.5,
-        "lineHeight": 1.3
+        "lineHeight": 1.3,
+        "tracking": -25,
+        "tint2": true
       },
       {
         "key": "host",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.712,
         "font": "GothamRegular",
         "sizePx": 24,
         "weight": 400,
         "color": "#4c4c4b",
         "maxWidthPct": 0.5,
-        "lineHeight": 1.3
+        "lineHeight": 1.3,
+        "tracking": -50,
+        "tint2": true
       },
       {
         "key": "address",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.766,
         "font": "AddingtonCF",
         "sizePx": 30,
@@ -281,36 +356,46 @@
         "color": "#85381c",
         "maxWidthPct": 0.5,
         "lineHeight": 1.12,
-        "bevel": true,
+        "tracking": -25,
         "tint": true
       },
       {
         "key": "mahaprasad",
-        "cxPct": 0.7,
+        "cxPct": 0.72,
         "yPct": 0.886,
         "font": "AddingtonCF",
         "sizePx": 20,
-        "weight": 700,
+        "weight": 400,
         "color": "#4b4b4a",
         "maxWidthPct": 0.5,
-        "lineHeight": 1.3
+        "lineHeight": 1.3,
+        "tracking": -25,
+        "tint2": true
       }
     ],
     "satsang": {
+      "santos": {
+        "yPct": 0.56
+      },
       "datetime": {
         "yPct": 0.6,
-        "sizePx": 38
+        "sizePx": 49
       },
       "locationLabel": {
-        "yPct": 0.7
+        "yPct": 0.702,
+        "sizePx": 24
       },
       "address": {
-        "yPct": 0.742,
-        "sizePx": 24,
+        "yPct": 0.754,
+        "sizePx": 33,
         "lineHeight": 1.12
       },
       "mahaprasad": {
         "yPct": 0.88
+      },
+      "title": {
+        "sizePx": 117,
+        "yPct": 0.228
       }
     }
   }
