@@ -18,7 +18,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.95,
         "topPct": 0.1
       },
       "footer": "black",
@@ -38,7 +38,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.96,
         "topPct": 0.04
       },
       "footer": "black"
@@ -57,16 +57,16 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.95,
         "topPct": 0.08
       },
       "footer": "black",
-      "textColor": "#9e0000"
+      "textColor": "#c20000"
     },
     {
       "id": "20170927-southlondon-31",
       "file": "swami-photos/20170927-southlondon-31.jpg",
-      "bgColor": "#F4C9D6",
+      "bgColor": "#dfb6a4",
       "photo": {
         "xPct": 0.5,
         "topPct": 0.085,
@@ -77,11 +77,11 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.95,
         "topPct": 0.05
       },
       "footer": "black",
-      "textColor": "#912e0d"
+      "textColor": "#77008f"
     },
     {
       "id": "2018-02-17-030-auckland",
@@ -97,7 +97,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.95,
         "topPct": 0.06
       },
       "footer": "black",
@@ -111,13 +111,13 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.49,
+        "focusX": 0.4,
         "focusY": 0.31,
         "zoom": 1
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.97,
         "topPct": 0.08
       },
       "footer": "black",
@@ -132,12 +132,12 @@
         "topPct": 0.085,
         "widthPct": 1,
         "focusX": 0,
-        "focusY": 0.37,
+        "focusY": 0.4,
         "zoom": 1
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.89,
         "topPct": 0.08
       },
       "footer": "black",
@@ -151,37 +151,37 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.7,
+        "focusX": 0.6,
         "focusY": 0.7,
         "zoom": 1
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.96,
         "topPct": 0.08
       },
       "footer": "black",
-      "textColor": "#4100f5"
+      "textColor": "#3100b8"
     },
     {
       "id": "2025-02-23-049-melbourne",
       "file": "swami-photos/2025-02-23-049-melbourne.jpg",
-      "bgColor": "#140c07",
+      "bgColor": "#604a39",
       "photo": {
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
         "focusX": 1,
-        "focusY": 0.42,
+        "focusY": 0.18,
         "zoom": 1.1
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
-        "topPct": 0.08
+        "endPct": 0.93,
+        "topPct": 0.11
       },
       "footer": "black",
-      "textColor": "#d10034"
+      "textColor": "#8a0022"
     },
     {
       "id": "2025-02-25-023-melbourne",
@@ -192,12 +192,12 @@
         "topPct": 0.085,
         "widthPct": 1,
         "focusX": 0.42,
-        "focusY": 0.43,
+        "focusY": 0.44,
         "zoom": 1.2
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.94,
         "topPct": 0.08
       },
       "footer": "black",
@@ -217,7 +217,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.93,
         "topPct": 0.08
       },
       "footer": "black",
@@ -237,7 +237,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.99,
         "topPct": 0.08
       },
       "footer": "black",
@@ -257,7 +257,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.97,
         "topPct": 0.08
       },
       "footer": "black",
@@ -277,7 +277,7 @@
       },
       "fade": {
         "startPct": 0.66,
-        "endPct": 1,
+        "endPct": 0.96,
         "topPct": 0.04
       },
       "footer": "black",
@@ -291,13 +291,13 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.54,
-        "focusY": 0.13,
-        "zoom": 1.75
+        "focusX": 0.49,
+        "focusY": 0.2,
+        "zoom": 1.8
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.91,
         "topPct": 0.08
       },
       "footer": "black",
@@ -313,11 +313,11 @@
         "widthPct": 1,
         "focusX": 0.56,
         "focusY": 0,
-        "zoom": 1
+        "zoom": 0.95
       },
       "fade": {
         "startPct": 0.83,
-        "endPct": 1,
+        "endPct": 0.93,
         "topPct": 0.08
       },
       "footer": "black",
@@ -331,7 +331,7 @@
         "xPct": 0.5,
         "topPct": 0.085,
         "widthPct": 1,
-        "focusX": 0.61,
+        "focusX": 0.63,
         "focusY": 0,
         "zoom": 1
       },
@@ -352,36 +352,16 @@
         "topPct": 0.085,
         "widthPct": 1,
         "focusX": 0.5,
-        "focusY": 0.09,
-        "zoom": 1.2
+        "focusY": 0.15,
+        "zoom": 1.3
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.94,
         "topPct": 0.08
       },
       "footer": "black",
       "textColor": "#ff4d00"
-    },
-    {
-      "id": "2025-05-30-075-kanad",
-      "file": "swami-photos/2025-05-30-075-kanad.jpg",
-      "bgColor": "#832e7d",
-      "photo": {
-        "xPct": 0.5,
-        "topPct": 0.085,
-        "widthPct": 1,
-        "focusX": 0.55,
-        "focusY": 0.41,
-        "zoom": 1.7
-      },
-      "fade": {
-        "startPct": 0.68,
-        "endPct": 1,
-        "topPct": 0.11
-      },
-      "footer": "black",
-      "textColor": "#0056b3"
     },
     {
       "id": "2025-09-09-079-mahesana",
@@ -392,12 +372,12 @@
         "topPct": 0.085,
         "widthPct": 1,
         "focusX": 0.88,
-        "focusY": 0.46,
+        "focusY": 0.47,
         "zoom": 1.2
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.95,
         "topPct": 0.09
       },
       "footer": "black",
@@ -417,7 +397,7 @@
       },
       "fade": {
         "startPct": 0.82,
-        "endPct": 1,
+        "endPct": 0.96,
         "topPct": 0.05
       },
       "footer": "black",
@@ -437,7 +417,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.96,
         "topPct": 0.08
       },
       "footer": "black",
@@ -457,7 +437,7 @@
       },
       "fade": {
         "startPct": 0.8,
-        "endPct": 1,
+        "endPct": 0.95,
         "topPct": 0.08
       },
       "footer": "black"
@@ -476,7 +456,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.97,
         "topPct": 0.08
       },
       "footer": "black",
@@ -496,7 +476,7 @@
       },
       "fade": {
         "startPct": 0.83,
-        "endPct": 1,
+        "endPct": 0.98,
         "topPct": 0.13
       },
       "footer": "black",
@@ -516,7 +496,7 @@
       },
       "fade": {
         "startPct": 0.79,
-        "endPct": 1,
+        "endPct": 0.94,
         "topPct": 0.08
       },
       "footer": "black",
@@ -596,7 +576,7 @@
       },
       "fade": {
         "startPct": 0.85,
-        "endPct": 1,
+        "endPct": 0.95,
         "topPct": 0.08
       },
       "footer": "black",
@@ -616,7 +596,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.97,
         "topPct": 0.05
       },
       "footer": "black",
@@ -636,7 +616,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.95,
         "topPct": 0.08
       },
       "footer": "black",
@@ -656,7 +636,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.97,
         "topPct": 0.08
       },
       "footer": "black",
@@ -676,7 +656,7 @@
       },
       "fade": {
         "startPct": 0.72,
-        "endPct": 1,
+        "endPct": 0.96,
         "topPct": 0.08
       },
       "footer": "black",

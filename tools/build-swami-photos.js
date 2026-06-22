@@ -37,7 +37,7 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 const DEFAULTS = () => ({
   bgColor: '#F4C9D6',
   textColor: '#85381c',
-  photo: { focusX: 0.5, focusY: 0.5, zoom: 1.0 },
+  photo: { focusX: 0.5, focusY: 0.5, zoom: 1.0, offsetY: 0 },
   fade: { topPct: 0.05, startPct: 0.80, endPct: 1.0 },
   footer: 'black',
 });

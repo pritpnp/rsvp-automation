@@ -40,38 +40,61 @@
 
     // Fixed region the swami photo cover-fills — matched to the live template's
     // photo area so per-photo crops are "universal". Manifest: { focusX, focusY, zoom }.
-    photoBox: { topPct: 0.085, bottomPct: 0.575 },
+    photoBox: { topPct: 0.085, bottomPct: 0.575, offsetY: 0 },
     photo: { focusX: 0.5, focusY: 0.5, zoom: 1.0 },
     fade: { topPct: 0.04, startPct: 0.86, endPct: 1.0 },
 
     // Brown + grey used throughout (match the existing baked design).
     colors: { brown: '#85381c', grey: '#4c4c4b', title: '#8a3a18' },
 
+    // Text effect — soft bevel/emboss (light highlight up-left + dark shadow
+    // down-right peeking around each glyph, crisp fill on top). Subtle, like the
+    // PSD's Bevel & Emboss. offset/blur are px at 1125 authoring width; 0..1 alphas.
+    // Per-element embossHl / embossSh can override the opacities; emboss:false off.
+    emboss: { offset: 1.5, blur: 3, highlight: '#ffffff', shadow: '#08271a', hlOpacity: 0.35, shOpacity: 0.30 },
+
     // Text — matched to the live flyer. datetime/rsvp/host/address/mahaprasad
     // yPcts are the LIVE builder's exact calibrated values; the rest are sized
     // to the live's baked title block.
+    // Fonts/weights/tracking match the source PSD: only TWO faces are used —
+    // AddingtonCF (= AddingtonCF-Medium, rendered at natural weight, NOT bold)
+    // for the serif blocks, and GothamRegular (= Gotham-Book) for the sans ones.
+    // tracking is Photoshop's value in 1/1000 em (negative = tighter).
+    // Sizes + yPcts are the EXACT geometry from the source PSD (Bloomsburg
+    // Parasabha Template.psd), transform-corrected: effective size = base FontSize
+    // × layer scale; yPct = layer bbox top / 2436.
     text: [
-      // Title block — sized to match the live flyer (image reference).
-      { key: 'invitation', yPct: 0.582, font: 'Cormorant Garamond', sizePx: 66, weight: 700, color: '#85381c', align: 'center', maxWidthPct: 0.9, lineHeight: 1.1, tint: true },
-      { key: 'zoneLine',   yPct: 0.610, font: 'Cormorant Garamond', sizePx: 50, weight: 600, color: '#85381c', align: 'center', maxWidthPct: 0.94, lineHeight: 1.1, tint: true },
-      { key: 'cordially',  yPct: 0.633, font: 'DM Sans',            sizePx: 36, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.92, lineHeight: 1.2 },
-      { key: 'title',      yPct: 0.650, font: 'Cormorant Garamond', sizePx: 148, weight: 700, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 0.82, wrap: true, tint: true },
-      // Date/host/address block.
-      { key: 'datetime',   yPct: 0.756, font: 'AddingtonCF',       sizePx: 84, weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 1.4, bevel: true, tint: true },
-      { key: 'rsvp',       yPct: 0.800, font: 'AppleSDGothicNeoH', sizePx: 42, weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9, lineHeight: 1.4 },
-      { key: 'locationLabel', yPct: 0.821, font: 'AddingtonCF',    sizePx: 37, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.3 },
-      { key: 'host',       yPct: 0.840, font: 'GothamRegular',     sizePx: 48, weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9, lineHeight: 1.4 },
-      { key: 'address',    yPct: 0.866, font: 'AddingtonCF',       sizePx: 44, weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9, lineHeight: 1.12, bevel: true, tint: true },
-      { key: 'mahaprasad', yPct: 0.912, font: 'AddingtonCF',       sizePx: 36, weight: 700, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.4 },
+      // tint  → follows the per-photo PRIMARY text color (textColor)
+      // tint2 → follows the per-photo SECONDARY text color (textColor2)
+      { key: 'invitation', yPct: 0.5575, font: 'AddingtonCF',       sizePx: 79,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.1,   tracking: -25, tint: true },
+      { key: 'zoneLine',   yPct: 0.5907, font: 'AddingtonCF',       sizePx: 50,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.94, lineHeight: 1.1,   tracking: -40, tint: true },
+      { key: 'cordially',  yPct: 0.6162, font: 'GothamRegular',     sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.92, lineHeight: 1.2,   tracking: -40, tint2: true },
+      { key: 'title',      yPct: 0.6367, font: 'AddingtonCF',       sizePx: 167, weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 0.814, wrap: true, tracking: -25, tint: true },
+      // santos ("In the presence of Pujya Swamis") — Satsang only, gated by the
+      // toggle in buildFields (empty string = skipped). Fixed purple.
+      { key: 'santos',     yPct: 0.7300, font: 'GothamRegular',     sizePx: 42,  weight: 400, color: '#4a4882', align: 'center', maxWidthPct: 0.92, lineHeight: 1.3,   tracking: -40 },
+      { key: 'datetime',   yPct: 0.7545, font: 'AddingtonCF',       sizePx: 86,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 1.4,   tracking: -25, tint: true },
+      { key: 'rsvp',       yPct: 0.7964, font: 'AppleSDGothicNeoH', sizePx: 52,  weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint2: true },
+      { key: 'locationLabel', yPct: 0.8202, font: 'AddingtonCF',    sizePx: 33, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.3,   tracking: -25, tint2: true },
+      { key: 'host',       yPct: 0.8374, font: 'GothamRegular',     sizePx: 52,  weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint2: true },
+      { key: 'address',    yPct: 0.8654, font: 'AddingtonCF',       sizePx: 63,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.06,  tracking: -25, tint: true },
+      { key: 'mahaprasad', yPct: 0.9216, font: 'AddingtonCF',       sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -25, tint2: true },
     ],
 
     // Satsang Sabha zone overrides (from the live flyer-positions.json — px ×3.125).
     // Satsang flyers have no host/RSVP; datetime + address sit lower than parasabha.
+    // Satsang Sabha overrides — matched to the staggered reference flyer. No
+    // host / RSVP (buildFields blanks them). Title is STAGGERED via lineCxPct
+    // ("Satsang" left, "Sabha" right). santos shows only when the toggle is on.
     satsang: {
-      datetime:      { yPct: 0.792, sizePx: 86 },
-      locationLabel: { yPct: 0.834 },
-      address:       { yPct: 0.856, sizePx: 53, lineHeight: 1.12 },
-      mahaprasad:    { yPct: 0.920, sizePx: 36 },
+      invitation:    { yPct: 0.5644, sizePx: 79 },
+      cordially:     { yPct: 0.5998, sizePx: 33 },
+      title:         { yPct: 0.606, sizePx: 209, lineHeight: 0.92, lineCxPct: [0.06, 0.94], lineAlign: ['left', 'right'] },
+      santos:        { yPct: 0.771, sizePx: 42 },
+      datetime:      { yPct: 0.789, sizePx: 102 },
+      locationLabel: { yPct: 0.841, sizePx: 33 },
+      address:       { yPct: 0.862, sizePx: 63, lineHeight: 1.06 },
+      mahaprasad:    { yPct: 0.921, sizePx: 33 },
     },
 
     // ── Landscape social / OG card (1200×630) — same design language as the
@@ -82,23 +105,26 @@
       canvas: { width: 1200, height: 630 },
       photoPanel: { leftPct: 0, widthPct: 0.44, topPct: 0, bottomPct: 1.0 },
       photoFeatherPct: 0.22, // right-edge fade of the photo panel into the bg
-      header: { widthPct: 0.072, cxPct: 0.70, topPct: 0.035 },
+      header: { widthPct: 0.072, cxPct: 0.72, topPct: 0.035 },
       text: [
-        { key: 'invitation',    cxPct: 0.70, yPct: 0.115, font: 'Cormorant Garamond', sizePx: 30, weight: 700, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.1, tint: true },
-        { key: 'zoneLine',      cxPct: 0.70, yPct: 0.180, font: 'Cormorant Garamond', sizePx: 23, weight: 600, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.1, tint: true },
-        { key: 'cordially',     cxPct: 0.70, yPct: 0.242, font: 'DM Sans',            sizePx: 15, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.2 },
-        { key: 'title',         cxPct: 0.70, yPct: 0.300, font: 'Cormorant Garamond', sizePx: 66, weight: 700, color: '#85381c', maxWidthPct: 0.54, lineHeight: 0.85, wrap: true, tint: true },
-        { key: 'datetime',      cxPct: 0.70, yPct: 0.585, font: 'AddingtonCF',        sizePx: 36, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.3, bevel: true, tint: true },
-        { key: 'rsvp',          cxPct: 0.70, yPct: 0.655, font: 'AppleSDGothicNeoH',  sizePx: 18, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3 },
-        { key: 'locationLabel', cxPct: 0.70, yPct: 0.700, font: 'AddingtonCF',        sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3 },
-        { key: 'host',          cxPct: 0.70, yPct: 0.735, font: 'GothamRegular',      sizePx: 22, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3 },
-        { key: 'address',       cxPct: 0.70, yPct: 0.778, font: 'AddingtonCF',        sizePx: 20, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.12, bevel: true, tint: true },
-        { key: 'mahaprasad',    cxPct: 0.70, yPct: 0.880, font: 'AddingtonCF',        sizePx: 16, weight: 700, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3 },
+        { key: 'invitation',    cxPct: 0.72, yPct: 0.115, font: 'AddingtonCF',   sizePx: 30, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.1, tracking: -25, tint: true },
+        { key: 'zoneLine',      cxPct: 0.72, yPct: 0.180, font: 'AddingtonCF',   sizePx: 23, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.1, tracking: -40, tint: true },
+        { key: 'cordially',     cxPct: 0.72, yPct: 0.242, font: 'GothamRegular',     sizePx: 15, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.2, tracking: -40, tint2: true },
+        { key: 'title',         cxPct: 0.72, yPct: 0.300, font: 'AddingtonCF',       sizePx: 66, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 0.85, wrap: true, tracking: -25, tint: true },
+        { key: 'santos',        cxPct: 0.72, yPct: 0.540, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4a4882', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -40 },
+        { key: 'datetime',      cxPct: 0.72, yPct: 0.585, font: 'AddingtonCF',       sizePx: 36, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -25, tint: true },
+        { key: 'rsvp',          cxPct: 0.72, yPct: 0.655, font: 'AppleSDGothicNeoH', sizePx: 18, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
+        { key: 'locationLabel', cxPct: 0.72, yPct: 0.700, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
+        { key: 'host',          cxPct: 0.72, yPct: 0.735, font: 'GothamRegular',     sizePx: 22, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
+        { key: 'address',       cxPct: 0.72, yPct: 0.778, font: 'AddingtonCF',       sizePx: 20, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.12, tracking: -25, tint: true },
+        { key: 'mahaprasad',    cxPct: 0.72, yPct: 0.880, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
       ],
       satsang: {
-        datetime:      { yPct: 0.600, sizePx: 38 },
-        locationLabel: { yPct: 0.700 },
-        address:       { yPct: 0.742, sizePx: 24, lineHeight: 1.12 },
+        title:         { yPct: 0.228, sizePx: 117 },
+        santos:        { yPct: 0.560 },
+        datetime:      { yPct: 0.600, sizePx: 49 },
+        locationLabel: { yPct: 0.702, sizePx: 24 },
+        address:       { yPct: 0.754, sizePx: 33, lineHeight: 1.12 },
         mahaprasad:    { yPct: 0.880 },
       },
     },
@@ -138,10 +164,13 @@
    * melts into the recolored background.
    */
   function drawPhotoInBox(ctx, photoImg, box, photoCfg, fade, W, H) {
-    const bTop = (box.topPct ?? 0.075) * H;
+    photoCfg = photoCfg || {};
+    // offsetY (GLOBAL — lives on photoBox, like the header position) shifts the
+    // ENTIRE photo block (image + its top/bottom fades) up/down as one unit,
+    // independent of focusY (crop pan) and the fade sliders. Neg = up, pos = down.
+    const bTop = ((box.topPct ?? 0.075) + (box.offsetY || 0)) * H;
     const bh = ((box.bottomPct ?? 0.595) - (box.topPct ?? 0.075)) * H;
     if (bh <= 0) return;
-    photoCfg = photoCfg || {};
 
     // Render into a box-sized layer so the fade mask doesn't punch the bg.
     const layer = document.createElement('canvas');
@@ -209,32 +238,63 @@
     return lines;
   }
 
-  function drawTextEl(ctx, el, value, W, H, scale, textColor) {
+  function drawTextEl(ctx, el, value, W, H, scale, textColor, textColor2) {
     if (value === undefined || value === null || value === '') return;
-    // `tint` elements follow the per-photo custom text color; others keep their own.
-    const fill = (el.tint && textColor) ? textColor : el.color;
+    // tint → per-photo PRIMARY color; tint2 → per-photo SECONDARY color; else fixed.
+    const fill = (el.tint && textColor) ? textColor
+               : (el.tint2 && textColor2) ? textColor2
+               : el.color;
     const size = el.sizePx * scale;
-    ctx.font = (el.weight >= 600 ? '700 ' : '400 ') + size + 'px "' + el.font + '"';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';   // yPct is the TOP of the first line (matches the live DOM `top:`)
+    const fontStr = (el.weight >= 600 ? '700 ' : '400 ') + size + 'px "' + el.font + '"';
+    const ls = (el.tracking ? (el.tracking / 1000) * size : 0) + 'px';  // PS tracking = 1/1000 em
     const maxW = (el.maxWidthPct || 0.9) * W;
+    const cx = (el.cxPct != null ? el.cxPct : 0.5) * W;  // center column (OG uses an off-centre text column)
+    // lineCxPct: optional per-line horizontal centre (used to STAGGER a title,
+    // e.g. Satsang upper-left + Sabha lower-right). Falls back to cx.
+    const cxFor = (i) => ((el.lineCxPct && el.lineCxPct[i] != null) ? el.lineCxPct[i] * W : cx);
+    // lineAlign: optional per-line text-align ('left'|'right'|'center'). With cxFor
+    // as the anchor: left → anchor is the left edge, right → the right edge. Used to
+    // stagger the Satsang title (Satsang left-aligned, Sabha right-aligned).
+    const alignFor = (i) => ((el.lineAlign && el.lineAlign[i]) ? el.lineAlign[i] : (el.align || 'center'));
+    const yTop = el.yPct * H;                            // yPct is the TOP of the first line
+    const lineH = size * (el.lineHeight || 1.3);
 
-    // explicit newlines first, then optional word-wrap per segment
+    ctx.font = fontStr; ctx.letterSpacing = ls; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     let lines = String(value).split('\n');
     if (el.wrap) lines = lines.flatMap((ln) => wrapLines(ctx, ln, maxW));
 
-    const lineH = size * (el.lineHeight || 1.3);
-    const cx = (el.cxPct != null ? el.cxPct : 0.5) * W;  // center column (OG uses an off-centre text column)
-    const yTop = el.yPct * H;
+    // Bevel/emboss = two soft edge-halos peeking out around each glyph — a light
+    // highlight (up-left) + a dark shadow (down-right) — with a CRISP fill drawn
+    // on TOP so the letter colour itself stays clean (no muddying). Subtle.
+    const emb = (el.emboss === false) ? null : LAYOUT.emboss;
+    const hlA = emb ? (el.embossHl != null ? el.embossHl : emb.hlOpacity) : 0;
+    const shA = emb ? (el.embossSh != null ? el.embossSh : emb.shOpacity) : 0;
+    const d = emb ? emb.offset * scale : 0;
+    const blur = emb ? emb.blur * scale : 0;
+    const hlC = emb ? hexToRgb(emb.highlight) : null;
+    const shC = emb ? hexToRgb(emb.shadow) : null;
+    const rgba = (c, a) => 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + a + ')';
+
     lines.forEach((line, i) => {
-      const y = yTop + i * lineH;
-      if (el.bevel) {
-        ctx.fillStyle = 'rgba(255,255,255,0.40)'; ctx.fillText(line, cx - scale, y - scale);
-        ctx.fillStyle = 'rgba(0,0,0,0.22)';       ctx.fillText(line, cx + scale, y + scale);
+      const x = cxFor(i), y = yTop + i * lineH;
+      ctx.textAlign = alignFor(i);
+      if (emb) {
+        ctx.save();
+        ctx.fillStyle = fill;
+        if (shA > 0) {  // dark halo, down-right
+          ctx.shadowColor = rgba(shC, shA); ctx.shadowBlur = blur; ctx.shadowOffsetX = d; ctx.shadowOffsetY = d;
+          ctx.fillText(line, x, y);
+        }
+        if (hlA > 0) {  // light halo, up-left
+          ctx.shadowColor = rgba(hlC, hlA); ctx.shadowBlur = blur; ctx.shadowOffsetX = -d; ctx.shadowOffsetY = -d;
+          ctx.fillText(line, x, y);
+        }
+        ctx.restore();
       }
       ctx.fillStyle = fill;
-      ctx.fillText(line, cx, y);
+      ctx.fillText(line, x, y);  // crisp letter on top
     });
+    ctx.letterSpacing = '0px';
   }
 
   /**
@@ -297,7 +357,7 @@
     const ov = opts.variant === 'satsang' ? LAYOUT.satsang : null;
     for (const baseEl of LAYOUT.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
-      drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor);
+      drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
     }
 
     return { W, H };
@@ -357,7 +417,7 @@
     const ov = opts.variant === 'satsang' ? L.satsang : null;
     for (const baseEl of L.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
-      drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor);
+      drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
     }
     return { W, H };
   }

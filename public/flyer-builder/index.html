@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Flyer Builder — SCREvents</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -187,7 +189,7 @@
   </div>
 </div>
 
-<script src="/flyer-builder/flyer-render.js?v=10"></script>
+<script src="/flyer-builder/flyer-render.js?v=26"></script>
 <script>
 // ── Zone config ───────────────────────────────────────────────────────────────
 const PREVIEW_TEMPLATES = {
@@ -218,6 +220,11 @@ async function loadFlyerAssets() {
   MANIFEST = await (await fetch('/flyer-builder/swami-photos.json?t=' + Date.now())).json();
   // Optional saved layout override (from the Advanced panel's "Save layout").
   try { const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now()); if (lr.ok) FlyerRender.applyLayout(await lr.json()); } catch (e) {}
+  // Pick up the GLOBAL tuning the photo vetter saved in this browser (same-origin
+  // localStorage) — header position/size/shadow + the global photo move — so the
+  // builder matches the vetter without a manual export. (Production reads flyer-layout.json.)
+  try { const h = JSON.parse(localStorage.getItem('scr_vetter_header') || 'null'); if (h && typeof h === 'object') Object.assign(FlyerRender.LAYOUT.header, h); } catch (e) {}
+  try { const off = localStorage.getItem('scr_vetter_boxoffset'); if (off !== null) FlyerRender.LAYOUT.photoBox.offsetY = parseFloat(off); } catch (e) {}
   PHOTO_BY_ID = Object.fromEntries(MANIFEST.photos.map((p) => [p.id, p]));
   ALL_IDS = MANIFEST.photos.map((p) => p.id);
   [A.watercolor, A.header, A.footerBlack, A.footerWhite] = await Promise.all([
@@ -282,11 +289,14 @@ function buildFields() {
   const addr2 = document.getElementById('f-addr2').value.trim();
   const mahaprasad = document.getElementById('f-mahaprasad').value || 'Mahaprasad will be served after sabha.';
   const zoneName = ZONE_DISPLAY[currentZone] || currentZone;
+  const santosCb = document.getElementById('santos-cb');
+  const santosOn = isSatsang && santosCb && santosCb.checked;
   return {
     invitation: 'Invitation',
-    zoneLine: 'BAPS Swaminarayan Mandir | ' + zoneName + (isSatsang ? '' : ' Zone'),
-    cordially: 'Cordially invites you, your family, and friends to',
+    zoneLine: isSatsang ? '' : ('BAPS Swaminarayan Mandir | ' + zoneName + ' Zone'),
+    cordially: isSatsang ? 'We cordially invite you, your family, and friends to' : 'Cordially invites you, your family, and friends to',
     title: isSatsang ? 'Satsang\nSabha' : 'Para Satsang\nSabha',
+    santos: santosOn ? 'In the presence of Pujya Swamis' : '',
     datetime: dt || 'Fri, April 10 at 5:00 pm',
     rsvp: isSatsang ? '' : (rsvp ? 'Please RSVP by ' + rsvp : ''),
     locationLabel: 'Location:',
@@ -305,6 +315,7 @@ function renderFlyer(W, canvasEl) {
     variant: isSatsang ? 'satsang' : 'parasabha',
     bgColor: currentPhoto.entry.bgColor,
     textColor: currentPhoto.entry.textColor,
+    textColor2: currentPhoto.entry.textColor2,
     photoImg: currentPhoto.img,
     photo: currentPhoto.entry.photo,
     fade: currentPhoto.entry.fade,
@@ -447,7 +458,7 @@ function toggleMandir(checked) {
   else { a1.value = a2.value = ''; a1.disabled = a2.disabled = false; a1.style.opacity = a2.style.opacity = '1'; }
   scheduleRender();
 }
-function toggleSantos(checked) { renderPreviewCanvas(); }
+function toggleSantos(checked) { scheduleRender(); renderPreviewCanvas(); }
 
 // ── OG / social preview (1200×630) — canvas composite, matches the flyer ─────
 function renderOG(W, canvasEl) {
@@ -458,6 +469,7 @@ function renderOG(W, canvasEl) {
     variant: isSatsang ? 'satsang' : 'parasabha',
     bgColor: currentPhoto.entry.bgColor,
     textColor: currentPhoto.entry.textColor,
+    textColor2: currentPhoto.entry.textColor2,
     photoImg: currentPhoto.img,
     photo: currentPhoto.entry.photo,
     headerImg: A.header,
