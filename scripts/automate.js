@@ -1168,7 +1168,11 @@ async function main() {
     if (eventInfo.date) {
       try {
         const currentYear = new Date().getFullYear();
-        let parsed = new Date(eventInfo.date + ', ' + currentYear);
+        // Strip ordinal suffixes ("July 4th" → "July 4"). The JS Date parser
+        // rejects ordinals, which silently left eventDate empty for dates like
+        // "Saturday, July 4th" and dropped those events from /summary entirely.
+        const cleanDate = eventInfo.date.replace(/(\d{1,2})(st|nd|rd|th)\b/gi, '$1');
+        let parsed = new Date(cleanDate + ', ' + currentYear);
         // If the parsed date is more than ~3 months in the past, bump to next
         // year — so a November-uploaded January flyer correctly resolves to
         // next year instead of being treated as already-past.
@@ -1176,7 +1180,7 @@ async function main() {
           const threeMonthsAgo = new Date();
           threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
           if (parsed < threeMonthsAgo) {
-            parsed = new Date(eventInfo.date + ', ' + (currentYear + 1));
+            parsed = new Date(cleanDate + ', ' + (currentYear + 1));
           }
         }
         if (!isNaN(parsed)) eventDateISO = parsed.toISOString().split('T')[0];
