@@ -51,6 +51,15 @@ exports.handler = async (event) => {
   if (!zone || !name) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Name is required.' }) };
   }
+  // Reject junk names — the recurring data-quality problem is people typing the
+  // guest count (e.g. "4 people") into the name box. Require at least one letter
+  // and no digits; the guest count belongs in the Number of Guests field.
+  if (!/[a-zA-Z]/.test(name)) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please enter your name using letters.' }) };
+  }
+  if (/[0-9]/.test(name)) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Your name can\'t contain numbers — please put the guest count in the Number of Guests box.' }) };
+  }
   if (guests > 100) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Guest count is too high — please contact the organizer directly.' }) };
   }
