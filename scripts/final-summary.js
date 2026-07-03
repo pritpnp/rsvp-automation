@@ -91,7 +91,10 @@ async function main() {
       continue;
     }
 
-    const zoneResponses = responses.filter(r => String(r['zone']).trim() === zone);
+    const zoneResponses = responses
+      .filter(r => String(r['zone']).trim() === zone)
+      // Alphabetical by name (case-insensitive) so the final list is easy to scan.
+      .sort((a, b) => String(a.name || '').trim().localeCompare(String(b.name || '').trim(), 'en', { sensitivity: 'base' }));
     const zoneName = zone.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     if (zoneResponses.length === 0) {
