@@ -1,12 +1,13 @@
 // Event-night RSVP cleanup — archive variant.
 //
 // Runs from .github/workflows/cleanup-past-rsvps.yml on a dual UTC cron
-// (3 AM / 4 AM) so 11 PM America/New_York is covered year-round. For
-// every zone whose eventDate is on or before today (in NY time), the
-// script copies the active RSVP rows into rsvps_archive (preserving id,
-// adding archived_at + event_date), then deletes them from rsvps and the
-// Google Sheet. The admin view stays focused on upcoming events; the
-// historical data lives in rsvps_archive for later lookup.
+// (08:00 / 09:00 UTC ≈ 3–5 AM America/New_York year-round). For every zone
+// whose eventDate is STRICTLY before today in NY time — i.e. the day AFTER the
+// event, never on the event day itself, so tonight's headcount survives — the
+// script copies the active RSVP rows into rsvps_archive (preserving id, adding
+// archived_at + event_date), then deletes them from rsvps and the Google Sheet.
+// The admin view stays focused on upcoming events; the historical data lives in
+// rsvps_archive for later lookup.
 //
 // Order matters: archive insert MUST succeed before delete runs. If the
 // insert fails the rows are kept in rsvps and Telegram surfaces an alert
