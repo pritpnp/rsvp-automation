@@ -79,7 +79,7 @@
       <p class="rsvp-note">Please fill out the form below to confirm your attendance.</p>
       <div style="background:#fff;border-radius:20px;padding:28px 24px;box-shadow:0 4px 24px rgba(92,45,10,0.10);">
         <div id="rsvp-form" style="text-align:left;">
-          <input id="rsvp-name" type="text" placeholder="Full Name" autocomplete="name" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
+          <input id="rsvp-name" type="text" placeholder="Full Name" autocomplete="name" oninput="this.value=this.value.replace(/[^a-zA-Z '.-]/g,'')" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
           <input id="rsvp-guests" type="number" placeholder="Number of Guests" min="1" max="100" inputmode="numeric" style="width:100%;padding:13px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:14px;box-sizing:border-box;font-family:'DM Sans',sans-serif;background:#FDF6EC;color:#5C2D0A;" />
           <button id="rsvp-submit" onclick="submitRsvp()" style="width:100%;padding:14px;background:linear-gradient(135deg,#C8860A,#E6A817);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity 0.2s ease;">Submit RSVP →</button>
         </div>
@@ -97,7 +97,7 @@
         <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#5C2D0A;margin-bottom:8px;">RSVP is now closed</h2>
         <p style="font-size:14px;color:#8B6040;line-height:1.6;margin-bottom:24px;">The deadline has passed, but you can still send a late request below.</p>
         <div id="late-form" style="text-align:left;">
-          <input id="late-name" type="text" placeholder="Full Name" style="width:100%;padding:12px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;" />
+          <input id="late-name" type="text" placeholder="Full Name" oninput="this.value=this.value.replace(/[^a-zA-Z '.-]/g,'')" style="width:100%;padding:12px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:10px;box-sizing:border-box;font-family:'DM Sans',sans-serif;" />
           <input id="late-guests" type="number" placeholder="Number of Guests" min="1" style="width:100%;padding:12px 14px;border:1px solid #e0d5c8;border-radius:12px;font-size:15px;margin-bottom:16px;box-sizing:border-box;font-family:'DM Sans',sans-serif;" />
           <button onclick="sendLateRsvp()" style="width:100%;padding:14px;background:linear-gradient(135deg,#C8860A,#E6A817);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Send Late Request 🙏</button>
         </div>
