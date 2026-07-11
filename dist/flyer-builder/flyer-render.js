@@ -76,7 +76,7 @@
       { key: 'datetime',   yPct: 0.7545, font: 'AddingtonCF',       sizePx: 86,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 1.4,   tracking: -25, tint: true },
       { key: 'rsvp',       yPct: 0.7964, font: 'AppleSDGothicNeoH', sizePx: 52,  weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint2: true },
       { key: 'locationLabel', yPct: 0.8202, font: 'AddingtonCF',    sizePx: 33, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.3,   tracking: -25, tint2: true },
-      { key: 'host',       yPct: 0.8374, font: 'GothamRegular',     sizePx: 52,  weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint2: true },
+      { key: 'host',       yPct: 0.840,  font: 'GothamRegular',     sizePx: 52,  weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint2: true },
       { key: 'address',    yPct: 0.8654, font: 'AddingtonCF',       sizePx: 63,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.06,  tracking: -25, tint: true },
       { key: 'mahaprasad', yPct: 0.9216, font: 'AddingtonCF',       sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -25, tint2: true },
     ],
