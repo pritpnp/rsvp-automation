@@ -1,308 +1,4663 @@
-# Scranton Region — RSVP Automation System
+# SCREvents
 
-A fully automated RSVP pipeline for Scranton region events. Drop a flyer image into a folder, run one script, and a live event site deploys itself — complete with OCR-extracted event details, embedded Microsoft Forms, WhatsApp preview images, VIP passes, and Telegram summaries.
+Community satsang event management — RSVP collection, VIP passes, per-event landing pages, a manager-driven flyer builder with Telegram-mediated approval, and a fleet of scheduled jobs that keep deadlines, summaries, and zone broadcasts in sync.
 
-**Live site:** [screvents.com](https://screvents.com)  
-**GitHub repo:** `pritpnp/rsvp-automation`  
-**Telegram group:** SCREvents Admin (supergroup)
+This README is a complete recreation manual. Every subsystem, function, table, env var, and route is mapped to where it lives in this repository.
 
----
+## Table of Contents
 
-## How It Works — Full Pipeline
-
-### 1. Flyer Upload
-Two ways to upload a flyer:
-
-**Mac script (original):**
-1. Drop flyer image (JPG/PNG) into the correct zone folder inside `Screvents Flyers/` on your iCloud Desktop
-2. Run `Upload Flyers` (double-click the Automator app on your Desktop)
-3. Script stashes local changes, pulls latest, removes any old flyer for that zone from the repo, copies the new one in, commits, and pushes
-4. A Mac notification confirms success ("Glass" sound), a removal-only sync, or no changes found ("Basso" sound)
-5. GitHub push triggers GitHub Actions automatically
-
-**Telegram (admin chat):**
-1. Send `/uploadflyer` in the SCREvents Admin group
-2. Bot prompts for a photo — send the flyer image
-3. Select the zone from the inline keyboard
-4. Confirm — bot commits the image to `flyers/{zone}/flyer.jpg` via GitHub Contents API
-5. GitHub Actions triggers automatically
-
-To remove a flyer via Telegram: `/removeflyer` → select zone → confirm.
-
-### 2. GitHub Actions — Site Build (`rsvp-automation.yml`)
-Triggered on every push to `main` (ignoring `dist/` changes). Runs `scripts/automate.js` which:
-1. Scans all zone folders in `flyers/` for images
-2. For each flyer, calls **Claude API (claude-sonnet-4-20250514)** with vision to OCR-extract event info
-3. Generates a styled HTML page for the zone (Parasabha or Mandir layout depending on zone)
-4. Generates a 1200×630 OG image (50/50 split: top half left panel, bottom half right panel)
-5. Compresses the flyer to JPEG under 300KB
-6. Writes everything to `dist/`, commits with `"deploy: update dist"`, pushes — Netlify CI deploys automatically
-7. Commits updated `deadlines.json` back to the repo with `[skip ci]`
-
-### 3. RSVP Collection
-- User visits `screvents.com/{zone}` and fills out the embedded **Microsoft Form**
-- **Power Automate** flow fires: `When a new response is submitted` → `Get response details` → `Insert row` into Google Sheet
-- One Power Automate flow per zone, all writing to the same Google Sheet (`Parasabha RSVPs`)
-- Insert row retry policy: Exponential, count 4, interval PT5S (prevents 429 failures)
-
-### 4. Telegram Summaries
-- **Automatic:** Every 3 days at 2:30 PM EDT — `rsvp-summary.yml` runs `scripts/summary.js`
-- **On demand:** Send `/summary` in a Telegram group → `telegram-webhook` Netlify function receives it → triggers `rsvp-summary.yml` via GitHub API dispatch → `summary.js` reads the Google Sheet CSV → sends per-zone breakdown back to the group
-- Summary only sends zones whose RSVP deadline has not yet passed (or all zones in TEST_MODE)
-
-### 5. Final Summary
-- `final-summary.yml` runs nightly at 9 PM EDT
-- Sends final RSVP list for zones where `eventDate === today` to the admin group only
-
-### 6. Nightly Cleanup
-- **Google Apps Script** (`cleanupOldRSVPs`) runs daily at 3–4 AM ET
-- Fetches `deadlines.json` from GitHub raw URL
-- Deletes all rows from the Google Sheet for any zone where `eventDate < today`
+1. [Project Overview](#project-overview)
+2. [Tech Stack](#tech-stack)
+3. [Repository Structure](#repository-structure)
+4. [Frontend Pages Reference](#frontend-pages-reference)
+5. [Netlify Functions Reference](#netlify-functions-reference)
+6. [Background Scripts Reference](#background-scripts-reference)
+7. [GitHub Actions Workflows](#github-actions-workflows)
+8. [Supabase Schema](#supabase-schema)
+9. [Telegram Bot Integration](#telegram-bot-integration)
+10. [Flyer Builder Flow](#flyer-builder-flow)
+11. [RSVP & VIP Pass Flow](#rsvp-vip-pass-flow)
+12. [Authentication & Access Control](#authentication-access-control)
+13. [Per-Event Configuration & Deadlines](#perevent-configuration-deadlines)
+14. [Build & Deployment](#build-deployment)
+15. [Environment Variables Reference](#environment-variables-reference)
+16. [Recreate From Scratch](#recreate-from-scratch)
+17. [Operations & Troubleshooting](#operations-troubleshooting)
 
 ---
 
-## Site Structure
+## 1. Project Overview
+SCREvents is the event management and RSVP platform for community satsang events organized in the Scranton / Northeast Pennsylvania region. It is the connective tissue between five geographic zone congregations (Scranton, Mountain Top, Moosic, Bloomsburg, Bloomsburg/Satsang Sabha) and the central Mandir, and it covers every step of an event's lifecycle: a manager designs a flyer in the browser, an admin approves it from Telegram, the flyer is committed to a GitHub repo, a GitHub Actions workflow OCRs it with Claude to extract date / time / location / RSVP deadline, regenerates per-zone landing pages and an aggregate hub page, deploys the static site to Netlify, collects RSVPs into Supabase, issues VIP passes for invitees, and sends scheduled Telegram digests to zone leaders. The production site is served at `https://screvents.com`.
 
-| URL | Description |
-|-----|-------------|
-| `screvents.com` | Hub page — Parasabha Events + Mandir Events sections |
-| `screvents.com/{zone}` | Zone event page — flyer, event details, embedded RSVP form |
-| `screvents.com/np/{zone}` | Same page, OG/Twitter meta tags stripped (WhatsApp no-preview share) |
-| `screvents.com/vip/{uuid}` | VIP pass card |
-| `screvents.com/admin` | Admin portal |
-| `screvents.com/login` | Manager login |
+### The events currently routed by the platform
 
-### Zones
+Pulled from `deadlines.json` at the repository root (the single source of truth that downstream scripts and pages read on every build):
 
-**Parasabha Events** (saffron/gold cards on hub — RSVP form always shown)
-| Slug | Display Name |
-|------|-------------|
-| `scranton` | Scranton |
-| `mountain-top` | Mountain Top |
-| `moosic` | Moosic |
-| `bloomsburg` | Bloomsburg |
+| Zone slug         | Event                                  | Style       | Public route                    |
+| ----------------- | -------------------------------------- | ----------- | ------------------------------- |
+| `scranton`        | Para Satsang Sabha (Scranton)          | Parasabha   | `https://screvents.com/scranton`        |
+| `moosic`          | Para Satsang Sabha (Moosic)            | Parasabha   | `https://screvents.com/moosic`          |
+| `bloomsburg`      | Para Satsang Sabha (Bloomsburg)        | Parasabha   | `https://screvents.com/bloomsburg`      |
+| `mountain-top`    | Para Satsang Sabha (Mountain Top)      | Parasabha   | `https://screvents.com/mountain-top`    |
+| `satsang-sabha`   | Satsang Sabha                          | Mandir-style| `https://screvents.com/satsang-sabha`   |
+| `mandir-1`        | Mountain Top July 4th Picnic           | Mandir-style| `https://screvents.com/mandir/1`        |
+| `mandir-2`        | Scranton July 4th Picnic               | Mandir-style| `https://screvents.com/mandir/2`        |
+| `mandir-3`        | Walkathon                              | Mandir-style| `https://screvents.com/mandir/3`        |
 
-**Mandir Events** (maroon/rose cards on hub — RSVP form only shown if deadline detected on flyer)
-| Slug | Display Name |
-|------|-------------|
-| `satsang-sabha` | Satsang Sabha |
-| `mandir-1` – `mandir-5` | Generic Mandir slots |
+`mandir-4` and `mandir-5` exist as reserved slots in the build pipeline, the Telegram bot, and the admin portal so additional Mandir events can be added without code changes. Each event also gets a "no preview" mirror at `/np/<slug>/` whose HTML is byte-for-byte identical except that all Open Graph and Twitter card meta tags are stripped — see Frontend Pages for why.
 
----
+### Core capabilities at a glance
 
-## Repo Structure
+- **Per-event landing pages** — One `index.html` per zone in `dist/<slug>/` (or `dist/mandir/<n>/` for mandir slots) generated by `scripts/automate.js`. Each page embeds the printable flyer (`flyer.jpg`), a 1200×630 Open Graph share image (`og.jpg`), event details pulled from OCR + `deadlines.json`, and a native RSVP form.
+- **Public RSVP collection** — Zone pages POST to `netlify/functions/submit-rsvp.js`, which honors a per-zone on/off toggle in the Supabase `rsvp_settings` table and writes to the `rsvps` table as the source of truth.
+- **Late RSVPs** — Once an event's deadline passes, the same UI swaps to a "late RSVP" form that POSTs to `netlify/functions/late-rsvp.js`, which fans a Telegram notification out to both the zone group chat and the admin group so organizers can hand-process the response.
+- **VIP pass system** — Superadmins and permissioned managers create named passes (`vip_passes` table) via the admin portal. Invitees self-serve at `/invite` with name + phone (`netlify/functions/lookup-pass.js`, IP rate-limited), then view their personalized pass at `/vip/<uuid>` (`netlify/functions/get-pass.js`).
+- **Admin dashboard** — Single-page app at `/admin` (source: `public/admin/index.html`) that surfaces every administrative operation: VIP passes, live + archived RSVPs, events CRUD, managers CRUD, per-zone RSVP toggles, zone event-name overrides, flyer uploads/removal, full-site redeploy, and an IP rate-limit console for the invite lookup endpoint.
+- **Manager dashboard** — The same `/admin` page renders a narrowed view for non-superadmin managers, gated by a JSONB `permissions` blob on the `managers` row (`view_rsvps`, `edit_rsvps`, `view_passes`, `create_delete_passes`, `edit_passes`, `flyer_builder`, `flyer_zones`, `upload_flyers`, `remove_flyers`, `refresh_flyers`, etc.). Authentication is shared with superadmin via `netlify/functions/manager-auth.js`.
+- **Flyer builder with Telegram-mediated approval** — `/flyer-builder` is a WYSIWYG composer (`public/flyer-builder/index.html`) that captures the flyer and a 1200×630 social preview to base64 PNGs via `html2canvas` and POSTs them to `netlify/functions/review-flyer.js`. The function stores the artifacts in the Supabase `flyer-reviews` Storage bucket, inserts a row into `flyer_reviews` with `status='pending'`, and sends the admin Telegram group a photo card with inline Approve / Reject buttons. On approval, `netlify/functions/telegram-webhook.js` atomically claims the row (`pending → processing`), deletes any stale flyer files in `flyers/<zone>/`, commits the new `flyer.jpg` and `og.jpg` to the GitHub repo `pritpnp/rsvp-automation`, and marks the row `approved`. On rejection the manager receives a follow-up message with a deep-link back into the builder, pre-filled from `event_data.rejectUrl`.
+- **Telegram bot for organizers** — `/getflyer`, `/summary`, `/uploadflyer`, `/removeflyer`, `/refreshall`, and `/cancel` commands are handled by `netlify/functions/telegram-webhook.js`. Zone group chats are mapped to zone slugs through `TELEGRAM_CHAT_ID_*` env vars so bare commands "know" which zone they belong to.
+- **Automated scheduled jobs** — Six GitHub Actions workflows under `.github/workflows/` run the recurring work (cron, dispatch, and event-triggered). Listed below.
 
-```
-rsvp-automation/
-├── .github/
-│   └── workflows/
-│       ├── rsvp-automation.yml     # Triggered on push — builds & deploys site
-│       ├── rsvp-summary.yml        # Triggered on schedule or dispatch — sends RSVP summary
-│       └── final-summary.yml       # Triggered nightly — sends final summary on event day
-├── flyers/
-│   ├── scranton/
-│   ├── mountain-top/
-│   ├── satsang-sabha/
-│   ├── moosic/
-│   ├── bloomsburg/
-│   └── mandir-1/ … mandir-5/       # Each folder must have a .gitkeep
-├── images/
-│   ├── logo.png
-│   └── sanstha.png
-├── netlify/
-│   └── functions/
-│       ├── admin-passes.js          # VIP pass CRUD
-│       ├── get-pass.js              # Public pass lookup
-│       ├── get-rsvps.js             # Google Sheet read/edit/delete
-│       ├── late-rsvp.js             # Late RSVP Telegram notification
-│       ├── manager-auth.js          # Login/logout/verify
-│       ├── superadmin-events.js     # Events table CRUD
-│       ├── superadmin-managers.js   # Managers table CRUD
-│       ├── telegram-webhook.js      # Telegram bot webhook handler
-│       ├── package.json             # Required for @supabase/supabase-js
-│       └── package-lock.json
-├── public/
-│   ├── admin/index.html
-│   ├── login/index.html
-│   └── vip/index.html
-├── scripts/
-│   ├── automate.js                  # Main script: OCR → HTML → deploy
-│   ├── summary.js                   # Reads Google Sheet → sends Telegram summary
-│   ├── final-summary.js             # Sends final RSVP list on event day
-│   └── package.json
-├── dist/                            # Auto-generated — do not edit manually
-├── deadlines.json                   # Auto-updated by automate.js
-├── netlify.toml
-└── package.json
+### Scheduled GitHub Actions workflows
+
+| Workflow file                               | Cron (UTC)            | Purpose                                                                                                                |
+| ------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/rsvp-automation.yml`     | `0 8 * * *`           | OCR new/changed flyers with Claude, regenerate `dist/`, commit `deadlines.json`, deploy the static site to Netlify.    |
+| `.github/workflows/cleanup-past-rsvps.yml`  | `0 8 * * *`, `0 9 * * *` | At 4 AM America/New_York (one cron for EDT, one for EST), move RSVPs whose event date is in the past into `rsvps_archive`. |
+| `.github/workflows/final-summary.yml`       | `0 1 * * *`           | At 9 PM EDT, push the end-of-day "Final RSVP List" Telegram message for every event whose date is today.                |
+| `.github/workflows/rsvp-summary.yml`        | `30 18 */3 * *`       | Every three days at 2:30 PM EDT, send per-zone RSVP headcount digests to each zone's Telegram group.                    |
+| `.github/workflows/sync-check.yml`          | `*/10 * * * *`        | Every 10 minutes, diff the legacy Google Sheet against Supabase `rsvps` and Telegram-alert only when drift is detected. |
+| `.github/workflows/supabase-keepalive.yml`  | `0 13 * * *`          | Daily REST ping against `vip_passes` so the free-tier Supabase project never pauses.                                    |
+
+See Workflows & Scheduled Jobs for the full breakdown of each workflow's steps, secrets, and concurrency settings.
+
+### High-level architecture
+
+The system is a deliberately boring stack of managed services wired together by Netlify Functions:
+
+- **Static site (Netlify)** — `dist/` is committed to the repo and served as-is. `build.sh` only copies the flyer-builder's templates, preview templates, fonts, and `index.html` from `public/flyer-builder/` into `dist/flyer-builder/` on each Netlify build; the per-event pages are regenerated by `scripts/automate.js` in CI and committed back to `main` with the message convention `deploy: update dist`. URL routing is configured in `netlify.toml` (see Configuration & Build).
+- **Serverless API (Netlify Functions)** — Every dynamic operation is a function under `netlify/functions/`. Browsers never speak directly to Supabase, GitHub, or Telegram; they always go through a function. Authentication is opaque bearer tokens (`x-manager-token` from `manager_sessions`, or short-lived `x-builder-session` UUIDs from `builder_sessions`). See Netlify Functions and Auth & Security.
+- **Supabase (Postgres + Storage)** — Backs everything stateful: `rsvps`, `rsvps_archive`, `rsvp_settings`, `events`, `vip_passes`, `managers`, `manager_sessions`, `builder_sessions`, `flyer_reviews`, `zone_events`, `telegram_upload_sessions`, `invite_lookup_attempts`, `invite_ip_whitelist`, plus the `flyer-reviews` Storage bucket. All access is via `SUPABASE_SERVICE_KEY` from Node — RLS is effectively bypassed and the auth perimeter lives in the function layer. See Supabase Schema.
+- **GitHub repo `pritpnp/rsvp-automation`** — Holds source flyer images under `flyers/<zone>/`. Committing a flyer triggers the `rsvp-automation.yml` workflow, which OCRs, regenerates pages, and pushes `dist/` back to the same repo. Netlify auto-builds from that push. See Flyer Builder Flow for the full review → commit → deploy chain.
+- **Telegram bot** — Receives webhook callbacks at `netlify/functions/telegram-webhook.js` (authenticated by Telegram's `X-Telegram-Bot-Api-Secret-Token` header, constant-time compared against `TELEGRAM_WEBHOOK_SECRET`). Used for admin approvals on flyer reviews, organizer commands in zone groups, and as the destination for automated digests and alerts. See Telegram Bot.
+
+```text
+                       +---------------------------+
+                       |   Public visitor / guest  |
+                       |  (zone page, /invite, /vip)|
+                       +-------------+-------------+
+                                     |
+                                     v
+                       +---------------------------+
+                       |       Netlify CDN         |
+                       |  (publish dir = dist/)    |
+                       +------+------------+-------+
+                              |            |
+              static .html /  |            |  /.netlify/functions/*
+              .jpg / .css /   |            |  (admin, RSVP, passes,
+              .otf            |            |   flyer review, etc.)
+                              v            v
+              +--------------------+   +-----------------------------------+
+              |  dist/<zone>/      |   |  Netlify Function (Node 18+)      |
+              |  dist/mandir/<n>/  |   |  netlify/functions/*.js           |
+              |  dist/np/<zone>/   |   +---+------+-----------+------------+
+              |  dist/admin/       |       |      |           |
+              |  dist/login/       |       |      |           |
+              |  dist/invite/      |       v      v           v
+              |  dist/vip/         |   Supabase  GitHub      Telegram
+              |  dist/flyer-builder|   Postgres  REST API    Bot API
+              |  index.html (hub)  |   + Storage (contents,  (sendMessage,
+              +--------------------+   tables    workflow    sendPhoto,
+                                       above     dispatch    callbacks)
+                                       in arch
+                                       overview)
+                                            ^                     ^
+                                            |                     |
+                       +--------------------+---------------------+--------+
+                       |               GitHub Actions runners              |
+                       |  scripts/automate.js  (OCR flyers, regen dist)    |
+                       |  scripts/cleanup-past-rsvps.js  (archive)         |
+                       |  scripts/summary.js  (zone digests)               |
+                       |  scripts/final-summary.js  (event-day digest)     |
+                       |  scripts/sync-check.js  (drift detector)          |
+                       |  supabase-keepalive  (REST ping)                  |
+                       +---------------------------------------------------+
+
+  Admin in Telegram <----- inline buttons ------- review-flyer  /  webhook
+                           (Approve / Reject)     commits flyer + og.jpg
+                                                  to pritpnp/rsvp-automation
+                                                  -> triggers automate.js
+                                                  -> deploys dist/ to Netlify
 ```
 
+The rest of this README walks the stack from the outside in: the URL surface and what each page does (Frontend Pages), the Netlify Functions behind every dynamic action (Netlify Functions), the Supabase tables they read and write (Supabase Schema), the GitHub Actions that run the scheduled work (Workflows & Scheduled Jobs), the Telegram bot's command and callback surface (Telegram Bot), the end-to-end flyer review pipeline (Flyer Builder Flow), the auth and security model (Auth & Security), the master list of environment variables and where each one is set (Environment Variables), and the build configuration that ties it all together (Configuration & Build).
+
 ---
 
-## Key Files In Detail
+## 2. Tech Stack
+End-to-end, this is a static site + Netlify Functions + Supabase Postgres app with no JavaScript framework anywhere. Every layer is either standard-library Node, a thin SDK call, or hand-written HTML/CSS/JS. The only "build step" is `bash build.sh` copying the flyer-builder source files into `dist/`.
+
+### Stack at a glance
+
+| Layer | Tool | Version / Pin | Where it lives |
+|---|---|---|---|
+| Hosting / CDN | Netlify | n/a (SaaS) | `netlify.toml`, `build.sh`, `dist/` published |
+| Serverless runtime | Netlify Functions on Node.js | Node 22 (matches GH Actions `actions/setup-node@v5` node-version `'22'`) | `netlify/functions/*.js` |
+| Function module style | CommonJS, no framework | `"type": "commonjs"` in `netlify/functions/package.json`; every handler is `exports.handler = async (event) => {...}` | `netlify/functions/*.js` |
+| Database | Supabase Postgres (service-role from server only) | Hosted | see Supabase Schema |
+| Supabase client | `@supabase/supabase-js` | drift across three manifests (call out below) | functions, scripts |
+| Password hashing | `bcryptjs` | `^2.4.3` (root + functions) | `manager-auth.js`, `superadmin-managers.js` |
+| Session tokens | `crypto.randomBytes(32).toString('hex')` opaque, stored in `manager_sessions` | Node built-in `crypto` | `manager-auth.js` |
+| Frontend | Vanilla HTML/CSS/JS, no bundler, no framework | n/a | `public/**/*.html`, `dist/**/*.html` |
+| Frontend build | `bash build.sh` (cp -r promotes flyer-builder assets into `dist/`) | n/a | `build.sh` |
+| Front-end image capture | `html2canvas` (CDN script tag inside flyer-builder page) | pinned in HTML script src | `public/flyer-builder/index.html` |
+| Image processing (server) | `sharp` | `^0.34.5` | `scripts/automate.js` (resize, JPEG encode, OG composition) |
+| OCR / NLP | Anthropic Claude SDK (`@anthropic-ai/sdk`) | `^0.20.0` | `scripts/automate.js` (model `claude-sonnet-4-20250514`, vision input → JSON event metadata) |
+| Google Sheets | `googleapis` | scripts `^171.4.0`, functions `^140.0.0`, root `^140.0.0` | RSVP read / append / batchUpdate in scripts + functions |
+| GitHub REST | raw `fetch` to `https://api.github.com/...` with `Authorization: Bearer ${GITHUB_PAT}` | n/a | `netlify/functions/manage-flyers.js`, `refresh-flyers.js`, `telegram-webhook.js`, `trigger-redeploy.js` |
+| GitHub push from CI | ambient `actions/checkout@v5` extraheader token + `execSync('git push origin HEAD:main')` | n/a (workflow `contents: write`) | `scripts/automate.js` |
+| Telegram | raw `fetch` against `https://api.telegram.org/bot<TOKEN>/...` (sendMessage, sendPhoto, getFile, answerCallbackQuery, editMessage*) | no SDK | functions + scripts |
+| Scheduling | GitHub Actions cron | `actions/setup-node@v5`, `actions/checkout@v5` | `.github/workflows/*.yml` |
+| Fonts (builder) | `AddingtonCF.otf`, `GothamRegular.ttf`, `AppleSDGothicNeoH.ttf` loaded via `@font-face` + Lato / DM Sans / Cormorant Garamond from Google Fonts | n/a | `public/flyer-builder/fonts/` |
+| Misc node deps (scripts) | `axios ^1.6.0`, `adm-zip ^0.5.10`, `xlsx ^0.18.5` | as pinned | `scripts/package.json` |
+
+### Hosting (Netlify)
+
+- `netlify.toml` sets `command = "bash build.sh"` and `publish = "dist"`. The `dist/` directory is committed to git, so the build is essentially a refresh of the flyer-builder subtree (see Config & Build).
+- Functions auto-mount under `/.netlify/functions/<name>` from `netlify/functions/`. Netlify installs `netlify/functions/package.json` into the function bundle automatically — no separate deploy step.
+- SPA routing is encoded in `netlify.toml` redirects (200 rewrites for `/admin/*`, `/invite/*`, `/vip/*`, `/flyer-builder/*`, `/login`, plus a 302 from `/superadmin` to `/admin`).
+- CORS for the three flyer-builder asset subfolders (`templates/`, `preview-templates/`, `fonts/`) is set to `Access-Control-Allow-Origin: *` in `netlify.toml` headers.
+
+### Backend runtime (Node 22 on Netlify Functions)
+
+Every function follows the same hand-rolled shape — no Express, no Fastify, no Netlify framework helpers:
+
+```js
+// netlify/functions/<name>.js
+const { createClient } = require('@supabase/supabase-js');
+
+exports.handler = async (event) => {
+  // 1. Handle CORS preflight
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
+  // 2. Method gate
+  if (event.httpMethod !== 'POST') return { statusCode: 405, headers: CORS, body: 'Method not allowed' };
+  // 3. Auth (x-manager-token / x-admin-password / x-builder-session / x-telegram-bot-api-secret-token)
+  // 4. Supabase client with SERVICE_KEY
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+  // 5. Do work, return { statusCode, headers, body: JSON.stringify(...) }
+};
+```
+
+CommonJS only (`"type": "commonjs"` in `netlify/functions/package.json`). Node 22 globals are leveraged in places — e.g. `crypto.randomUUID()` is used in `review-flyer.js` without an explicit `require('crypto')`.
+
+### Database (Supabase Postgres)
+
+Single Supabase project. All server code uses the service-role key (`SUPABASE_SERVICE_KEY`) with `@supabase/supabase-js`. No anon-key data path actually serves traffic; a handful of files keep a defensive `SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY` fallback but the queries they run require service-role unless RLS policies are added. See Supabase Schema for tables.
+
+Known drift to align: the same `@supabase/supabase-js` library is pinned three different ways:
+
+| File | Pin |
+|---|---|
+| `package.json` (root) | `^2.0.0` |
+| `scripts/package.json` | `^2.99.1` |
+| `netlify/functions/package.json` | `^2.101.1` |
+
+The root manifest is effectively unused at runtime (Netlify reads `netlify/functions/package.json`; GitHub Actions `cd scripts && npm install` reads `scripts/package.json`), but the loose `^2.0.0` will resolve to whatever the latest 2.x is whenever someone runs `npm install` at the repo root, which can mask a regression. Recommendation: unify all three on a single pin (e.g. `^2.101.1`) and treat the root `package.json` as either authoritative or delete-able.
+
+### Frontend (vanilla)
+
+- No bundler. No transpiler. No framework. All pages are static `<html>` documents with inline `<style>` and inline `<script>`.
+- `public/admin/index.html`, `public/login/index.html`, `public/invite/index.html`, `public/vip/index.html`, `public/flyer-builder/index.html` are the source-of-truth SPAs. Per-zone landing pages live in `dist/<zone>/index.html` and are regenerated by `scripts/automate.js`.
+- `build.sh` is a 6-line shell script that `cp -r`s `public/flyer-builder/{templates,preview-templates,fonts}/` and `public/flyer-builder/index.html` into `dist/flyer-builder/`. That is the entire frontend "build".
+- Browser uses native `fetch`, `localStorage` (for `admin_token`, `admin_role`, `admin_permissions`, `admin_username`), `navigator.share`, `navigator.clipboard.write` with `ClipboardItem`, and `html2canvas` (CDN) for the flyer capture.
+
+### Auth
+
+- Manager passwords: `bcryptjs` (`bcrypt.hash(password, 10)` on create/update in `netlify/functions/superadmin-managers.js`; `bcrypt.compare` in `netlify/functions/manager-auth.js`).
+- Superadmin "password": single env var `ADMIN_PASSWORD` compared against `password === process.env.ADMIN_PASSWORD` when username is the literal string `admin` in `netlify/functions/manager-auth.js`. Also accepted as the `x-admin-password` request header on a handful of superadmin-only endpoints (see Auth & Security).
+- Session tokens: 32-byte hex via Node's `crypto.randomBytes(32).toString('hex')`. Opaque (not JWT). Persisted in Supabase `manager_sessions(token PK, manager_id, expires_at)` with 24h TTL. Browser holds the token in `localStorage` and sends it as `x-manager-token: <token>` on subsequent calls.
+- Builder sessions: separate 30-minute UUID tickets in `builder_sessions` minted by `netlify/functions/create-builder-session.js`, validated by `netlify/functions/verify-builder-session.js`, and sent as `x-builder-session: <uuid>` by the flyer-builder page.
+
+### External APIs
+
+| Service | SDK / Transport | Used by | Purpose |
+|---|---|---|---|
+| GitHub REST API | raw `fetch` with `Authorization: Bearer ${GITHUB_PAT}` | `manage-flyers.js`, `refresh-flyers.js`, `trigger-redeploy.js`, `telegram-webhook.js` | PUT/DELETE `flyers/<zone>/{flyer.jpg,og.jpg}` via the Contents API; POST workflow dispatch on `rsvp-automation.yml` and `rsvp-summary.yml` |
+| GitHub push (ambient) | `git push origin HEAD:main` via `child_process.execSync` | `scripts/automate.js` | Push regenerated `dist/` using the workflow's ambient `actions/checkout@v5` token (needs `permissions: contents: write` on the job) |
+| Telegram Bot API | raw `fetch` to `https://api.telegram.org/bot<TOKEN>/...` | `late-rsvp.js`, `review-flyer.js`, `telegram-webhook.js`, `scripts/cleanup-past-rsvps.js`, `scripts/final-summary.js`, `scripts/summary.js`, `scripts/sync-check.js` | `sendMessage`, `sendPhoto` (multipart), `getFile`, `answerCallbackQuery`, `editMessageText/Caption/ReplyMarkup` |
+| Google Sheets API v4 | `googleapis` (`google.auth.GoogleAuth` from service account JSON, `google.sheets({version:'v4'})`) | `netlify/functions/backfill-rsvps.js`, `get-rsvps.js`, `restore-rsvps.js`, `submit-rsvp.js`; `scripts/cleanup-past-rsvps.js`, `scripts/sync-check.js` | Read `responses!A:E`, append rows, per-row column-C updates, `batchUpdate.deleteDimension` row deletes, and the public CSV export for `scripts/final-summary.js` |
+| Anthropic Claude | `@anthropic-ai/sdk` (`new Anthropic({ apiKey })`, `client.messages.create({...})`) | `scripts/automate.js` only | Vision OCR of each flyer image (model `claude-sonnet-4-20250514`) returning JSON `{eventName, date, time, location, description, rsvpDeadline}` |
+| Supabase Storage | `@supabase/supabase-js` storage client | `review-flyer.js`, `telegram-webhook.js` | Bucket `flyer-reviews` — upload, `createSignedUrl`, `.remove([...])` for flyer + OG capture round-trip |
+
+### Fonts
+
+The flyer-builder ships three custom faces in `public/flyer-builder/fonts/`:
+
+- `AddingtonCF.otf` — bevel/serif used for date/time/address lines.
+- `GothamRegular.ttf` — host name display.
+- `AppleSDGothicNeoH.ttf` — RSVP line.
+
+Plus three Google Fonts (Lato, DM Sans, Cormorant Garamond) loaded via `<link rel="stylesheet">` in the flyer-builder page. CORS is intentionally permissive on `/flyer-builder/fonts/*` (set in `netlify.toml`) so `@font-face` can resolve when the page is loaded in cross-origin contexts.
+
+### Image processing
+
+- Server-side: `sharp` `^0.34.5` in `scripts/automate.js` for (a) compressing OCR input to <4MB JPEG (resize 1800w, quality 85), (b) detecting PNG via magic bytes, (c) generating per-zone OG images (1200×630) with either passthrough or blurred-background + contained 50/50 split, (d) resizing flyers to 1080w q80 mozjpeg for deployment.
+- Client-side: `html2canvas` (loaded via CDN script tag from the flyer-builder HTML) captures `#flyer-wrap` at scale=`923/offsetWidth` for the printable flyer and `#preview-wrap` at scale=`1200/offsetWidth` for the OG card. Both go out as base64 JPEG quality 0.85 in the `review-flyer` request body.
+
+### Scheduling
+
+All recurring work is GitHub Actions cron — there is no in-app scheduler, no Vercel cron, no Supabase Edge function. See Workflows section for the full schedule; the runners are pinned to Node 22 via `actions/setup-node@v5 { node-version: '22' }` and concurrency groups serialize overlapping runs where needed.
+
+### Local reproduction
+
+Minimum local setup. Node 22 is required (matches Netlify Functions runtime and the GitHub Actions runners):
+
+```bash
+# 1. Clone
+git clone https://github.com/pritpnp/SCREvents.git
+cd SCREvents
+
+# 2. Verify Node version (22.x)
+node --version   # should print v22.x.y; use nvm/fnm if not
+
+# 3. Install dependencies for each of the three package.json manifests
+#    (root is mostly vestigial — see drift note above — but install it so any
+#    ad-hoc `node script.js` at the root resolves cleanly)
+npm install                                # root      -> uses ./package.json
+( cd scripts && npm install )              # automation -> uses scripts/package.json
+( cd netlify/functions && npm install )    # serverless -> uses netlify/functions/package.json
+
+# 4. Populate environment variables (see Environment Variables section).
+#    For Netlify local dev:
+npm install -g netlify-cli
+netlify link            # link to the SCREvents Netlify site
+netlify env:pull .env   # pull configured env into .env
+
+# 5. Run the local dev server (functions + static)
+netlify dev             # serves dist/ + /.netlify/functions/* at http://localhost:8888
+
+# 6. (Optional) Manually exercise the automation script
+cd scripts
+SUPABASE_URL=... SUPABASE_SERVICE_KEY=... ANTHROPIC_API_KEY=... \
+FLYER_PATHS="flyers/scranton/flyer.jpg" FORCE_ALL=true \
+node automate.js
+```
+
+`build.sh` is what Netlify executes — you can reproduce it locally with `bash build.sh` after editing anything under `public/flyer-builder/`, then commit the resulting `dist/flyer-builder/` changes. There is no separate front-end install (no `npm` deps in `public/`).
+
+---
+
+## 3. Repository Structure
+This repo is a hybrid of (a) hand-edited source for a few static "builder" pages under `public/`, (b) a fully pre-rendered static site under `dist/` that is committed to git and served verbatim by Netlify, (c) a Netlify Functions backend under `netlify/functions/`, (d) long-running automation scripts under `scripts/` invoked by GitHub Actions in `.github/workflows/`, and (e) flyer source images under `flyers/` that drive the entire generated zone-page pipeline. There is intentionally no bundler — every artifact you can see is exactly what the user receives.
+
+### Top level
+
+```text
+/Users/pritpatel/Desktop/SCREvents
+├── .github/workflows/           # 6 GitHub Actions YAMLs (see Workflows section)
+├── .gitignore                   # Ignores node_modules/ and **/.DS_Store, nothing else
+├── .last-upload                 # Marker file written by automate.js to remember the last successful flyer batch
+├── README.md                    # This file
+├── build.sh                     # Netlify build command (see Config section) — syncs public/flyer-builder/* into dist/
+├── deadlines.json               # Source-of-truth event metadata (8 zone keys → {eventName,date,eventDate,time,location,deadline})
+├── dist/                        # The published static site (checked into git AND deployed by Netlify)
+├── flyers/                      # Per-zone flyer source images (input to scripts/automate.js)
+├── images/                      # Logo assets copied verbatim into dist/images/ on each build
+├── netlify/                     # netlify/functions/ + netlify.toml configuration
+├── netlify.toml                 # Build cmd, publish dir, function dir, redirects, CORS headers
+├── package.json                 # Root deps for GitHub Actions (Supabase, bcrypt, googleapis)
+├── package-lock.json            # Lockfile for the root manifest
+├── public/                      # Hand-edited HTML sources for the "static-builder" pages
+└── scripts/                     # Long-running Node automation scripts run by Actions
+```
+
+`deadlines.json` is auto-committed to `main` by `.github/workflows/rsvp-automation.yml` after every successful `scripts/automate.js` run with the commit message `Auto-update deadlines.json [skip ci]`. The eight zone keys it carries (`scranton`, `mandir-1`, `moosic`, `mandir-2`, `bloomsburg`, `satsang-sabha`, `mountain-top`, `mandir-3`) map 1:1 to the published `dist/<zone>/` subfolders (see Event Routing). The root `package.json` and `scripts/package.json` and `netlify/functions/package.json` each have their own lockfile and dependency set, because the three runtimes (Actions, Functions, Scripts) install separately and want different versions (see Config & Dependencies).
+
+### `public/` — hand-edited "static-builder" HTML sources
+
+The five pages that are NOT generated by `scripts/automate.js` live here as raw HTML. They are SPAs that fetch live data from `/.netlify/functions/*` at runtime. `build.sh` only copies the flyer-builder subset into `dist/`; the other four pages (`admin`, `login`, `invite`, `vip`) live in `public/` for editing but are inlined into `dist/` by `scripts/automate.js`'s `deployAllToNetlify` step.
+
+```text
+public/
+├── admin/
+│   └── index.html                # 1965-line admin/superadmin SPA (talks to /.netlify/functions/*)
+├── flyer-builder/
+│   ├── fonts/                    # Custom @font-face files
+│   │   ├── AddingtonCF.otf       # Date/time/address bevel
+│   │   ├── AppleSDGothicNeoH.ttf # RSVP line
+│   │   └── GothamRegular.ttf     # Host name
+│   ├── index.html                # WYSIWYG flyer composer SPA
+│   ├── preview-templates/        # 1200×630 social-card backgrounds (5 zones)
+│   │   ├── bloomsburg.png
+│   │   ├── moosic.png
+│   │   ├── mountain-top.png
+│   │   ├── satsang-sabha.png
+│   │   └── scranton.png
+│   ├── review-sent/
+│   │   └── index.html            # Confirmation page after "Send for Review"
+│   └── templates/                # Printable-flyer backgrounds (5 zones + santos variant)
+│       ├── bloomsburg.png
+│       ├── moosic.png
+│       ├── mountain-top.png
+│       ├── satsang-sabha-santos.png
+│       ├── satsang-sabha.png
+│       └── scranton.png
+├── invite/
+│   └── index.html                # Public "Find My Invitation" lookup form
+├── login/
+│   └── index.html                # Manager / superadmin sign-in form
+├── og.png                        # Site-wide default Open Graph image
+└── vip/
+    └── index.html                # Public VIP-pass viewer (reads /vip/<id> from URL)
+```
+
+### `dist/` — published static site (committed to git, served by Netlify)
+
+`dist/` is the publish root configured in `netlify.toml` (`publish = "dist"`). It is checked in so Netlify can serve the site without doing any `npm install` or bundling — `build.sh` only re-syncs the flyer-builder assets from `public/` on each deploy. Everything else in `dist/` is regenerated and committed by `scripts/automate.js` (running in `.github/workflows/rsvp-automation.yml`) whenever a flyer changes.
+
+```text
+dist/
+├── index.html                    # Root marquee/landing page (cards for each active event in deadlines.json)
+├── og-template.html              # Template fragment used by automate.js for OG image rendering
+├── og.png                        # Site-wide default Open Graph image
+├── admin/index.html              # Inlined copy of public/admin/index.html
+├── login/index.html              # Inlined copy of public/login/index.html
+├── invite/index.html             # Inlined copy of public/invite/index.html
+├── vip/index.html                # Inlined copy of public/vip/index.html (matched by /vip/* SPA redirect)
+├── flyer-builder/                # Synced from public/flyer-builder/ by build.sh on every Netlify build
+│   ├── index.html
+│   ├── fonts/                    # AddingtonCF.otf, AppleSDGothicNeoH.ttf, GothamRegular.ttf
+│   ├── templates/                # 6 zone PNGs incl. satsang-sabha-santos.png
+│   ├── preview-templates/        # 5 zone PNGs
+│   └── review-sent/index.html
+├── images/                       # Copied verbatim from /images/ by automate.js
+│   ├── baps-logo.png
+│   └── tab-logo.png
+├── bloomsburg/                   # Per-event subfolder — one per zone with an active flyer
+│   ├── flyer.jpg                 # Printable flyer (1080w mozjpeg q80)
+│   ├── og.jpg                    # 1200×630 social-card preview
+│   └── index.html                # Generated zone landing page (see Event Routing)
+├── moosic/                       # Same shape as bloomsburg/
+│   ├── flyer.jpg
+│   ├── og.jpg
+│   └── index.html
+├── mountain-top/                 # Same shape
+│   ├── flyer.jpg
+│   ├── og.jpg
+│   └── index.html
+├── satsang-sabha/                # Same shape
+│   ├── flyer.jpg
+│   ├── og.jpg
+│   └── index.html
+├── scranton/                     # Same shape
+│   ├── flyer.jpg
+│   ├── og.jpg
+│   └── index.html
+├── mandir/                       # Mandir-style zone events live under /mandir/<slot>/
+│   ├── 1/                        # Mountain Top July 4th Picnic
+│   │   ├── flyer.jpg
+│   │   ├── og.jpg
+│   │   └── index.html
+│   ├── 2/                        # Scranton July 4th Picnic
+│   │   ├── flyer.jpg
+│   │   ├── og.jpg
+│   │   └── index.html
+│   └── 3/                        # Walkathon
+│       ├── flyer.jpg
+│       ├── og.jpg
+│       └── index.html
+└── np/                           # "No-preview" duplicates — same page sans og:* / twitter:* meta tags
+    ├── bloomsburg/index.html     # Shares the canonical /bloomsburg/flyer.jpg via absolute URL
+    ├── moosic/index.html
+    ├── mountain-top/index.html
+    ├── satsang-sabha/index.html
+    ├── scranton/index.html
+    └── mandir/
+        ├── 1/index.html
+        ├── 2/index.html
+        └── 3/index.html
+```
+
+Each per-event subfolder under `dist/<zone>/` and `dist/mandir/<n>/` holds the same triple: `flyer.jpg` (the printable event flyer), `og.jpg` (the 1200×630 share-preview image), and `index.html` (the RSVP landing page). The mirror tree under `dist/np/` carries only `index.html` for each — the np pages reuse the canonical flyer via absolute `https://screvents.com/<zone>/flyer.jpg` URLs and exist purely to give organizers a link that does NOT unfurl into a preview card in Telegram / WhatsApp / iMessage (see Frontend Pages).
+
+### `netlify/functions/` — serverless backend (23 functions + manifest)
+
+Every function is auto-mounted at `/.netlify/functions/<name>` (see `netlify.toml` `[functions] directory = "netlify/functions"`). They are CommonJS modules and share `netlify/functions/package.json` for their runtime deps.
+
+```text
+netlify/
+├── functions/
+│   ├── admin-passes.js              # VIP-pass CRUD for admin portal
+│   ├── admin-rate-limit.js          # /invite IP rate-limit dashboard + whitelist
+│   ├── backfill-rsvps.js            # One-shot: copy legacy Sheet rows into Supabase rsvps
+│   ├── create-builder-session.js    # Mints 30-min builder_sessions UUID for flyer-builder
+│   ├── get-archived-rsvps.js        # Read past-event archive with facets
+│   ├── get-pass.js                  # Public per-id VIP-pass fetch (powers /vip/<id>)
+│   ├── get-rsvps.js                 # Admin RSVP view (Supabase + Sheet merge, PATCH, DELETE)
+│   ├── late-rsvp.js                 # Telegram notify when someone RSVPs after deadline
+│   ├── lookup-pass.js               # Public name+phone → pass-id lookup (rate-limited)
+│   ├── manage-flyers.js             # Upload/delete flyer.jpg in pritpnp/rsvp-automation repo
+│   ├── manage-rsvp.js               # Toggle per-zone / global RSVP on/off
+│   ├── manager-auth.js              # /login /logout /verify — issues 24h x-manager-token
+│   ├── package.json                 # Runtime deps for Functions (Supabase, bcryptjs, googleapis)
+│   ├── package-lock.json
+│   ├── refresh-flyers.js            # Dispatch rsvp-automation.yml (optionally single zone)
+│   ├── restore-rsvps.js             # Move rows from rsvps_archive back into rsvps + Sheet
+│   ├── review-flyer.js              # Flyer-builder submission → Storage + flyer_reviews row + Telegram card
+│   ├── rsvp-status.js               # Public read of rsvp_settings (zone → enabled)
+│   ├── submit-rsvp.js               # Public RSVP submission endpoint
+│   ├── superadmin-events.js         # CRUD on events table (VIP-pass-bearing events)
+│   ├── superadmin-managers.js       # CRUD on managers table (bcrypt hashing)
+│   ├── telegram-webhook.js          # Telegram bot webhook (commands + flyer-review callbacks)
+│   ├── trigger-redeploy.js          # Superadmin button to dispatch rsvp-automation.yml
+│   ├── update-event-name.js         # Per-zone admin-overrideable event name (zone_events)
+│   └── verify-builder-session.js    # Flyer-builder page validates its sessionId on load
+└── (netlify.toml lives at repo root, not here)
+```
+
+Full per-function purpose, auth model, inputs, outputs, env vars, and Supabase-table touchpoints are documented in Netlify Functions.
+
+### `scripts/` — long-running automation invoked by GitHub Actions
+
+These are heavier than Functions: `automate.js` calls Anthropic's vision API and uses `sharp` for image processing; the others read/write Google Sheets and Supabase. They get their own `package.json` so the lighter scripts (e.g. summary, sync-check) don't pay for `sharp`'s native install.
+
+```text
+scripts/
+├── automate.js                  # OCR → generate dist/ → git push dist/ → Netlify deploy
+├── cleanup-past-rsvps.js        # Archive rsvps → rsvps_archive for events whose date is past (runs 4 AM NY)
+├── final-summary.js             # 9 PM ET final-headcount Telegram digest for today's events
+├── package.json                 # Scripts deps (anthropic-ai, supabase, googleapis, sharp, xlsx, ...)
+├── package-lock.json
+├── summary.js                   # Per-zone RSVP Telegram digest (cron + /summary bot trigger)
+└── sync-check.js                # Every-10-min parity check Sheet ↔ Supabase rsvps; Telegram alert on drift
+```
+
+Full descriptions in Automation Scripts.
+
+### `.github/workflows/` — 6 cron + dispatch workflows
+
+Each workflow ties one schedule (or dispatch input set) to one script. All run on `ubuntu-latest` with Node 22 and `cd scripts && npm install` before invoking.
+
+```text
+.github/workflows/
+├── cleanup-past-rsvps.yml        # Two crons (8 & 9 UTC) so 4 AM America/New_York fires year-round → cleanup-past-rsvps.js
+├── final-summary.yml             # Cron 0 1 * * * (9 PM EDT) → final-summary.js
+├── rsvp-automation.yml           # Cron 0 8 * * * + push to main (paths-ignore: dist/**) → automate.js (+ commits deadlines.json)
+├── rsvp-summary.yml              # Cron 30 18 */3 * * + workflow_dispatch (target_zone, trigger_chat_id, test_mode) → summary.js
+├── supabase-keepalive.yml        # Cron 0 13 * * * — inline curl ping to vip_passes (keeps free tier warm)
+└── sync-check.yml                # Cron */10 * * * * → sync-check.js
+```
+
+Full schedules, inputs, secrets, and concurrency rules are in Workflows.
+
+### `flyers/` — source flyer images (input to the pipeline)
+
+This is where flyer images land when an admin uploads via the admin portal, the `/uploadflyer` Telegram command, or an approved flyer-builder submission — all three paths commit into `flyers/<zone>/` on the `main` branch through the GitHub Contents API. A push under `flyers/**` then triggers `.github/workflows/rsvp-automation.yml`, which runs `scripts/automate.js` to OCR the flyer, regenerate `dist/<zone>/`, and update `deadlines.json`.
+
+```text
+flyers/
+├── bloomsburg/      .gitkeep, flyer.jpg, og.jpg
+├── mandir-1/        .gitkeep, flyer.jpg
+├── mandir-2/        .gitkeep, flyer.jpg
+├── mandir-3/        .gitkeep, flyer.jpg
+├── mandir-4/        .gitkeep                 # No flyer yet — folder reserved
+├── mandir-5/        .gitkeep                 # No flyer yet — folder reserved
+├── moosic/          .gitkeep, flyer.jpg, og.jpg
+├── mountain-top/    .gitkeep, flyer.jpg
+├── satsang-sabha/   .gitkeep, flyer.jpg, og.jpg
+└── scranton/        .gitkeep, flyer.jpg, og.jpg
+```
+
+Zone slugs here are exactly the values accepted by `submit-rsvp.js`, `manage-flyers.js`, `review-flyer.js`, and the Telegram-webhook `ZONE_CHAT_MAP` (see Event Routing and Telegram Bot). When a zone folder contains a hand-curated `og.jpg`, `automate.js` uses it as-is for the social-card image; otherwise the script generates one with `sharp` from the flyer. `.gitkeep` files preserve the empty `mandir-4` / `mandir-5` slots so a future flyer can be dropped in without scaffolding the directory.
+
+### `images/` — site-wide logo assets
+
+```text
+images/
+├── baps-logo.png    # BAPS header logo embedded in dist/index.html (data URI) and shipped to dist/images/
+└── tab-logo.png     # Browser tab favicon used across generated pages
+```
+
+`scripts/automate.js`'s `deployAllToNetlify` step copies the entire `images/` folder into `dist/images/` on every run so the deployed site can reference `/images/baps-logo.png` and `/images/tab-logo.png` without any build-time path rewriting.
+
+---
+
+## 4. Frontend Pages Reference
+This section walks every URL the live site exposes, in the order a typical visitor encounters them, and explains exactly what each page does in the browser, which backend endpoints it calls, what auth state it expects, and what it stores client-side. Routing is governed by `netlify.toml` (see Config), so every route below is either a literal file under `dist/` or a Netlify SPA redirect to one.
+
+Two cross-cutting notes that apply everywhere:
+
+- The site has **no client-side bundler and no framework**. Every page is a single static `index.html` with inline `<script>` blocks. There is no React, Vue, Svelte, or build-time templating other than the Node generators in `scripts/automate.js` that emit per-event HTML at deploy time.
+- Authenticated pages keep the manager session token in `localStorage` (not cookies). The keys used are always: `admin_token`, `admin_username`, `admin_role`, and `admin_permissions` (the last is JSON-stringified). The token is then sent on every privileged XHR as the request header `x-manager-token: <token>` (a handful of older paths use `Authorization: Bearer <token>`; both forms appear in source).
+
+### Root landing page — `/`
+
+- **File:** `dist/index.html`
+- **Generator:** `scripts/automate.js` `buildHubPage(allFlyers, deadlines)`
+- **Netlify routing:** None — served as the default index for the apex domain; there is no rewrite rule for `/`.
+
+What the user sees: a static marquee page branded **BAPS SCRANTON MANDIR**. The header shows the BAPS logo (embedded as a base64 data URI inside `<head>`, which makes the file relatively heavy) and the site title. The body has two card grids:
+
+1. **Para Satsang Sabha Events** — one `<a class="card card-parasabha">` per active Parasabha zone (Scranton, Mountain Top, Moosic, Bloomsburg, Satsang Sabha). Each card shows the zone, event name, pretty date, RSVP-by deadline, and a `View Details →` CTA linking to `/<zone>` (for example `/scranton`, `/moosic`).
+2. **Mandir Events** — one `<a class="card card-mandir">` per active mandir slot (Mountain Top July 4th Picnic, Scranton July 4th Picnic, Walkathon, etc.) linking to `/mandir/<n>`.
+
+Cards are filtered to events whose `eventDate` in `deadlines.json` is today or later — past events fall off automatically on the next deploy. The footer links to `https://www.baps.org/Scranton` and includes a small "Admin Portal" chip that points to `/admin`.
+
+- **Functions called:** none. The page is pure static HTML/CSS plus a small decorative CSS animation. No `fetch`, no `localStorage`, no polling.
+- **Auth state required:** none.
+- **Notable behavior:** every card href links to the canonical event route (`/<zone>` or `/mandir/<n>`), never to the `/np/<event>` mirror — the no-preview variant is for chat sharing only (see Per-event landing pages below).
+
+### Per-event landing pages — `/<event>` and `/np/<event>`
+
+These are the bulk of the deployed site. Each event slug has two near-identical pages: a canonical version under `/<event>/index.html` and a "no preview" mirror under `/np/<event>/index.html`. Both are generated by `scripts/automate.js` (`buildHtmlPage` for the Parasabha zones, `buildMandirPage` for the mandir-style pages and Satsang Sabha) — generated twice with `noPreview=false` and `noPreview=true`. The full list of slugs that ship with their own folders is defined in `deadlines.json` and matches the route table in Event Routing.
+
+#### Canonical route — `/<event>`
+
+- **Files (canonical paths in `dist/`):** for example `dist/scranton/index.html`, `dist/mountain-top/index.html`, `dist/moosic/index.html`, `dist/bloomsburg/index.html`, `dist/satsang-sabha/index.html`, and the mandir variants under `dist/mandir/1/index.html`, `dist/mandir/2/index.html`, `dist/mandir/3/index.html` (the route is `/mandir/<n>`, not `/mandir-<n>`).
+- Each event folder also contains its `flyer.jpg` (the printable flyer, 1080px wide JPEG) and `og.jpg` (1200×630 social preview, generated by `buildOgImage`).
+- **Netlify routing:** none specific — the static index is served at the bare slug because the directory has an `index.html`.
+
+`<head>` contains:
+
+- `<title>` — `<eventName> — <Zone> Zone` (Parasabha) or `<eventName> — BAPS Scranton Mandir` (mandir/satsang-sabha).
+- Open Graph block: `og:title`, `og:description` set to `"<date> at <time> · <location>"`, `og:image` pointing at `https://screvents.com/<basePath>/og.jpg?v=<sha1>` (the SHA1 of the OG bytes is appended for cache-busting), `og:url`, `og:type=website`, `og:image:width=1200`, `og:image:height=630`, `og:image:type=image/jpeg`.
+- Twitter card meta (`summary_large_image`, plus title/description/image).
+
+The body, in order:
+
+1. A thin colored top border bar.
+2. A small "change zone" back link that points to `https://screvents.com` so users can hop back to the hub.
+3. `<h1>{eventName}</h1>`.
+4. Two action buttons, hidden by default and revealed at runtime:
+   - **Share** (`#share-btn`) — calls `shareFlyerMobile()`, which `fetch`es the flyer URL, wraps the blob in a `File`, and calls `navigator.share({ files: [file], title, text })`. Only revealed when `navigator.share` exists with file support (mobile).
+   - **Copy** (`#copy-btn`) — calls `copyFlyerDesktop()`, which draws the JPG into a `<canvas>`, converts to PNG via `toBlob`, and writes it to `navigator.clipboard` using `new ClipboardItem({'image/png': blob})`. Only revealed on desktop browsers that expose `ClipboardItem`.
+5. An embedded `<img>` of `flyer.jpg`.
+6. An **event-details panel** with:
+   - Location, rendered as a link to `https://www.google.com/maps/search/?api=1&query=<encoded address>`.
+   - RSVP deadline (the human-readable string from `deadlines.json` for the slug).
+7. An **RSVP card** with a name input, a guests number input, and a "Submit RSVP" button.
+8. A success message panel and a "late RSVP" panel, both hidden on load.
+
+Baked-in build-time constants (Parasabha example): `const RSVP_ZONE = 'scranton'`, `const RSVP_EVENT_NAME = 'Para Satsang Sabha'`. For mandir slots the zone is `'mandir-1'`, `'mandir-2'`, etc.
+
+**Functions called from the page:**
+
+- `GET /.netlify/functions/rsvp-status` — fired on load. Returns the per-zone enabled map (see Netlify Functions → `netlify/functions/rsvp-status.js`). If the response says either `global` or this page's `RSVP_ZONE` is `false`, the RSVP card is hidden and a "closed" message is shown instead.
+- `POST /.netlify/functions/submit-rsvp` — fired when the user clicks Submit. Body is `{ zone: RSVP_ZONE, name, guests, eventName: RSVP_EVENT_NAME }`. On `200 { ok:true, id }` the card swaps to the thank-you panel. On `403` (RSVPs closed by the server-side toggle) the late-RSVP path activates.
+- `POST /.netlify/functions/late-rsvp` — fired if the deadline has passed or the toggle is off when the user submits. Body is `{ name, guests, zone, eventName }`. The server routes a Telegram message to both the zone group and the admin group so an organizer can manually add the guest.
+
+**Auth state required:** none — fully public. The server enforces the on/off toggle so a stale tab cannot bypass a closed event.
+
+**Notable client-side behavior:**
+
+- No `localStorage`, no cookies, no service worker, no polling. The only network activity is the on-load `rsvp-status` GET and the one POST when the user submits.
+- The page does not embed any analytics or third-party scripts. Fonts are loaded from Google Fonts via `<link>` tags.
+- The share/copy buttons fail silently to their hidden state if the underlying browser API is missing, so older browsers just see the flyer image.
+
+#### No-preview mirror — `/np/<event>`
+
+- **Files:** `dist/np/<event>/index.html` for every event that has a canonical page **except** `mandir-3` (the Walkathon's `/np/` variant is intentionally skipped by `automate.js`'s `if (pageData)` guard).
+- **Netlify routing:** none — directory index again.
+
+The `/np/` folders contain only an `index.html` — they reuse the canonical flyer and OG image via absolute URLs (`<img src="https://screvents.com/<event>/flyer.jpg">`). That keeps the deploy small and means flyer updates propagate to both routes simultaneously.
+
+The only difference from the canonical page is that **all `og:*`, `og:image:*`, and `twitter:*` meta tags are stripped from `<head>`**. Use case: a manager who wants to drop a reminder link in a Telegram or WhatsApp chat without the giant flyer auto-unfurling pastes `/np/scranton` instead of `/scranton`. Behavior — RSVP form, share buttons, late-RSVP fallback, all baked-in constants — is otherwise byte-for-byte identical to the canonical page.
+
+### Invite lookup — `/invite`
+
+- **File:** `public/invite/index.html` (deployed to `dist/invite/index.html`).
+- **Netlify routing:** `/invite` and `/invite/*` are both 200-rewritten to `/invite/index.html` in `netlify.toml` (see Config). The `/*` rule exists so any future deep links under `/invite/<...>` still boot the same SPA shell.
+
+What the user sees: a single card titled something like **"Find My Invitation"** with two inputs — Full Name and Phone Number (the inputs use the native `name` and `tel` autocomplete hints so iOS/Android can offer to fill them) — and a **View My Invitation →** button. Submitting either with the button or with Enter triggers the lookup.
+
+**Functions called:**
+
+- `POST /.netlify/functions/lookup-pass` with body `{ name, phone }` (see `netlify/functions/lookup-pass.js`). On `200 { id }` the browser does `window.location.href = '/vip/' + id`. On `404` an inline red error appears ("We couldn't find an invitation for that name and phone"). On `429` (IP rate-limited after 5 failures in 60 minutes) the user sees a contact-organizer message.
+
+**Auth state required:** none — fully public. The server enforces a per-IP failed-attempt rate limit (administered via the "Invite Lookup Security" card in `/admin`, see `netlify/functions/admin-rate-limit.js`).
+
+**Notable behavior:** no `localStorage`, no cookies set client-side. The redirect to `/vip/<id>` is a same-origin location change, not a fetch, so the new page gets a clean load.
+
+### VIP pass viewer — `/vip/<id>`
+
+- **File:** `public/vip/index.html` (deployed to `dist/vip/index.html`).
+- **Netlify routing:** `/vip/*` is 200-rewritten to `/vip/index.html` in `netlify.toml`. There is no specific route per pass id — the page reads the id from `window.location.pathname` at runtime.
+
+What the user sees: a stylized ticket-style "VIP Pass" card with the guest's name, the event name, the event date, and the pass id rendered in monospace under a perforated notch design. While loading, a spinner is shown; if the fetch fails (or the id segment is missing) the page swaps to a "Pass Not Found" error card with a 🙏 icon.
+
+On load the inline script:
+
+1. Parses the last path segment as the pass id (`location.pathname.split('/').filter(Boolean).pop()`).
+2. Calls `GET /.netlify/functions/get-pass?id=<id>` (see `netlify/functions/get-pass.js`).
+3. On `200 { id, guest_name, event_name, event_date }` it hides the loader and fills the card. On any other status it shows the error card.
+
+**Auth state required:** none. The pass id is the bearer credential — anyone who has the link can view the pass. Ids are UUIDs and are only ever surfaced after a successful `/invite` lookup or after a superadmin shares one explicitly. There is no `localStorage` or cookie state.
+
+### Login — `/login`
+
+- **File:** `public/login/index.html` (deployed to `dist/login/index.html`).
+- **Netlify routing:** `/login` is 200-rewritten to `/login/index.html` in `netlify.toml`.
+
+What the user sees: a centered sign-in card with two inputs (username and password) and a **Sign In** button. Pressing Enter in either field submits. A failed attempt shows the inline error **"Invalid username or password."** Both managers and the superadmin use this same form — `username = "admin"` plus the `ADMIN_PASSWORD` is the superadmin path; any other username falls through to a bcrypt check against the `managers` table.
+
+**Functions called:**
+
+- `POST /.netlify/functions/manager-auth/login` with `{ username, password }`. On `200` the response body is `{ token, username, role, permissions }`. The script writes:
+
+  ```js
+  localStorage.setItem('admin_token', token);
+  localStorage.setItem('admin_username', username);
+  localStorage.setItem('admin_role', role); // 'superadmin' | 'manager'
+  localStorage.setItem('admin_permissions', JSON.stringify(permissions));
+  window.location.replace('/admin');
+  ```
+
+- `GET /.netlify/functions/manager-auth/verify` — fired on page load if `admin_token` is already present in `localStorage`. The page uses an `Authorization: Bearer <token>` header here; the server actually reads `queryStringParameters.token`, so this load-time call always returns 401 "No token" — which causes the page to clear the stored token and stay on the login screen. This effectively acts as a defensive logout for stale tokens on the login page. (When `/admin` later calls `/verify` correctly via query string, the same token is accepted.)
+
+**Auth state required:** none to view the page. After a successful login, the four `admin_*` keys above are written.
+
+**Notable behavior:** the only outbound calls on the login page are the two above. No CAPTCHA, no client-side rate limit — the server's rate-limit infrastructure (`admin-rate-limit.js`) is scoped to the `/invite` guest lookup, not to admin login.
+
+### Admin console — `/admin`
+
+- **File:** `public/admin/index.html` (deployed to `dist/admin/index.html`). This is by far the largest single file in the project (~1,965 lines).
+- **Netlify routing:** both `/admin` and `/admin/*` are 200-rewritten to `/admin/index.html` (so any future client-side nested route — `/admin/users`, `/admin/events` — boots the same shell). The `/admin/*` rule is intentionally a separate redirect entry in `netlify.toml` so the admin SPA can adopt sub-paths later without redeploying.
+
+What the user sees: a hidden `#admin-screen` container that is revealed only **after** token verification succeeds. The shell has two tabs that are always visible — **🎟 VIP Passes** and **📋 RSVPs** — plus additional tabs injected at runtime based on the role and permissions the server returned during verification:
+
+| Tab | Permission gate | Backing endpoint(s) |
+| --- | --- | --- |
+| 🎟 VIP Passes | `permissions.view_passes`, `create_delete_passes`, `edit_passes` | `admin-passes` (see Netlify Functions) |
+| 📋 RSVPs (active) | `permissions.view_rsvps`, `edit_rsvps`, `delete_rsvps` | `get-rsvps` |
+| 📋 RSVPs (archive view) | `permissions.view_rsvps` | `get-archived-rsvps` |
+| 👤 Managers | superadmin only | `superadmin-managers` |
+| 📅 Events | any authed user can view; superadmin to mutate | `superadmin-events` |
+| 🖼 Flyers (upload/remove/refresh) | `permissions.upload_flyers`, `remove_flyers`, `refresh_flyers` | `manage-flyers`, `refresh-flyers` |
+| 🛠 Settings — RSVP toggle | superadmin only | `manage-rsvp` (write), `rsvp-status` (read) |
+| 🛠 Settings — Zone event name | superadmin only | `update-event-name` |
+| 🛠 Settings — Trigger redeploy | superadmin only | `trigger-redeploy` |
+| 🔐 Invite Lookup Security | superadmin only | `admin-rate-limit` |
+| ✨ Open Flyer Builder | `permissions.flyer_builder` (with a non-empty `flyer_zones` list) | `create-builder-session` |
+| 🚪 Sign Out | n/a | `manager-auth/logout` |
+| 🏠 Home | n/a (links to `https://screvents.com`) | — |
+
+**Boot sequence (in order):**
+
+1. Read `admin_token`, `admin_role`, `admin_permissions` from `localStorage`. If `admin_token` is missing → `window.location.replace('/login')`.
+2. `GET /.netlify/functions/manager-auth/verify?token=<token>`. If the response is non-200, clear all four `admin_*` keys and redirect to `/login`. If 200, the server's `permissions` blob is treated as the source of truth (it may have changed since login).
+3. Inject the tab buttons the response is allowed to use, wire up the click handlers, show `#admin-screen`.
+
+**Privileged API calls (all send `x-manager-token: <admin_token>`):**
+
+```
+GET     /.netlify/functions/manager-auth/verify        (boot + periodic re-check)
+POST    /.netlify/functions/manager-auth/logout        (Sign Out)
+GET     /.netlify/functions/admin-passes               (?event_id=… optional)
+POST    /.netlify/functions/admin-passes               (single + batch create)
+PATCH   /.netlify/functions/admin-passes               (rename / re-phone)
+DELETE  /.netlify/functions/admin-passes               (single + batch)
+GET     /.netlify/functions/superadmin-events          (any authed user)
+POST    /.netlify/functions/superadmin-events          (superadmin)
+PATCH   /.netlify/functions/superadmin-events          (superadmin)
+DELETE  /.netlify/functions/superadmin-events          (superadmin)
+GET     /.netlify/functions/superadmin-managers
+POST    /.netlify/functions/superadmin-managers
+PATCH   /.netlify/functions/superadmin-managers
+DELETE  /.netlify/functions/superadmin-managers
+GET     /.netlify/functions/update-event-name
+POST    /.netlify/functions/update-event-name
+POST    /.netlify/functions/trigger-redeploy
+POST    /.netlify/functions/refresh-flyers             (with optional { zone_override })
+POST    /.netlify/functions/manage-flyers              (upload base64 flyer)
+DELETE  /.netlify/functions/manage-flyers              (remove flyer)
+GET     /.netlify/functions/admin-rate-limit
+POST    /.netlify/functions/admin-rate-limit           (whitelist upsert)
+DELETE  /.netlify/functions/admin-rate-limit           (whitelist remove)
+GET     /.netlify/functions/get-rsvps
+PATCH   /.netlify/functions/get-rsvps                  (edit guests)
+DELETE  /.netlify/functions/get-rsvps                  (delete row)
+GET     /.netlify/functions/get-archived-rsvps
+POST    /.netlify/functions/manage-rsvp                (toggle zone/global on/off)
+GET     /.netlify/functions/rsvp-status                (populate toggle UI)
+POST    /.netlify/functions/create-builder-session
+```
+
+**Flyer Builder launcher:** the "Open Flyer Builder" button POSTs to `create-builder-session`, takes the returned `{ sessionId }`, and opens `/flyer-builder/?session=<sessionId>` in a new tab. The manager's main `admin_token` is never exposed to the builder page — the builder operates entirely on the short-lived `sessionId` (see Auth and Security and Flyer Builder Flow).
+
+**Auth state required:** valid `admin_token` in `localStorage` mapping to a non-expired row in `manager_sessions`. The server returns 401 on any tampered/expired token, which the admin page treats as "redirect to `/login` and clear all four `admin_*` keys."
+
+**Notable client-side behavior:**
+
+- All four `admin_*` keys are cleared on Sign Out, on any 401 from `/verify`, and on any 401 from a privileged endpoint that the page interprets as a session expiry.
+- There is no polling — every refresh of a data table is driven by user action (e.g. clicking a tab, hitting a Refresh button, or completing a mutation). No `setInterval` is used.
+- No `postMessage` or WebSocket — all communication is plain `fetch`.
+- The page does not embed any analytics or third-party scripts.
+
+### Superadmin alias — `/superadmin`
+
+- **File:** none. The path is purely a redirect.
+- **Netlify routing:** `/superadmin` is a **302** (status `302`, not the SPA-rewrite `200`) to `/admin/index.html`, per `netlify.toml`. This is the only non-200 redirect in the entire config.
+
+What the user sees: a real browser redirect — the address bar changes to `/admin`, and from there the standard `/admin` boot sequence kicks in (token from `localStorage` → verify → render shell). There is no separate "superadmin portal" page; superadmin is just a role flag enforced both in the UI (which tabs are injected) and in every server function that checks `manager_id IS NULL` on the session row.
+
+**Auth state required:** none to *follow the redirect*, but the destination `/admin` page itself requires a valid `admin_token`. A user without a session lands on `/admin`, fails the verify step, and is bounced to `/login`.
+
+### Flyer Builder — `/flyer-builder`
+
+- **File:** `public/flyer-builder/index.html` (deployed to `dist/flyer-builder/index.html` by `build.sh`).
+- **Supporting assets:** `dist/flyer-builder/templates/` (high-res printable PNG backgrounds — `bloomsburg.png`, `moosic.png`, `mountain-top.png`, `scranton.png`, `satsang-sabha.png`, `satsang-sabha-santos.png`), `dist/flyer-builder/preview-templates/` (1200×630 social-card backgrounds), and `dist/flyer-builder/fonts/` (`AddingtonCF.otf`, `GothamRegular.ttf`, `AppleSDGothicNeoH.ttf`). All three directories are served with `Access-Control-Allow-Origin: *` headers per `netlify.toml` so the canvas can `drawImage` them cross-origin without taint.
+- **Netlify routing:** `/flyer-builder` → `/flyer-builder/index.html` (200) and `/flyer-builder/*` → `/flyer-builder/index.html` (200), per `netlify.toml`. The `review-sent` route below has its own redirect entries that come **before** the catch-all so they win.
+
+The page is always entered with a `?session=<uuid>` querystring that came from the admin portal's "Open Flyer Builder" button (see `/admin` above). The UUID is the only auth credential the builder ever holds.
+
+What the user sees: a two-pane WYSIWYG composer.
+
+**Left pane — controls:**
+
+- Zone picker buttons (Moosic, Scranton, Mountain Top, Bloomsburg, Satsang Sabha). Only the zones in the session's `allowedZones` list are visible; the others are hidden after the verify call returns.
+- A "Santos will be present" checkbox that swaps the Satsang Sabha template to `satsang-sabha-santos.png` and tags the zone as `satsang-sabha-santos` when the submission is sent.
+- An "Event is at Mandir" toggle that pre-fills the BAPS Scranton Mandir address into the address lines.
+- Event-detail form: date, hour, minute (PM), RSVP-by date, host name(s), mahaprasad dropdown, address line 1, address line 2.
+- An **Advanced Settings** collapsible (only shown when the session's `allowAdvanced` is true, or always when running in standalone mode) that lets the user drag elements on the canvas, change per-element font size and line height, and dump a `flyer-positions.json` for calibration via `saveLog()`.
+
+**Right pane — two tabs:**
+
+1. **Flyer** — the print canvas. Text overlays (datetime, RSVP, host name, address, mahaprasad, plus the Satsang Sabha `ss_*` overlays) are composited on top of the zone PNG template at `yPct` fractions.
+2. **Preview** — the 1200×630 social-card layout using the matching preview template.
+
+A single **Send for Review** button at the bottom triggers the submission.
+
+**Functions called:**
+
+- `POST /.netlify/functions/verify-builder-session` with `{ sessionId }` on page load. The response (`{ ok, isSuperadmin, allowedZones, allowAdvanced, managerId }`) is cached on `window.BUILDER_SESSION_ID` / `window.ADMIN_TOKEN` and drives which UI elements are visible.
+- `POST /.netlify/functions/review-flyer` when the user clicks Send for Review. Headers include `x-builder-session: <sessionId>`. Body is `{ zone, imageBase64, ogBase64, eventData }` where `imageBase64` and `ogBase64` are captured client-side by `html2canvas` (the flyer is captured at `scale = 923/wrap.offsetWidth` for a 923px-wide JPEG q=0.85; the preview at `scale = 1200/wrap.offsetWidth`). On `200 { ok:true, reviewId }` the browser navigates to `/flyer-builder/review-sent/`.
+
+**Auth state required:**
+
+- **Normal mode (the only production path):** a valid `?session=<uuid>` querystring, verified server-side against the `builder_sessions` table. No `localStorage`, no cookies, no `admin_token`. The 30-minute TTL on the session row is the upper bound on how long the page remains functional.
+- **Standalone mode (dev/design only):** if no `?session` is present, the page sets `window.ADMIN_TOKEN = 'standalone'` and force-enables the advanced toggle so designers can iterate on layout offline. The `review-flyer` endpoint rejects standalone tokens server-side, so this mode cannot publish anything.
+
+**Notable client-side behavior:**
+
+- No `localStorage` writes — the session UUID lives only on `window` for the lifetime of the page.
+- The font files are loaded via `@font-face` rules in inline CSS, pointing at `/flyer-builder/fonts/<name>`. The CORS headers configured in `netlify.toml` are required because `@font-face` enforces same-origin by default for canvas use.
+- Submitting the flyer re-uses the **same** captured base64 payload for both `flyer.jpg` (printable) and `og.jpg` (social preview) downstream — there is no second capture pass.
+
+### Review-sent confirmation — `/flyer-builder/review-sent`
+
+- **File:** `dist/flyer-builder/review-sent/index.html` (this page lives only in `dist/` — `build.sh` does not copy it from `public/`, and there is no `public/flyer-builder/review-sent/` source folder).
+- **Netlify routing:** two explicit entries in `netlify.toml` come **before** the `/flyer-builder/*` catch-all so that `/flyer-builder/review-sent` and `/flyer-builder/review-sent/*` are both 200-rewritten to `/flyer-builder/review-sent/index.html`. Without these entries the catch-all would swallow them and serve the main builder shell instead.
+
+What the user sees: a centered confirmation card with a large green checkmark, the headline **"Flyer Sent for Review!"**, an explanatory paragraph noting that an admin will approve or reject the flyer (and that a Telegram notification will be sent on decision), and a single **Return to SCREvents** button linking to `https://screvents.com`.
+
+**Functions called:**
+
+- `POST /.netlify/functions/review-flyer` — **fallback only**. The current builder page already POSTs `review-flyer` inline before navigating here, so this fallback almost never fires in production. It exists for a legacy handoff in which the builder stored a `pendingReview` object in `sessionStorage` (containing `zone`, `imageBase64`, `eventData`, and `token`) and let the confirmation page complete the submission with `x-builder-session: <token>`. If that key is absent (the normal case), the page does nothing on load.
+
+**Auth state required:** none to view the page. The fallback POST, if it fires, uses the builder session token from `sessionStorage`.
+
+**Notable behavior:** no `localStorage`, no polling, no second-stage telemetry. This is genuinely just a static "thanks" page.
+
+### Quick map of where each page lives in `dist/`
+
+```
+dist/
+├── index.html                              # /            (root landing)
+├── invite/index.html                       # /invite
+├── vip/index.html                          # /vip/<id>
+├── login/index.html                        # /login
+├── admin/index.html                        # /admin
+├── flyer-builder/
+│   ├── index.html                          # /flyer-builder
+│   ├── review-sent/index.html              # /flyer-builder/review-sent
+│   ├── templates/                          # zone PNG backgrounds (CORS *)
+│   ├── preview-templates/                  # 1200x630 PNG backgrounds (CORS *)
+│   └── fonts/                              # OTF/TTF font files (CORS *)
+├── scranton/{index.html, flyer.jpg, og.jpg}            # /scranton
+├── moosic/{index.html, flyer.jpg, og.jpg}              # /moosic
+├── bloomsburg/{index.html, flyer.jpg, og.jpg}          # /bloomsburg
+├── mountain-top/{index.html, flyer.jpg, og.jpg}        # /mountain-top
+├── satsang-sabha/{index.html, flyer.jpg, og.jpg}       # /satsang-sabha
+├── mandir/
+│   ├── 1/{index.html, flyer.jpg, og.jpg}               # /mandir/1
+│   ├── 2/{index.html, flyer.jpg, og.jpg}               # /mandir/2
+│   └── 3/{index.html, flyer.jpg, og.jpg}               # /mandir/3
+└── np/                                                  # no-preview mirrors
+    ├── scranton/index.html
+    ├── moosic/index.html
+    ├── bloomsburg/index.html
+    ├── mountain-top/index.html
+    ├── satsang-sabha/index.html
+    └── mandir/{1,2}/index.html                         # mandir-3 intentionally omitted
+```
+
+For the exact event slug → display name → flyer/OG path mapping (including which Telegram chat each zone reports to), see **Event Routing**. For the exact request/response shapes of every endpoint listed above, see **Netlify Functions**. For the `admin_*` localStorage keys, session TTLs, and the `x-manager-token` / `x-builder-session` header conventions, see **Auth and Security**.
+
+---
+
+I have read all 23 functions. Now I'll write the section.
+
+## 5. Netlify Functions Reference
+All server-side logic lives in `netlify/functions/`. Functions are CommonJS modules exporting `exports.handler = async (event) => {...}` and are auto-mounted by Netlify at `/.netlify/functions/<filename-without-.js>`. They share a single `package.json` at `netlify/functions/package.json` (pinned at `@supabase/supabase-js ^2.101.1`, `bcryptjs ^2.4.3`, `googleapis ^140.0.0`).
+
+Every function follows the same general pattern: handle an `OPTIONS` preflight up front with a wide-open `Access-Control-Allow-Origin: *`, look up the caller's identity by reading either `x-admin-password` (raw superadmin secret) or `x-manager-token` (24-hour opaque token issued by `manager-auth.js` and stored in the `manager_sessions` table), enforce a per-route permission gate, then talk to Supabase using the service-role key from `SUPABASE_SERVICE_KEY`. The 23 functions break into five clusters.
+
+---
+
+### RSVP & Passes
+
+This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the Supabase `rsvps` table and best-effort mirrors to the legacy Google Sheet); `rsvp-status.js` and `late-rsvp.js` cover the public-facing on/off + late-submission paths; `get-rsvps.js`, `get-archived-rsvps.js`, `manage-rsvp.js`, `restore-rsvps.js`, `backfill-rsvps.js` are the admin/maintenance side. The VIP-pass workflow uses `lookup-pass.js` (name+phone → pass id), `get-pass.js` (public render endpoint by id), and `admin-passes.js` (CRUD on `vip_passes`).
+
+#### submit-rsvp
+
+- **File:** `netlify/functions/submit-rsvp.js`
+- **Purpose:** Accept an RSVP from a zone landing page, enforce the admin's RSVP on/off toggle server-side, write to Supabase as the source of truth, best-effort mirror into the legacy Google Sheet.
+- **HTTP method:** `POST` (plus `OPTIONS` preflight).
+- **Auth:** Public — no auth.
+- **Request:** JSON body `{ zone, name, eventName, guests }`. `guests` is clamped to `Math.max(1, parseInt)` and rejected with 400 if `> 100` (`submit-rsvp.js:54`).
+- **Response:** `200 { ok: true, id }`. `400` invalid JSON / missing name / `guests > 100`. `403 { error: "RSVPs are currently closed for this event." }` when either the `global` or zone-specific row in `rsvp_settings` is disabled. `500` Supabase insert failure. `503` if the settings read itself errors.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`.
+- **Supabase tables:** `rsvp_settings` (select), `rsvps` (insert).
+- **External APIs:** Google Sheets API v4 — `spreadsheets.values.append` on `responses!A:E` with `valueInputOption: 'USER_ENTERED'`.
+- **Called by:** Every per-zone RSVP page rendered by `scripts/automate.js` (`dist/scranton/index.html`, `dist/mandir/1/index.html`, the `/np/` mirrors, etc.).
+- **Notes:**
+  - `id` is generated as `crypto.randomUUID()` and stored in both `rsvps.id` AND `rsvps.sheet_row_id` (line 79+93) — the latter is the cross-store key that lets `get-rsvps.js` join Supabase rows back to legacy Sheet rows.
+  - Settings query selects BOTH `'global'` and the request zone in one `.in()` call (line 66); a missing row defaults to enabled (`!== false`).
+  - Sheet timestamp formatted `en-US America/New_York` to match the existing column-D convention.
+  - Sheet failures are logged and swallowed (line 109–111) — the user always gets `200` if Supabase succeeded.
+
+#### rsvp-status
+
+- **File:** `netlify/functions/rsvp-status.js`
+- **Purpose:** Public read of the per-zone on/off toggle map.
+- **HTTP method:** `GET` (plus `OPTIONS`).
+- **Auth:** Public.
+- **Request:** No params.
+- **Response:** `200 { global: true, scranton: true, "mountain-top": true, ..., "mandir-5": true }` — any zone in `ALL_ZONES` (line 27) without a row defaults to `true`. `500` on DB error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Supabase tables:** `rsvp_settings` (select).
+- **External APIs:** None.
+- **Called by:** Every per-zone RSVP page (decides whether to show the RSVP form or the closed message) and `public/admin/index.html` (populates the toggle UI).
+- **Notes:** Uses the service-role key even though the endpoint is public — read-only intent, mild over-privilege but no write surface.
+
+#### late-rsvp
+
+- **File:** `netlify/functions/late-rsvp.js`
+- **Purpose:** When a user attempts to RSVP after the deadline, send a Telegram alert to both the zone group and the admin group so an organizer can accept manually.
+- **HTTP method:** `POST` only (`405` for anything else).
+- **Auth:** Public — no auth. Only zone validation + 80-char input caps gate abuse.
+- **Request:** JSON body `{ name, guests, zone, eventName }`. `zone` must be a key in the hard-coded `ZONE_CHAT_IDS` map (`scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`, `mandir-1`..`mandir-5`).
+- **Response:** `200 { ok: true }`. `400` invalid JSON / missing fields / invalid zone. `405` non-POST.
+- **Env vars:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CHAT_ID_SCRANTON`, `TELEGRAM_CHAT_ID_MOUNTAIN_TOP`, `TELEGRAM_CHAT_ID_MOOSIC`, `TELEGRAM_CHAT_ID_BLOOMSBURG`, `TELEGRAM_CHAT_ID_MANDIR`.
+- **Supabase tables:** None.
+- **External APIs:** Telegram Bot API — `POST https://api.telegram.org/bot<TOKEN>/sendMessage` with `parse_mode: 'HTML'`.
+- **Called by:** Per-zone RSVP pages (`dist/<zone>/index.html`) when `deadlines.json` says the RSVP window has closed.
+- **Notes:**
+  - `name` and `eventName` are HTML-escaped and sliced to 80 chars (lines 41–42).
+  - All `mandir-*` slugs AND `satsang-sabha` route to `TELEGRAM_CHAT_ID_MANDIR` (lines 14–19).
+  - Uses a `Set` (line 57) to dedup chat IDs in case the zone group equals the admin group.
+  - Does NOT write the late RSVP anywhere — pure notification.
+
+#### get-rsvps
+
+- **File:** `netlify/functions/get-rsvps.js`
+- **Purpose:** Admin RSVP view. Supabase `rsvps` is the source of truth; merges Sheet-only legacy rows (not yet backfilled) for visibility. Dual-writes on PATCH/DELETE.
+- **HTTP method:** `GET`, `PATCH`, `DELETE` (plus `OPTIONS`).
+- **Auth:** `x-admin-password === ADMIN_PASSWORD` (treated as full perms) OR `x-manager-token` (superadmin session if `manager_id IS NULL`, else manager's `permissions` JSON). Per-method gates: `view_rsvps` for GET, `edit_rsvps` for PATCH, `delete_rsvps` for DELETE.
+- **Request:**
+  - GET: no body.
+  - PATCH: `{ powerapps_id, guests }`. `guests` parsed as int, must be `>= 1`.
+  - DELETE: `{ powerapps_id }`.
+- **Response:**
+  - GET `200` array of `{ zone, name, guests: String, submitted, powerapps_id }`. Supabase rows newest-first, then Sheet-only rows.
+  - PATCH/DELETE `200 { success: true }`.
+  - `401` unauthorized, `403` missing permission, `500` Supabase read failure.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`.
+- **Supabase tables:** `manager_sessions` (select), `managers` (select), `rsvps` (select / update / delete).
+- **External APIs:** Google Sheets API v4 — `values.get` on `responses!A:E`, `values.update` on `C{row}` for PATCH, `spreadsheets.get` + `batchUpdate.deleteDimension` for DELETE.
+- **Called by:** `public/admin/index.html` (`RSVPS_API`).
+- **Notes:**
+  - If `SUPABASE_SERVICE_KEY` is unset the function returns `500 "Service misconfigured"` rather than silently falling back to the anon key (line 79–82).
+  - If the Supabase read itself errors, returns `500` — refuses to show partial data from the Sheet that would mislead a manager.
+  - Sheet merge filters by `r.length >= 3 && r[4] && !supabaseSeen.has(r[4])` (line 126) so only previously-unseen `sheet_row_id`s are appended.
+  - PATCH/DELETE update Supabase first by `sheet_row_id`, then attempt the Sheet edit — Sheet exceptions are logged and swallowed (`Sheet PATCH skipped` / `Sheet DELETE skipped`).
+  - DELETE on the Sheet side fetches `sheetId` via `spreadsheets.get` then issues `deleteDimension` for `{ startIndex: rowIndex, endIndex: rowIndex + 1 }`.
+
+#### get-archived-rsvps
+
+- **File:** `netlify/functions/get-archived-rsvps.js`
+- **Purpose:** Read-only view of past-event RSVPs that `scripts/cleanup-past-rsvps.js` has moved into `rsvps_archive`.
+- **HTTP method:** `GET` only (plus `OPTIONS`).
+- **Auth:** Same as `get-rsvps` — password OR manager token; superadmin gets implicit `view_rsvps`, managers need `permissions.view_rsvps`.
+- **Request:** Query params `?zone=&event_date=YYYY-MM-DD&q=` (all optional). `q` is an `ilike` on `name`.
+- **Response:** `200 { rows: [...], zones: [...], event_dates: [...] }`. `rows` entries: `{ id, zone, name, guests: String, submitted, powerapps_id, event_name, event_date, archived_at }`. `401` / `403` / `500`.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (with `SUPABASE_ANON_KEY` fallback on the client construction line, though the queries require the service role), `ADMIN_PASSWORD`.
+- **Supabase tables:** `manager_sessions` (select), `managers` (select), `rsvps_archive` (select).
+- **External APIs:** None.
+- **Called by:** `public/admin/index.html` (`ARCHIVE_API`).
+- **Notes:**
+  - Sort order is `archived_at DESC` then `submitted_at DESC` (lines 67–68).
+  - The facets (`zones`, `event_dates`) come from a **second** query that does NOT apply the user's filters (lines 91–95) — so dropdowns always show the full archive even when the current filter narrows the rows.
+
+#### manage-rsvp
+
+- **File:** `netlify/functions/manage-rsvp.js`
+- **Purpose:** Superadmin toggle for the per-zone (or `global`) RSVP on/off switch. The toggle is honored by `submit-rsvp.js` and rendered by `rsvp-status.js`.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** Superadmin only — `x-admin-password === ADMIN_PASSWORD` OR `x-manager-token` mapping to a session row with `manager_id IS NULL` (lines 18–28).
+- **Request:** `{ zone, enabled }`. `zone` must be in `VALID_ZONES` (`global`, `scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`, `mandir-1`..`mandir-5`). `enabled` must be a boolean.
+- **Response:** `200 { ok: true, zone, enabled }`. `400` invalid input. `401` unauthorized. `500` DB error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`.
+- **Supabase tables:** `manager_sessions` (select), `rsvp_settings` (upsert with `onConflict: 'zone'`).
+- **External APIs:** None.
+- **Called by:** `public/admin/index.html` Settings tab.
+- **Notes:** `global` is a meta-zone — when disabled, `submit-rsvp.js` will short-circuit and reject every zone.
+
+#### restore-rsvps
+
+- **File:** `netlify/functions/restore-rsvps.js`
+- **Purpose:** Pull rows back from `rsvps_archive` into the live `rsvps` table and re-append to the Google Sheet. Built as the inverse of the cleanup job.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** Superadmin password ONLY — `x-admin-password === ADMIN_PASSWORD` (no manager-token path).
+- **Request:** Optional `{ zone, event_date }`. With no filter, restores ALL archived rows.
+- **Response:** `200 { ok: true, restored, sheet_restored, zones: [...], event_dates: [...] }`. `200 { ok: true, restored: 0, note: "Nothing in archive matched the filter." }` when filter matches nothing. `401`. `500 { error, restored?, sheet_restored?, archive_cleanup: "manual_needed" }` if the archive delete fails after a successful restore.
+- **Env vars:** `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`.
+- **Supabase tables:** `rsvps_archive` (select / delete), `rsvps` (upsert with `onConflict: 'id'`).
+- **External APIs:** Google Sheets API v4 — `values.get` on `responses!E:E` (dedup), `values.append` on `responses!A:E`.
+- **Called by:** Manual admin operation — not wired into any UI; intended to be invoked from cURL or a one-off script.
+- **Notes:**
+  - Idempotent on the Supabase side via `upsert({ onConflict: 'id' })` (line 106).
+  - Sheet re-append dedups against column E (`fetchExistingSheetRowIds`, lines 45–61) to survive re-runs.
+  - Order is strict: insert to `rsvps` first, then re-append to Sheet (best-effort, doesn't roll back), then delete from `rsvps_archive`. A Sheet failure logs a warning but does not abort the archive cleanup.
+
+#### backfill-rsvps
+
+- **File:** `netlify/functions/backfill-rsvps.js`
+- **Purpose:** One-shot migration: copy every historical Google Sheet RSVP row into `rsvps`. Idempotent via `sheet_row_id` dedup.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** Superadmin password ONLY (`x-admin-password === ADMIN_PASSWORD`). Not exposed to managers.
+- **Request:** No body required.
+- **Response:** `200 { ok, total_sheet_rows, inserted, skipped_already_in_supabase, skipped_missing_sheet_id, skipped_bad_data, failed, sample_errors }`. `sample_errors` is capped at 10 entries. `401` missing password, `500` Sheets env vars missing.
+- **Env vars:** `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`.
+- **Supabase tables:** `rsvps` (select all `sheet_row_id` for dedup, then insert).
+- **External APIs:** Google Sheets API v4 — `values.get` on `responses!A:E` with scope `spreadsheets.readonly`.
+- **Called by:** Manual admin operation.
+- **Notes:**
+  - Strips the header row if `rows[0]?.[0]?.toLowerCase() === 'zone'` (line 46).
+  - Generates a fresh UUID for `rsvps.id` but preserves the original Power Apps ID from column E as `sheet_row_id` (lines 90–99) — that's what later cross-store lookups key on.
+  - Timestamp parse falls back to `new Date().toISOString()` if `new Date(submittedRaw)` returns `NaN` (lines 83–88) — better than losing the row.
+
+#### lookup-pass
+
+- **File:** `netlify/functions/lookup-pass.js`
+- **Purpose:** Public `/invite` endpoint. Verify a guest by name + phone, return the `vip_passes.id` so they can be redirected to `/vip/<id>`. Rate-limited per IP.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** Public. Rate limit: 5 failed attempts per IP per 60-minute sliding window (constants `RATE_LIMIT_WINDOW_MIN = 60`, `RATE_LIMIT_MAX_FAILS = 5` at lines 8–9). Whitelisted IPs in `invite_ip_whitelist` bypass; `'unknown'` IPs skip BOTH the whitelist check and the rate limit.
+- **Request:** `{ name, phone }`. Phone normalized to digits-only US 10-digit (`normalizePhone` strips a leading `1` if `length === 11`).
+- **Response:** `200 { id }`. `400` missing fields. `404 "No invitation found for that name and phone."`. `429 "Too many failed attempts. Please contact the event organizer..."`. `500` lookup error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Supabase tables:** `invite_ip_whitelist` (select), `invite_lookup_attempts` (count for rate-limit, insert log row), `vip_passes` (select).
+- **External APIs:** None.
+- **Called by:** `public/invite/index.html`.
+- **Notes:**
+  - `getClientIp` falls back through `x-nf-client-connection-ip` → `x-forwarded-for[0]` → `client-ip` → `'unknown'`.
+  - Loose name match (`namesMatch`, lines 23–32): equality OR substring OR any `>= 2`-char token overlap — handles nicknames and `First` vs `First Last`.
+  - Blocked attempts are deliberately NOT logged again (lines 82–88) — otherwise the rolling window would extend indefinitely.
+  - The insert into `invite_lookup_attempts` is fire-and-forget (`.then(() => {}, () => {})` at line 111) — never blocks the response.
+
+#### get-pass
+
+- **File:** `netlify/functions/get-pass.js`
+- **Purpose:** Public render endpoint — fetch a single VIP pass by id for display on `/vip/?id=...`.
+- **HTTP method:** Any (no method gate). Implicitly used as GET via query string.
+- **Auth:** Public — pass id is the bearer credential. Only callers who already know the UUID (delivered by `/invite` after name/phone match) can fetch.
+- **Request:** Query param `id` (UUID).
+- **Response:** `200 { id, guest_name, event_name, event_date }`. `400 "Missing id"`. `404 "Pass not found"`.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Supabase tables:** `vip_passes` (select).
+- **External APIs:** None.
+- **Called by:** `public/vip/index.html`.
+- **Notes:** Uses service-role key so the row is fetched server-side regardless of RLS. No `OPTIONS` handler — a preflight will fall through and 400 with `"Missing id"`.
+
+#### admin-passes
+
+- **File:** `netlify/functions/admin-passes.js`
+- **Purpose:** CRUD on the `vip_passes` table for the admin/manager portal. Enforces per-event phone uniqueness and `events.max_passes` caps.
+- **HTTP method:** `GET`, `POST`, `DELETE`, `PATCH` (plus `OPTIONS`).
+- **Auth:** `x-admin-password` (treated as superadmin) OR `x-manager-token` (superadmin session or manager). Per-method permission gates: GET requires `view_passes`, POST/DELETE require `create_delete_passes`, PATCH requires `edit_passes`.
+- **Request:**
+  - GET: optional `?event_id=<uuid>`.
+  - POST single: `{ guest_name, phone, event_id }`.
+  - POST batch: `{ guests: [{name, phone}, ...], event_id }`.
+  - DELETE single: `{ id }`. DELETE batch: `{ ids: [...] }`.
+  - PATCH: `{ id, guest_name?, phone? }`.
+- **Response:** `200` with the inserted/updated row, `{ created, passes }` for batch insert, `{ deleted } | { success: true }` for delete. `400` invalid input / duplicate phone / max-passes reached. `401` unauthorized. `403` missing permission. `500` DB error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (with `SUPABASE_ANON_KEY` fallback on client construction), `ADMIN_PASSWORD`.
+- **Supabase tables:** `manager_sessions` (select), `managers` (select), `vip_passes` (select / insert / update / delete), `events` (select for `max_passes` + denormalized name/date).
+- **External APIs:** None.
+- **Called by:** `public/admin/index.html` Passes tab.
+- **Notes:**
+  - `normalizePhone` strips non-digits then drops a leading `1` if 11 digits long; `isValidPhone` requires exactly 10 digits.
+  - Per-event phone uniqueness — the SAME phone is allowed at DIFFERENT events.
+  - Batch insert pre-checks count vs `max_passes` BEFORE inserting (lines 146–154) so the batch is rejected wholesale rather than partially.
+  - `event_date` is denormalized at insert time: `evt.start_date` when single-day, `${start_date} – ${end_date}` when a range (lines 156–158, 207–209).
+  - PATCH only updates `guest_name` and/or `phone`; rejects `{}` with 400 `"Nothing to update"` (line 286).
+
+---
+
+### Auth
+
+The auth surface is two functions: `manager-auth.js` (login/logout/verify, the only place that mints tokens) and `admin-rate-limit.js` (superadmin dashboard for the `/invite` rate-limit IP allow/block lists). The session model is opaque random tokens stored in `manager_sessions`; there is no JWT.
+
+#### manager-auth
+
+- **File:** `netlify/functions/manager-auth.js`
+- **Purpose:** Login, logout, and token verification for the admin portal. Issues 24-hour `x-manager-token` strings. Treats `username === 'admin'` + `ADMIN_PASSWORD` as a superadmin session with `manager_id = NULL`.
+- **HTTP method:** Sub-path routed via `event.path`: `POST /login`, `POST /logout`, `GET /verify`, plus `OPTIONS`.
+- **Auth:** Public for `/login`. `/logout` and `/verify` use the token itself as their credential.
+- **Request:**
+  - `POST /login`: `{ username, password }`.
+  - `POST /logout`: `{ token }`.
+  - `GET /verify`: `?token=<hex>` in the query string.
+- **Response:**
+  - `/login` `200 { token, username, role: 'superadmin' | 'manager', permissions }` — superadmin gets the hard-coded `SUPERADMIN_PERMISSIONS` object (lines 10–14). `401 "Invalid username or password"` on any failure (constant message, no user-enumeration leak).
+  - `/logout` `200 { success: true }`.
+  - `/verify` `200 { valid: true, username, role, permissions }`. `401` on missing token, expired session, or missing manager.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (with `SUPABASE_ANON_KEY` fallback), `ADMIN_PASSWORD`.
+- **Supabase tables:** `manager_sessions` (insert on login, delete on logout, select on verify), `managers` (select for credential check + fallback embed on verify).
+- **External APIs:** None.
+- **Called by:** `public/login/index.html` (`/login`), `public/admin/index.html` (`/verify` on boot, `/logout` on sign-out).
+- **Notes:**
+  - Token is `crypto.randomBytes(32).toString('hex')` — a 64-char hex string. Opaque, not a JWT.
+  - Session TTL: 24 hours (`Date.now() + 24*60*60*1000`).
+  - Superadmin sessions are stored with `manager_id: null` (line 36); that NULL is what every other function checks to grant superadmin permissions.
+  - `bcrypt.compare(password, manager.password_hash)` for manager auth; raw `===` equality for `ADMIN_PASSWORD` (line 31).
+  - `/verify` embeds the manager via `managers(username, permissions)` join. If the embed comes back null (manager was deleted but session row leaked because of no FK cascade), it falls back to a separate `managers` select keyed on `session.manager_id` (lines 104–115).
+  - The `404 "Not found"` at the bottom (line 125) is returned for any unrecognized path under `/.netlify/functions/manager-auth`.
+
+#### admin-rate-limit
+
+- **File:** `netlify/functions/admin-rate-limit.js`
+- **Purpose:** Superadmin dashboard for the `/invite` lookup rate-limit — view recent attempts, blocked/watching IPs, manage the whitelist.
+- **HTTP method:** `GET`, `POST`, `DELETE` (plus `OPTIONS`).
+- **Auth:** Superadmin only — `x-admin-password === ADMIN_PASSWORD` OR `x-manager-token` mapping to a session with `manager_id IS NULL` (`authenticateSuperadmin`, lines 11–28).
+- **Request:**
+  - GET: no body.
+  - POST: `{ ip, note? }` to upsert into the whitelist. `note` capped at 200 chars.
+  - DELETE: `{ ip }` to remove from the whitelist.
+- **Response:**
+  - GET `200 { threshold: 5, window_minutes: 60, blocked: [...], watching: [...], whitelist: [...], recent: [last 100 attempts] }`. `blocked` are non-whitelisted IPs with `fail_count >= 5`; `watching` are non-whitelisted IPs with `fail_count < 5`. Both arrays are sorted by `fail_count` desc.
+  - POST `200` with the upserted whitelist row.
+  - DELETE `200 { success: true }`.
+  - `401 "Superadmin required"`.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`.
+- **Supabase tables:** `manager_sessions` (select), `invite_lookup_attempts` (select), `invite_ip_whitelist` (select / upsert with `onConflict: 'ip'` / delete).
+- **External APIs:** None.
+- **Called by:** `public/admin/index.html` Settings → Invite Lookup Security card.
+- **Notes:** `added_by` is hard-coded to `'superadmin'` on upsert (line 14, 24) regardless of which superadmin auth path was used.
+
+---
+
+### Manager & Event Management
+
+Two superadmin-only CRUD endpoints over `managers` and `events`, plus the per-zone display-name override.
+
+#### superadmin-managers
+
+- **File:** `netlify/functions/superadmin-managers.js`
+- **Purpose:** Superadmin CRUD on the `managers` table. Hashes new passwords with bcrypt and rejects duplicate usernames.
+- **HTTP method:** `GET`, `POST`, `PATCH`, `DELETE` (plus `OPTIONS`).
+- **Auth:** Superadmin only — `x-admin-password === ADMIN_PASSWORD` OR `x-manager-token` with `manager_id IS NULL`.
+- **Request:**
+  - POST: `{ username, password, permissions? }`. Username forced lowercase + trimmed.
+  - PATCH: `{ id, username?, password?, permissions? }`. Only the fields present are updated.
+  - DELETE: `{ id }`.
+- **Response:** `200` with the manager row (minus `password_hash`). `400 "Missing fields"` or `"Username already exists"` (Postgres code `23505` caught at lines 58, 79). `401`. `500` DB error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (with `SUPABASE_ANON_KEY` fallback), `ADMIN_PASSWORD`.
+- **Supabase tables:** `manager_sessions` (select for token auth + bulk delete on DELETE), `managers` (insert / update / delete).
+- **External APIs:** None.
+- **Called by:** `public/admin/index.html` Managers tab.
+- **Notes:**
+  - bcrypt cost is 10 (`bcrypt.hash(password, 10)` at lines 50 and 70).
+  - DELETE does a manual cascade: pre-deletes all `manager_sessions` rows for that `manager_id` BEFORE deleting the `managers` row (line 89) — there is no DB-level `ON DELETE CASCADE`, so missing this step would leave orphaned sessions that `manager-auth.js` `/verify` would treat as still valid (until expiry).
+
+#### superadmin-events
+
+- **File:** `netlify/functions/superadmin-events.js`
+- **Purpose:** CRUD on the `events` table (`event_name`, date window, time window, `max_passes`, `notes`). GET is open to any authed user; POST/PATCH/DELETE are superadmin-only.
+- **HTTP method:** `GET`, `POST`, `PATCH`, `DELETE` (plus `OPTIONS`).
+- **Auth:** Any authed caller (password or manager token) for GET. POST/PATCH/DELETE require superadmin (lines 16–17 set `isSuperadmin` from password or NULL-manager-id session).
+- **Request:**
+  - POST: `{ event_name, start_date, end_date, start_time?, end_time?, max_passes?, notes? }`. `start_time` / `end_time` default to `''`, `max_passes` defaults to `50`.
+  - PATCH: same fields plus `{ id }`.
+  - DELETE: `{ id }`.
+- **Response:** GET `200` array sorted by `start_date ASC`. POST/PATCH `200` with the row. DELETE `200 { success: true }`. `401 "Unauthorized"`. `403 "Only superadmin can modify events"`. `400 "Missing required fields"`. `500` DB error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (with `SUPABASE_ANON_KEY` fallback), `ADMIN_PASSWORD`.
+- **Supabase tables:** `manager_sessions` (select), `events` (select / insert / update / delete).
+- **External APIs:** None.
+- **Called by:** `public/admin/index.html` Events tab; `admin-passes.js` indirectly reads the same table via Supabase FK embed.
+- **Notes:** The `isSuperadmin` check at line 16 is guarded by `!!process.env.ADMIN_PASSWORD && !!adminPassword` so an empty env var + empty header can't both equal `''` and pass.
+
+#### update-event-name
+
+- **File:** `netlify/functions/update-event-name.js`
+- **Purpose:** Superadmin GET/POST of `zone_events` — the per-zone display name shown on RSVP pages (decoupled from the `events` table used for pass-bearing events).
+- **HTTP method:** `GET`, `POST` (plus `OPTIONS`).
+- **Auth:** Superadmin only — `x-manager-token` with `manager_id IS NULL` (no password header path).
+- **Request:**
+  - GET: no body.
+  - POST: `{ zone, eventName }`. `zone` must be in `VALID_ZONES` (lines 6–9, the 10-zone universe with no `global`). `eventName.trim()` required, ≤ 200 chars.
+- **Response:** GET `200 { "<zone>": { eventName, updatedAt }, ... }`. POST `200 { ok: true, zone, eventName }`. `400` invalid input. `401`/`403`. `500` DB error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Supabase tables:** `manager_sessions` (select), `zone_events` (select / upsert).
+- **External APIs:** None.
+- **Called by:** `public/admin/index.html` (`UPDATE_EVENT_NAME_API`).
+- **Notes:** Upsert explicitly sets `updated_at: new Date().toISOString()` (line 83). The response headers explicitly include `Access-Control-Allow-Headers: 'x-manager-token, Content-Type'` (line 15), which most other functions omit and rely on Netlify's default preflight permissiveness.
+
+---
+
+### Flyer Builder Flow
+
+Six functions cooperate to take a flyer from the WYSIWYG builder UI through a Telegram-button review into the `pritpnp/rsvp-automation` GitHub repo. The handoff chain is:
+
+`create-builder-session` (mints a 30-min session UUID from a manager token) → builder UI calls `verify-builder-session` to scope the UI → `review-flyer` uploads to Supabase Storage and pings Telegram → admin clicks Approve in Telegram → `telegram-webhook` commits to GitHub. `manage-flyers` is a direct-upload bypass for admins; `refresh-flyers` and `trigger-redeploy` re-fire the GitHub Actions workflow without uploading anything new.
+
+#### create-builder-session
+
+- **File:** `netlify/functions/create-builder-session.js`
+- **Purpose:** Mint a short-lived (30-minute) `builder_sessions` row so the flyer builder page can authenticate without exposing the manager's main token in a query string.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** Manager session token (`x-manager-token`). Managers must have `permissions.flyer_builder === true` and `permissions.flyer_zones.length > 0`. Superadmin (`manager_id IS NULL`) gets the full base zone list.
+- **Request:** No body required.
+- **Response:** `200 { sessionId }` (UUID of the new `builder_sessions` row). `401 "Unauthorized"` / `"Session expired"`. `403 "No permission to use flyer builder"` or `"No zones authorized for flyer builder"`. `500 "Failed to create session"`.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Supabase tables:** `manager_sessions` (select), `managers` (select), `builder_sessions` (insert).
+- **External APIs:** None.
+- **Called by:** `public/admin/index.html` when the admin clicks "Open Flyer Builder" — the function returns `{ sessionId }` and the UI opens `/flyer-builder/?session=<sessionId>` in a new tab.
+- **Notes:** Superadmin defaults: `allowedZones = ['scranton','mountain-top','moosic','bloomsburg','satsang-sabha']`, `allowAdvanced = true` (lines 24–25). Manager defaults come from `manager.permissions.flyer_zones` and `manager.permissions.flyer_builder_advanced`. The row is initialized with `used: false` and `expires_at = now + 30 min`.
+
+#### verify-builder-session
+
+- **File:** `netlify/functions/verify-builder-session.js`
+- **Purpose:** The flyer builder page calls this on load with its `sessionId` to learn which zones the user may publish to and whether to reveal advanced controls.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** PUBLIC — knowledge of the `sessionId` UUID IS the credential. Only the 30-min TTL gates it.
+- **Request:** `{ sessionId }`.
+- **Response:** `200 { ok: true, isSuperadmin, allowedZones, allowAdvanced, managerId }`. `400 "Missing sessionId"`. `401 "Invalid session"` / `"Session expired"`.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Supabase tables:** `builder_sessions` (select).
+- **External APIs:** None.
+- **Called by:** `public/flyer-builder/index.html` on page load.
+- **Notes:** Despite the `used` column existing in `builder_sessions`, this function does NOT flip it on success — the session is reusable for the full 30 minutes, not single-shot.
+
+#### review-flyer
+
+- **File:** `netlify/functions/review-flyer.js`
+- **Purpose:** Flyer builder submission endpoint. Uploads the flyer (and optional OG preview) to Supabase Storage, inserts a `flyer_reviews` row, then posts the flyer to the admin Telegram group with Approve/Reject inline buttons. Rolls back storage + DB row on Telegram failure.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** `x-builder-session` header — the UUID of a `builder_sessions` row, not expired. Superadmin bypasses the zone check; managers must have the requested base zone (with `-santos` suffix stripped) in `builder_sessions.allowed_zones`.
+- **Request:** `{ zone, imageBase64, ogBase64?, eventData? }`. `zone` ∈ `['scranton','mountain-top','moosic','bloomsburg','satsang-sabha','satsang-sabha-santos']` (line 47).
+- **Response:** `200 { ok: true, reviewId }`. `400` invalid zone / missing image / invalid JSON. `401` no/expired builder session. `403 "Zone not authorized"`. `500` storage / DB / Telegram failure (with rollback already performed).
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- **Supabase tables:** `builder_sessions` (select), `managers` (select for `username`), `flyer_reviews` (insert / delete on rollback). Supabase Storage bucket `flyer-reviews` (upload, `createSignedUrl`, `remove`).
+- **External APIs:** Telegram Bot API — `sendPhoto` with a manually-constructed `multipart/form-data` `Uint8Array` body (lines 167–188), with an `inline_keyboard` carrying `callback_data: 'review:approve:<reviewId>' | 'review:reject:<reviewId>'`.
+- **Called by:** `public/flyer-builder/index.html` when the manager clicks "Send for Review".
+- **Notes:**
+  - `reviewId` is generated by `crypto.randomUUID()` (line 61) WITHOUT a top-level `require('crypto')` — relies on the Node 18+ global `crypto`.
+  - Storage paths: `${reviewId}/${zone}-flyer.jpg` and `${reviewId}/${zone}-og.jpg` (both uploaded with `upsert: false`).
+  - The `rejectUrl` is computed up-front from `eventData` so the rejection flow can prefill the builder with the original values (lines 86–100); it's stored INSIDE `event_data.rejectUrl` on the review row.
+  - Rollback (`rollbackReview`, lines 121–131) removes both storage objects and deletes the `flyer_reviews` row. Triggered on any Telegram prep/send failure after the DB insert.
+  - OG upload failure is non-fatal — `ogStoragePath` falls back to `null` and the flow continues with just the main flyer (lines 80–84).
+
+#### manage-flyers
+
+- **File:** `netlify/functions/manage-flyers.js`
+- **Purpose:** Direct-upload (bypasses the review flow) and delete a zone flyer by committing to the `pritpnp/rsvp-automation` GitHub repo. Also removes the stale `og.jpg` so `automate.js` regenerates it.
+- **HTTP method:** `POST` (upload), `DELETE` (remove), plus `OPTIONS`.
+- **Auth:** `x-manager-token`. Superadmin (`manager_id IS NULL`) bypasses perm checks. Managers need `permissions.upload_flyers` for POST, `permissions.remove_flyers` for DELETE.
+- **Request:**
+  - POST: `{ zone, imageBase64 }`. `imageBase64` is the raw base64 content (no data URI prefix).
+  - DELETE: `{ zone }`.
+  - `zone` ∈ `['scranton','mountain-top','moosic','bloomsburg','satsang-sabha','mandir-1'..'mandir-5']` (line 47).
+- **Response:** `200 { ok: true }`. `400 "Invalid zone"` / `"Missing imageBase64"`. `401 "Unauthorized"` / `"Session expired"`. `403 "No permission to upload flyers"` / `"No permission to remove flyers"`. `404 "No flyer found for <zone>"` on DELETE if the flyer doesn't exist. `500` GitHub error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GITHUB_PAT`.
+- **Supabase tables:** `manager_sessions` (select), `managers` (select).
+- **External APIs:** GitHub Contents API — `GET https://api.github.com/repos/pritpnp/rsvp-automation/contents/flyers/<zone>/flyer.jpg` to fetch the existing `sha`, then `PUT` to overwrite or `DELETE` to remove. Plus the equivalent calls on `flyers/<zone>/og.jpg`.
+- **Called by:** `public/admin/index.html` Flyers tab (`MANAGE_FLYERS_API`).
+- **Notes:**
+  - The commit messages are `"Upload flyer for <zone> via admin portal"`, `"Remove flyer for <zone> via admin portal"`, `"Remove stale og.jpg for <zone> after flyer upload"`, and `"Remove og.jpg for <zone> via admin portal"` (lines 103, 115, 138, 149).
+  - `deleteOgIfExists` (lines 68–80) silently no-ops on 404 — `og.jpg` may or may not exist.
+  - Every commit triggers the `rsvp-automation.yml` workflow which re-OCRs and re-deploys.
+
+#### refresh-flyers
+
+- **File:** `netlify/functions/refresh-flyers.js`
+- **Purpose:** Re-fire the `rsvp-automation.yml` GitHub Actions workflow to re-OCR and redeploy, optionally scoped to a single zone.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** `x-manager-token`. Superadmin bypasses perm. Managers need `permissions.refresh_flyers`.
+- **Request:** Optional `{ zone_override: "<zone>" }`. If omitted, the workflow runs with `force_all = 'true'` on every zone.
+- **Response:** `200 { ok: true }`. `401`/`403`. `500 "GitHub dispatch failed: <body>"`.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GITHUB_PAT`.
+- **Supabase tables:** `manager_sessions` (select), `managers` (select).
+- **External APIs:** `POST https://api.github.com/repos/pritpnp/rsvp-automation/actions/workflows/rsvp-automation.yml/dispatches` with body `{ ref: 'main', inputs: { force_all, zone_override } }`.
+- **Called by:** `public/admin/index.html` Flyers tab.
+- **Notes:** The trick is at line 59 — `force_all: zoneOverride ? 'false' : 'true'`. A `zone_override` value implies "only that zone", so `force_all` flips off; an absent value means "everything", so `force_all` is on.
+
+#### trigger-redeploy
+
+- **File:** `netlify/functions/trigger-redeploy.js`
+- **Purpose:** Superadmin-only button that dispatches the same `rsvp-automation.yml` workflow with no inputs — used after a manual edit to re-build the dist site.
+- **HTTP method:** `POST` only (plus `OPTIONS`).
+- **Auth:** Superadmin only — `x-manager-token` with `manager_id IS NULL`. NO `x-admin-password` path.
+- **Request:** No body.
+- **Response:** `200 { ok: true }`. `401 "No token"` / `"Invalid token"` / `"Session expired"`. `403 "Superadmin access required"`. `502 "Failed to trigger redeploy"` on GitHub error.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GITHUB_PAT`.
+- **Supabase tables:** `manager_sessions` (select).
+- **External APIs:** `POST https://api.github.com/repos/pritpnp/rsvp-automation/actions/workflows/rsvp-automation.yml/dispatches` with body `{ ref: 'main' }` and no `inputs` (relies on workflow defaults).
+- **Called by:** `public/admin/index.html` (`TRIGGER_REDEPLOY_API`).
+- **Notes:** Explicitly sets `Access-Control-Allow-Headers: 'x-manager-token, Content-Type'` on every response. The 502 is intentional — distinguishes "GitHub is broken" from "you sent us bad input" (401/403).
+
+---
+
+### Telegram Webhook
+
+A single function — `telegram-webhook.js` — is the entire Telegram surface area: bot commands (`/uploadflyer`, `/removeflyer`, `/cancel`, `/refreshall`, `/getflyer*`, `/summary*`), photo uploads, the inline-keyboard wizards for upload and remove flows, AND the Approve/Reject callbacks that drive the flyer-builder review state machine.
+
+#### telegram-webhook
+
+- **File:** `netlify/functions/telegram-webhook.js`
+- **Purpose:** Telegram bot webhook. Handles text commands, photo uploads, wizard callbacks, and `review:approve`/`review:reject` button presses for the flyer builder. Drives the `flyer_reviews` state machine `pending → processing → approved | rejected` with an atomic CAS claim to prevent duplicate commits.
+- **HTTP method:** `POST` (any non-POST returns `200 "OK"` to look like a passive endpoint).
+- **Auth:** Telegram webhook secret — header `X-Telegram-Bot-Api-Secret-Token` constant-time-compared against `TELEGRAM_WEBHOOK_SECRET` (`constantTimeEqual`, lines 5–11). Unauthenticated requests return `200` with an empty body so probers can't fingerprint. Most admin commands are further gated to `chatId === TELEGRAM_CHAT_ID` (admin group). `callback_query` from any non-admin chat is silently acked and ignored (lines 344–347).
+- **Request:** A Telegram `Update` payload — `body.message` (text or photo) or `body.callback_query` (inline button press).
+- **Response:** Always `200 "OK"` to Telegram (so Telegram does not retry). All side effects happen via outbound Telegram Bot API calls and GitHub API calls.
+- **Env vars:** `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CHAT_ID_SCRANTON`, `TELEGRAM_CHAT_ID_MOUNTAIN_TOP`, `TELEGRAM_CHAT_ID_MOOSIC`, `TELEGRAM_CHAT_ID_BLOOMSBURG`, `TELEGRAM_CHAT_ID_MANDIR`, `GITHUB_PAT`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Supabase tables:** `telegram_upload_sessions` (select / upsert / delete, drives the `/uploadflyer` and `/removeflyer` wizards), `flyer_reviews` (CAS update for `pending → processing`, select for reject, update for `approved`/`rejected`, conditional update for rollback). Plus Supabase Storage bucket `flyer-reviews` (`createSignedUrl`, `remove`).
+- **External APIs:**
+  - Telegram Bot API: `sendMessage`, `sendPhoto` (multipart, manually built), `answerCallbackQuery`, `editMessageText`, `editMessageCaption`, `editMessageReplyMarkup`, `getFile`, file download via `https://api.telegram.org/file/bot<TOKEN>/<path>`.
+  - GitHub Contents API: `GET / PUT / DELETE /repos/pritpnp/rsvp-automation/contents/flyers/<zone>/{flyer.jpg, og.jpg}`, plus a folder list (`/contents/flyers/<zone>`) used during approve to delete pre-existing `.jpg/.jpeg/.png` files.
+  - GitHub Actions: workflow dispatches on `rsvp-automation.yml` (for `/refreshall`) and `rsvp-summary.yml` (for `/summary`).
+- **Called by:** Telegram servers via the registered webhook URL. No internal callers.
+- **Notes (the dense ones):**
+  - `ZONE_CHAT_MAP` is built at module load BUT only from env vars that are actually defined (lines 15–32). This is a defensive trick: if multiple `TELEGRAM_CHAT_ID_*` env vars were undefined, naive code would map them all to the same `'undefined'` key and cross-route messages between zones. The filter at line 32 prevents that.
+  - `SUFFIX_MAP` (lines 108–120) covers `/getflyer<suffix>` parsing. Plain `mandir` maps to `mandir-1`, but bare `/getflyer` in the mandir group sends ALL `MANDIR_ZONES` in sequence (lines 749–757). `satsang` → `satsang-sabha`.
+  - Approve flow atomic claim (lines 447–458): `UPDATE flyer_reviews SET status='processing' WHERE id=? AND status='pending' RETURNING *` — only ONE caller can flip pending → processing. Webhook redelivery or admin double-click is silently no-op'd (`if (claimErr || !review) return 200`).
+  - Approve flow GitHub work (lines 486–546): lists `flyers/<zone>/` and deletes every existing `.jpg/.jpeg/.png` file (with `sha`), THEN PUTs `flyer.jpg` AND `og.jpg`. The `og` content falls back to the main flyer bytes if no OG preview was uploaded (line 533). Zone has `-santos` stripped (line 487) before pathing.
+  - Approve flow rollback (lines 567–581): on any error in the GitHub block, rolls `processing → pending` BUT guarded with `.eq('id', reviewId).eq('status', 'processing')` so a concurrent reject doesn't get clobbered.
+  - Reject flow (lines 587–638): no atomic claim, simpler — `status = 'rejected'`, remove storage objects, edit the photo caption, then send a SEPARATE follow-up message (lines 619–628) with the prebuilt `event_data.rejectUrl`. The link is sent as plain text in its own message specifically to avoid Markdown escaping (the comment on line 619 notes this).
+  - Wizard sessions live in `telegram_upload_sessions` keyed by `chat_id` — `step` values are `awaiting_photo`, `awaiting_zone`, `awaiting_confirm`, `awaiting_remove_zone`, `awaiting_remove_confirm`. Cancelling or completing clears the row (`clearSession`).
+  - `/summary` (lines 791–836) dispatches `rsvp-summary.yml` with `target_zone` derived from `ZONE_CHAT_MAP[chatId]` when bare, or from a `summarySuffixMap` when suffixed; `trigger_chat_id: chatId` is what `scripts/summary.js` uses to reply into the calling chat instead of broadcasting.
+  - `/refreshall` (lines 675–695) is admin-chat only — dispatches `rsvp-automation.yml` with `inputs.force_all: 'true'`. Same workflow that `refresh-flyers.js` calls, just with a fixed input.
+  - The `sendPhotoBuffer` helper (lines 178–213) downloads a flyer URL from `screvents.com/<zone>/flyer.jpg` and re-uploads it to Telegram as a `multipart/form-data` body assembled manually with a `Uint8Array` — no `FormData` polyfill needed in the Netlify runtime.
+
+---
+
+Now I have enough context. Let me write the section.
+
+## 6. Background Scripts Reference
+The repo ships five long-form Node scripts under `/Users/pritpatel/Desktop/SCREvents/scripts/` that run inside GitHub Actions and do everything that doesn't fit in a per-request Netlify function: flyer OCR + zone-page generation, RSVP archival, RSVP digests, and Sheet-vs-Supabase parity checking. Every script declares its dependencies in `scripts/package.json` (`@anthropic-ai/sdk`, `@supabase/supabase-js`, `googleapis`, `sharp`, `axios`, `xlsx`, `adm-zip`) and is invoked from a workflow under `.github/workflows/` after a `cd scripts && npm install` step. See [GitHub Workflows] for the cron schedules and dispatch inputs, [Supabase Schema] for the tables these scripts read and write, and [Env Vars Master] for the full list of secrets each one needs.
 
 ### `scripts/automate.js`
-The brain of the system. Key functions:
-- **`extractEventInfo(flyerPath)`** — Sends flyer to Claude vision API. Returns JSON: `eventName`, `date`, `time`, `location`, `description`, `rsvpDeadline`, `invitationYPercent`. Flyers over 4MB are pre-compressed with Sharp before encoding.
-- **`resolveEventName(zone, ocrName)`** — Checks `zone_events` Supabase table for a canonical event name for the zone; prefers DB name over OCR result. Stale names cleared when flyer folder is empty.
-- **`buildHtmlPage(eventInfo, zone, ...)`** — Generates Parasabha-style event page. RSVP form always shown.
-- **`buildMandirPage(eventInfo, zone, ...)`** — Generates Mandir-style event page. RSVP form only shown if `rsvpDeadline` is set.
-- **`buildOgImage(flyerPath)`** — 50/50 vertical split of flyer into 1200×630 composite using Sharp.
-- **`buildHubPage(allFlyers, deadlines)`** — Hub page with two sections: Parasabha Events (saffron/gold) sorted by date ascending, and Mandir Events (maroon/rose).
-- **`deployAllToNetlify(...)`** — Writes all files to `dist/`, commits `"deploy: update dist"` (no `[skip ci]`), pushes. Netlify CI watches for pushes and deploys.
 
-### `scripts/summary.js`
-- Downloads Google Sheet as public CSV (no auth needed)
-- Filters zones by deadline (skips past-deadline zones unless TEST_MODE)
-- Sends Telegram message per zone: zone name, event name, total responses, total guests, name/guest list
+The end-to-end flyer-to-Netlify pipeline. This is by far the largest script in the repo and is the only one that ever writes to the `dist/` build output. It walks every zone folder under `/flyers/<zone>/`, OCRs each flyer through Claude vision, resolves the canonical event name against Supabase, renders per-zone landing pages, builds Open Graph share images, syncs everything into `dist/`, commits and pushes `dist/` back to `main`, and updates `deadlines.json` at the repo root for every other script to consume.
+
+- **File path**: `/Users/pritpatel/Desktop/SCREvents/scripts/automate.js`
+- **Run context**: invoked by `.github/workflows/rsvp-automation.yml` on
+  - `schedule: cron '0 8 * * *'` (daily 08:00 UTC safety net)
+  - `push` to `main` with `paths-ignore: dist/**` (so a flyer-builder approval that lands a new `flyers/<zone>/flyer.jpg` triggers a rebuild immediately, but the script's own `dist/` push does not loop)
+  - `workflow_dispatch` with two inputs:
+    - `force_all` (`true|false`) — forwarded to the script as env `FORCE_ALL`; when `true` every zone re-OCRs even if `deadlines.json` already has a cached entry.
+    - `zone_override` (string, e.g. `scranton`) — forwarded as env `ZONE_OVERRIDE`; that zone alone is force-re-OCR'd, everything else still uses cache.
+  - The workflow sets `concurrency: { group: rsvp-automation-deploy, cancel-in-progress: false }` so rapid flyer-builder approvals serialise instead of racing on `dist/` or `deadlines.json`.
+  - The workflow's first job step computes `FLYER_PATHS` by `git log --grep='^deploy: update dist' -1` and diffing the working tree against that commit (falling back to `HEAD~1` if the deploy commit isn't an ancestor of `HEAD`), then passes the comma-joined list of changed `flyers/**/*.{jpg,jpeg,png}` paths into the script.
+- **Env vars consumed** (read at runtime via `process.env`):
+  - `ANTHROPIC_API_KEY` — Claude vision OCR.
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` — `zone_events` lookups and upserts.
+  - `FLYER_PATHS` (preferred) or `FLYER_PATH` (single-flyer fallback) — comma-separated list of changed flyer paths from the workflow.
+  - `FORCE_ALL` — `'true'` skips the cache and re-OCRs every zone.
+  - `ZONE_OVERRIDE` — single zone slug to force-re-OCR.
+- **Supabase tables touched**:
+  - `zone_events` — `SELECT event_name WHERE zone=?`, `UPSERT {zone, event_name, updated_at}` when the row is missing, `UPDATE event_name=?` when the stored value is empty, and bulk `UPDATE event_name='' WHERE zone IN (...)` for any zone whose flyer was removed.
+- **External APIs called**:
+  - Anthropic Messages API (`claude-sonnet-4-20250514`, vision input) — one call per flyer that needs OCR.
+  - `git push origin HEAD:main` via `execSync` — uses the ambient extraheader credential written by `actions/checkout@v5` plus the workflow's `permissions: contents: write` grant. The script itself does not hold a PAT.
+- **Internal helpers worth naming**:
+  - `slugify(text)` — normalises text into lowercase hyphenated slugs (used inside `deployAllToNetlify` paths).
+  - `zoneName(zoneSlug)` — slug → display label (Scranton, Mountain Top, Moosic, Bloomsburg, Satsang Sabha).
+  - `resolveEventName(supabase, zone, ocrName)` — implements the DB-vs-OCR precedence rule (stored non-empty name wins; otherwise upsert the OCR-extracted name as the seed so an admin can later override it from the admin portal).
+  - `extractEventInfo(flyerPath)` — image preprocessing + Claude call. Detects PNG via the 4-byte magic header `89 50 4E 47`, transcodes to JPEG when the input is PNG or larger than 4 MB (`sharp().resize({ width: 1800 }).jpeg({ quality: 85 })`), base64-encodes, and asks Claude to return strict JSON `{eventName, date, time, location, description, rsvpDeadline}` with formatting rules pinned by prompt (`"Weekday, Month Day"` for date, lowercase am/pm time, address-only location, ISO date for the RSVP deadline). If Claude returns an ISO date anyway, the helper converts it to the friendly form.
+  - `buildHtmlPage(eventInfo, zone, flyerPath, noPreview, ogSha1)` — generates the cream/saffron Parasabha-style page (Scranton / Mountain Top / Moosic / Bloomsburg). Bakes in `RSVP_ZONE` and `RSVP_EVENT_NAME` constants, an inline `submitRsvp()` that POSTs to `/.netlify/functions/submit-rsvp`, a `sendLateRsvp()` fallback that POSTs to `/.netlify/functions/late-rsvp` when the deadline has passed, and a load-time `/.netlify/functions/rsvp-status` check that hides the RSVP section if global or zone toggle is off.
+  - `buildMandirPage(eventInfo, slot, flyerPath, noPreview, overrideUrl, ogSha1)` — maroon Mandir-style page used for `mandir-1..5` and for `satsang-sabha` (passed with `overrideUrl=https://screvents.com/satsang-sabha`). Same RSVP machinery as `buildHtmlPage`.
+  - `buildOgImage(flyerPath)` — `sharp`-based 1200×630 generator. If the flyer aspect ratio is within ±20% of 1.9:1 it cover-crops it directly; otherwise it splits the flyer into a top and bottom half, blurs a copy as background, composes each half "contained" over the blur, and uses the dominant colour from `sharp().stats()` as the fill behind the composite.
+  - `buildHubPage(allFlyers, deadlines)` — the root `dist/index.html` marquee. Filters zones to those with `eventDate >= today`, sorts Parasabha cards by event date ascending, and groups Mandir cards (including `satsang-sabha`) separately.
+  - `deployAllToNetlify(pages, deadlines, eventInfoMap)` — the final assembly + push step described below.
+  - `PARASABHA_ZONES`, `MANDIR_ZONES`, `MANDIR_SLOTS` — the canonical zone groupings (`mandir-1..5` are slots, `satsang-sabha` is "mandir-style" but lives at `/satsang-sabha`).
+- **Step-by-step flow** (top-level `main()`):
+  1. Parse `FLYER_PATHS` (or `FLYER_PATH`) env into `changedFlyers[]`; if empty, log "redeploying all zones".
+  2. `createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)`.
+  3. Walk `flyers/<zone>/` for the fixed zone list `['satsang-sabha', 'mountain-top', 'scranton', 'moosic', 'bloomsburg', 'mandir-1'..'mandir-5']`. Collect the first non-`og.jpg` `.png|.jpg|.jpeg` per zone. Build `zonesWithFlyer` set as a side-effect.
+  4. For every zone NOT in `zonesWithFlyer`, bulk-update `zone_events.event_name = ''` so a stale admin override doesn't haunt a re-uploaded flyer with a brand-new event later.
+  5. Load `deadlines.json` (repo root) as `cachedDeadlines`. Missing/corrupt file is treated as `{}`.
+  6. For each flyer compute `skipOcr = !FORCE_ALL && !isChanged && hasCached && zone !== ZONE_OVERRIDE`. If `skipOcr`, reuse the cached `{eventName, date, time, location, deadline}` blob; otherwise call `extractEventInfo()` to OCR via Claude.
+  7. `resolveEventName(supabase, zone, eventInfo.eventName)` — DB name wins if non-empty, otherwise OCR name is seeded into `zone_events`.
+  8. Pick the template — `mandir-1..5` → `buildMandirPage`, `satsang-sabha` → `buildMandirPage` with `overrideUrl=https://screvents.com/satsang-sabha`, everything else → `buildHtmlPage`.
+  9. Compute `eventDateISO` by parsing `eventInfo.date + ', ' + currentYear`. If the parsed date is more than 3 months in the past, retry with `currentYear + 1` (so a November-uploaded January flyer correctly resolves to next year).
+  10. Populate `deadlines[zone] = { deadline, eventName, date, eventDate, time, location }`. Keeping `location` here is what lets every `skipOcr` re-run keep the address visible without a fresh Claude call.
+  11. Merge `deadlines` into the on-disk `deadlines.json` (`{...existing, ...deadlines}`) and write it back pretty-printed. The workflow's later "Commit deadlines.json" step picks this up.
+  12. Call `deployAllToNetlify(pages, merged, eventInfoMap)` — see below.
+  13. Log every deployed URL.
+- **`deployAllToNetlify()` flow** (the publish half of the pipeline):
+  1. Render the hub page via `buildHubPage(pages, deadlines)`, SHA1 it, queue it as `/index.html`.
+  2. For each entry in a fixed `staticPages[]` array — `/vip/index.html`, `/invite/index.html`, `/login/index.html`, `/admin/index.html`, `/flyer-builder/index.html`, `/flyer-builder/review-sent/index.html` — read the source from `public/<page>/index.html`, strip any pre-existing `<link rel="icon"...>` tag, inject a base64 favicon built from `images/tab-logo.png` (falling back to `images/baps-logo.png`), and queue the rewritten HTML.
+  3. For each `{zone, flyerPath}` in `pages`:
+     - Compute `basePath` (`/mandir/<n>` for `mandir-N`, otherwise `/<zone>`).
+     - Build the OG image with precedence: manual `flyers/<zone>/og.jpg` (transcoded to JPEG q=90) if present → `public/og.png` for mandir slots → `buildOgImage(flyerPath)` auto-generator.
+     - SHA1 the OG bytes; the first 8 hex chars are embedded into the page's `og:image` URL as `?v=<sha1>` so social platforms always pull a fresh preview.
+     - Render the page HTML twice — once with `noPreview=false` for `<basePath>/index.html`, once with `noPreview=true` for `/np<basePath>/index.html` (same page minus all `og:*` and `twitter:*` meta — see [Frontend Pages] for why this exists).
+     - Compress the flyer to 1080-wide JPEG (`sharp().resize({ width: 1080, withoutEnlargement: true }).jpeg({ quality: 80, mozjpeg: true })`) and queue it as `<basePath>/flyer.jpg`.
+  4. Iterate the queue: for each `{filePath, content}`, SHA1 the file already on disk under `dist/`; only write the file if the existing SHA1 differs. Log `written` vs `unchanged (skipped)`.
+  5. Copy every file from `images/` into `dist/images/`.
+  6. `git config user.email/name = github-actions`, `git add dist/`. Use `git diff --staged --quiet` to distinguish "nothing changed" from "commit failed" — the old catch-all wrapper masked a stale `deadlines.json` for weeks.
+  7. If there is something staged, `git commit -m "deploy: update dist"`, then try `git push origin HEAD:main` up to 3 times, doing `git pull --rebase --autostash origin main` between attempts. After 3 failures the script throws so the workflow turns red.
+- **Outputs**:
+  - Disk writes under `dist/` — `dist/index.html` (hub), `dist/<page>/index.html` for each static SPA, `dist/<zone>/index.html` + `dist/<zone>/flyer.jpg` + `dist/<zone>/og.jpg` for each Parasabha zone, `dist/mandir/<n>/index.html` + `flyer.jpg` + `og.jpg` for each Mandir slot, `dist/satsang-sabha/...`, the no-preview mirrors under `dist/np/...`, and a refreshed `dist/images/` copy.
+  - Disk write at repo root — `deadlines.json` (the workflow's next step commits this with message `Auto-update deadlines.json [skip ci]`).
+  - Git push — a `deploy: update dist` commit to `main` (the diff-against-this-commit logic in the workflow's next run uses this exact subject string to compute `FLYER_PATHS`).
+  - Console — every step is logged with emoji-prefixed lines so the GitHub Actions log is greppable for "Extracted", "OG source", "Written", "dist push".
+  - **Does NOT send Telegram messages.** Zone-chat broadcasts from this pipeline happen indirectly: the new `dist/` push reaches Netlify which serves the new pages, and the Telegram bot (see [Telegram Bot]) is what actually forwards flyers via the `/getflyer` command.
+
+### `scripts/cleanup-past-rsvps.js`
+
+Event-night archive job. For every zone whose `eventDate` (from `deadlines.json`) is strictly before today in `America/New_York`, the script copies the active `rsvps` rows into `rsvps_archive` (preserving `id`, adding `archived_at` + `event_date`), then deletes them from `rsvps`, then best-effort deletes the same rows from the Google Sheet, then posts a Telegram summary. Re-runs are idempotent (`upsert` on `id`).
+
+- **File path**: `/Users/pritpatel/Desktop/SCREvents/scripts/cleanup-past-rsvps.js`
+- **Run context**: invoked by `.github/workflows/cleanup-past-rsvps.yml` on
+  - dual `schedule: cron` lines `'0 8 * * *'` and `'0 9 * * *'` — both fire at 4 AM `America/New_York` (8 UTC during EDT, 9 UTC during EST); whichever one happens not to be 4 AM locally finds no past events and exits silently.
+  - `workflow_dispatch` (no inputs).
+  - `concurrency: { group: cleanup-past-rsvps, cancel-in-progress: false }`.
+- **Env vars consumed**:
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` — archive write + delete.
+  - `GOOGLE_SHEET_ID` — sheet to clean.
+  - `GOOG_SA_JSON` (preferred) or `GOOGLE_SERVICE_ACCOUNT_JSON` (fallback) — Google service-account credentials JSON.
+  - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — admin chat summary.
+- **Supabase tables touched**:
+  - `rsvps` — `SELECT id, zone, name, guests, event_name, submitted_at, sheet_row_id WHERE zone IN (...)`, then `DELETE WHERE zone IN (...)`.
+  - `rsvps_archive` — `UPSERT` with `onConflict: 'id'`.
+- **External APIs called**:
+  - Google Sheets API v4 — `spreadsheets.values.get` on `responses!A:E`, `spreadsheets.get` to look up `sheetId`, `spreadsheets.batchUpdate` with `deleteDimension` requests sorted descending so row indexes don't shift mid-batch.
+  - Telegram Bot API — `POST /bot{token}/sendMessage` with HTML parse mode.
+- **Internal helpers worth naming**:
+  - `todayInNY()` — `toLocaleDateString('en-CA', { timeZone: 'America/New_York' })` returns `YYYY-MM-DD`.
+  - `loadDeadlines()` — reads `../deadlines.json`.
+  - `sheetsClient()` — `google.auth.GoogleAuth` with the spreadsheets scope.
+  - `deleteSheetRowsForZones(sheets, zoneSet)` — pulls every row, filters by column A (zone), batch-deletes by row index descending.
+  - `sendTelegram(text)` — `fetch` POST to Telegram, throws on non-2xx.
+- **Step-by-step flow**:
+  1. Compute `today` in NY.
+  2. Load `deadlines.json`, filter to zones with `eventDate < today` (strictly less than — equal-to means event is happening right now and check-ins may still be running).
+  3. Early-exit if no candidate zones.
+  4. SELECT all matching `rsvps` rows into `liveRows`.
+  5. Early-exit (no Telegram) if `liveRows` is empty — past zones are already clean.
+  6. Build per-zone count map (RSVPs + summed guests) for the report.
+  7. **Step 1 — archive**: build archive rows (preserving `id`, adding `event_date` from the deadlines map and `archived_at = now`) and `UPSERT` with `onConflict: 'id'`. On failure send `RSVP cleanup aborted` Telegram and throw without touching `rsvps`.
+  8. **Step 2 — delete from `rsvps`**: `DELETE WHERE zone IN (zoneList)`. On failure send `RSVP archive partial` Telegram and throw — the archive insert already succeeded so data is safe, just drift between Sheet and Supabase will exist until manually resolved.
+  9. **Step 3 — Sheet best-effort**: `deleteSheetRowsForZones`. Any throw is logged but does NOT fail the script; Supabase is source of truth.
+  10. **Step 4 — Telegram summary**: HTML message with one line per cleaned zone (event name in parens, RSVPs + guests + event date), trailing line for Sheet row count or warning.
+- **Outputs**:
+  - No disk writes.
+  - No git operations.
+  - Supabase mutations: rows inserted into `rsvps_archive`, rows deleted from `rsvps`.
+  - Google Sheets mutation (best-effort): matching rows removed from the `responses` tab.
+  - One Telegram message to the admin chat on success, or an abort/partial alert on failure (no Telegram if there was nothing to archive).
 
 ### `scripts/final-summary.js`
-- Runs nightly at 9 PM EDT (1 AM UTC cron — UTC date offset handled)
-- Sends final RSVP list for zones where `eventDate === today (EDT)` to admin group only
 
-### `deadlines.json`
-Auto-generated and committed by `automate.js` after each run. Used by `summary.js` (which zones to summarize), Apps Script cleanup (which zones to clear), and the hub page (which zones to show and in what order).
+Sends a "Final RSVP List" Telegram message for every zone whose `eventDate` equals today in `America/New_York`. Pulls RSVPs from the Google Sheet via the public CSV export endpoint (no service-account auth needed) and posts a name-and-guest list with totals to the admin Telegram chat. Designed as the last reminder of the headcount on event day before `cleanup-past-rsvps.js` archives them the next morning.
 
-### `netlify/functions/telegram-webhook.js`
-Handles all inbound Telegram webhook events. Key behaviors:
-- `/uploadflyer` and `/removeflyer` only work in the admin chat (`TELEGRAM_CHAT_ID`)
-- Multi-step flow state (upload/remove) is persisted in Supabase `telegram_upload_sessions`
-- Photos are downloaded server-side from Telegram and committed to GitHub via Contents API
-- All flyer images fetched server-side and sent as multipart/form-data (bypasses Palo Alto firewall)
-- `allowed_updates: ["message", "callback_query"]` must be set on the webhook
-- Bot privacy mode must be **off** in BotFather; bot must be re-added to groups after changing
+- **File path**: `/Users/pritpatel/Desktop/SCREvents/scripts/final-summary.js`
+- **Run context**: invoked by `.github/workflows/final-summary.yml` on
+  - `schedule: cron '0 1 * * *'` (1:00 UTC daily = 9:00 PM EDT the previous evening; drifts by an hour in EST winter).
+  - `workflow_dispatch` (no inputs).
+  - `concurrency: { group: final-summary, cancel-in-progress: false }`.
+  - The workflow pins `TEST_MODE=false` at the env level so scheduled runs always target the real chat.
+- **Env vars consumed**:
+  - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — admin chat.
+  - `GOOGLE_SHEET_ID` — CSV export source.
+  - `TEST_MODE` — when `'true'`, every zone is treated as event-day regardless of `eventDate`.
+- **Supabase tables touched**: none.
+- **External APIs called**:
+  - Google Sheets public CSV export — `GET https://docs.google.com/spreadsheets/d/<SHEET_ID>/export?format=csv` via raw `node:https`, with manual 301/302/303/307/308 redirect handling and http/https switching.
+  - Telegram Bot API — `POST /bot{token}/sendMessage` (HTML parse mode), one call per event-day zone.
+- **Internal helpers worth naming**:
+  - `download(url, dest)` — promisified `https.get` with redirect-chain follower, writes to `/tmp/responses.csv`.
+  - `sendTelegram(token, chatId, message)` — raw `https.request` POST with a 10-second timeout.
+- **Step-by-step flow**:
+  1. Validate Telegram creds; exit non-zero if missing.
+  2. Read `../deadlines.json`; if missing, exit 0.
+  3. Download Sheet CSV to `/tmp/responses.csv` and read it back.
+  4. Naive parse — `split('\n')`, `split(',')`, strip surrounding quotes. Fragile to names containing commas, but the script is fail-soft on a per-zone basis.
+  5. Compute `today` in NY.
+  6. For each zone in `deadlines`: skip unless `TEST_MODE` or `eventDate === today`.
+  7. Filter the CSV rows by `zone` column. Skip zones with zero responses (don't spam a "no RSVPs" line for inactive zones).
+  8. Sum guests and build a per-name list (`name - guests` per line).
+  9. Send one Telegram message per zone: `🏁 Final RSVP List — <Zone>\n<eventName> | <date>\n⭐ Total Responses + Guests ⭐\n<list>`.
+  10. Log `No events ending today` if nothing was sent.
+- **Outputs**:
+  - Disk write: `/tmp/responses.csv` (ephemeral GitHub runner scratch).
+  - No git operations.
+  - Telegram message(s) to the admin chat — zero on a non-event day, one per matching zone otherwise.
+
+### `scripts/summary.js`
+
+Per-zone RSVP digest. Runs scheduled (every 3 days) to broadcast each zone's current headcount into its own zone Telegram group, and also runs on-demand from the Telegram bot's `/summary` command (via the `rsvp-summary.yml` workflow's `workflow_dispatch`) to reply into whichever chat triggered it. Reads from Supabase, not the Sheet, so names with commas survive intact.
+
+- **File path**: `/Users/pritpatel/Desktop/SCREvents/scripts/summary.js`
+- **Run context**: invoked by `.github/workflows/rsvp-summary.yml` on
+  - `schedule: cron '30 18 */3 * *'` (18:30 UTC every 3 days = 2:30 PM EDT / 1:30 PM EST).
+  - `workflow_dispatch` with three inputs forwarded as env vars:
+    - `target_zone` — `scranton | mountain-top | moosic | bloomsburg | mandir | all` (default `'all'`). The value `mandir` is a shorthand that expands inside the script to `['satsang-sabha', 'mandir-1'..'mandir-5']`.
+    - `trigger_chat_id` — Telegram chat ID to reply into. Set by `telegram-webhook.js` when the user types `/summary` so the digest comes back into the originating chat.
+    - `test_mode` — `'true'` skips the event-date filter so a manual dispatch can preview a digest for an already-closed event.
+- **Env vars consumed**:
+  - `TELEGRAM_BOT_TOKEN` — bot token.
+  - `TELEGRAM_CHAT_ID` — admin chat (used to detect `triggeredFromAdmin`).
+  - `TELEGRAM_CHAT_ID_SCRANTON`, `TELEGRAM_CHAT_ID_MOUNTAIN_TOP`, `TELEGRAM_CHAT_ID_MOOSIC`, `TELEGRAM_CHAT_ID_BLOOMSBURG`, `TELEGRAM_CHAT_ID_MANDIR` — zone groups (Mandir covers `satsang-sabha` + `mandir-1..5`).
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` — `rsvps` read.
+  - `TARGET_ZONE`, `TRIGGER_CHAT_ID`, `TEST_MODE` — workflow inputs.
+- **Supabase tables touched**:
+  - `rsvps` — `SELECT zone, name, guests, sheet_row_id, event_name` (entire table; filtered in JS by `zone`).
+- **External APIs called**:
+  - Telegram Bot API — `POST /bot{token}/sendMessage` (HTML), one call per zone with a non-empty digest (or with "No RSVPs yet" if triggered manually and the zone has zero responses).
+- **Internal helpers worth naming**:
+  - `sendTelegram(token, chatId, message)` — raw `https.request` POST with a 10-second timeout.
+  - `getZoneChatIds()` — slug → chat-ID env-var lookup. `satsang-sabha` and every `mandir-N` all point at `TELEGRAM_CHAT_ID_MANDIR`.
+- **Step-by-step flow**:
+  1. Validate `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (admin chat); exit non-zero if either is missing.
+  2. Load `../deadlines.json`; exit 0 if missing.
+  3. `SELECT * FROM rsvps` via Supabase. Bail out on a read error.
+  4. Compute `today` in NY.
+  5. Resolve `zonesToProcess`: `all` → every key in `deadlines`; `mandir` → the six mandir-style slugs; otherwise the single slug.
+  6. Unless `TEST_MODE`, filter `zonesToProcess` to zones with `eventDate || deadline >= today` (still includes event day itself, when the headcount matters most).
+  7. If the filter empties the list and `TRIGGER_CHAT_ID` was set, send "No active zones found for the requested summary." to the triggering chat, then return.
+  8. Compute `isScheduled = !TRIGGER_CHAT_ID`.
+  9. For each remaining zone: filter the `rsvps` rows to that zone, format a `<b>{Zone} — {eventName}</b>\n📅 {date} at {time}\n\n⭐ Total Responses: N | Total Guests: M ⭐\n\n{name - guests}\n…` message.
+  10. **Scheduled** runs send to that zone's group chat only (no message at all if the zone has zero responses); **triggered** runs always reply to `TRIGGER_CHAT_ID`, even with an empty-zone placeholder.
+  11. Log the count of messages sent.
+- **Outputs**:
+  - No disk writes.
+  - No git operations.
+  - Telegram message(s) — scheduled: one per zone group; triggered: one per zone back to the calling chat. Quiet on completely empty schedule windows.
+
+### `scripts/sync-check.js`
+
+Cross-checks the Google Sheet `responses` tab against the Supabase `rsvps` table every 10 minutes, diffs them on `sheet_row_id`, and posts a single capped Telegram alert when drift is detected. Stays silent when the two systems agree; healing is intentionally manual because auto-reinsert could undo a legitimate manual deletion. Infra failures (Sheets API down, Supabase paused) intentionally do NOT page Telegram — the red workflow run is the signal.
+
+- **File path**: `/Users/pritpatel/Desktop/SCREvents/scripts/sync-check.js`
+- **Run context**: invoked by `.github/workflows/sync-check.yml` on
+  - `schedule: cron '*/10 * * * *'` (every 10 minutes, the realistic floor given GitHub Actions cron drift).
+  - `workflow_dispatch` (no inputs).
+  - `concurrency: { group: sync-check, cancel-in-progress: false }`.
+- **Env vars consumed**:
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` — read-only `rsvps` pull.
+  - `GOOGLE_SHEET_ID` — sheet to read.
+  - `GOOG_SA_JSON` (preferred) or `GOOGLE_SERVICE_ACCOUNT_JSON` (fallback) — Google service-account credentials JSON.
+  - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — admin chat (alerts only).
+- **Supabase tables touched**:
+  - `rsvps` — `SELECT zone, name, guests, sheet_row_id`. No writes.
+- **External APIs called**:
+  - Google Sheets API v4 (`spreadsheets.readonly` scope) — `spreadsheets.values.get` on `responses!A:E`.
+  - Telegram Bot API — `POST /bot{token}/sendMessage` (HTML), but only when drift is non-zero.
+- **Internal helpers worth naming**:
+  - `pullSheet()` — returns `{ keyed: Map<sheet_row_id, {zone, name, guests}>, unkeyed }`. Strips the header row when `A1.toLowerCase() === 'zone'`. Rows missing the column-E ID are counted in `unkeyed` (they predate the cross-store ID column).
+  - `pullSupabase()` — same shape from `rsvps`.
+  - `diff(sheet, supa)` — three-bucket diff: `sheetOnly[]`, `supabaseOnly[]`, `mismatch[]`. A mismatch is the same `sheet_row_id` present in both but with different `guests`, `name`, or `zone`.
+  - `fmtRow(r)` — `'{name} ({zone}, {guests}g)'`.
+  - `fmtMismatch(m)` — lists only the fields that actually differ.
+  - `sendTelegram(text)` — `fetch` POST to Telegram, throws on non-2xx.
+- **Step-by-step flow**:
+  1. `Promise.all([pullSheet(), pullSupabase()])`.
+  2. Log `Sheet: N keyed + M unkeyed; Supabase: N keyed + M unkeyed`.
+  3. Compute `{ sheetOnly, supabaseOnly, mismatch }` via `diff()`.
+  4. Early-exit silently (no Telegram) if the total drift is 0.
+  5. Build an HTML message with a `⚠️ RSVP sync drift detected` header and one section per non-empty bucket. Each section lists up to 10 rows and appends `…and N more` for overflow.
+  6. Console-log the message, then `sendTelegram(message)`.
+  7. Catch any top-level error → log + exit non-zero. Do NOT page Telegram on infra failures, so a Supabase outage doesn't spam the chat every 10 minutes.
+- **Outputs**:
+  - No disk writes.
+  - No git operations.
+  - No Supabase or Sheet writes (read-only).
+  - Telegram message — zero in steady state, exactly one HTML alert per cron tick when drift exists, never on infra failure.
 
 ---
 
-## RSVP Form Behavior
+## 7. GitHub Actions Workflows
+All scheduled automation lives under `.github/workflows/` and runs on `ubuntu-latest`. The six workflows handle flyer OCR + deploy, headcount summaries, Supabase keep-alive, sheet/database parity, and post-event archival. Every workflow can also be manually triggered via `workflow_dispatch` from the GitHub Actions UI.
 
-- **Before deadline:** Microsoft Form iframe shown with "Open form in browser ↗" link
-- **After deadline:** Form hidden, replaced by late RSVP panel — name + guest count inputs, "Send Late Request" button sends Telegram notification directly from the browser
-- **Mandir zones:** Form only rendered at all if `rsvpDeadline` is present in `deadlines.json`
-- Deadline check is client-side JS using `rsvpDeadline` baked into the HTML at build time
+| Workflow file | Schedule (UTC) | Local time | Purpose |
+| --- | --- | --- | --- |
+| `rsvp-automation.yml` | `0 8 * * *` + push to `main` | Daily ~4 AM ET | OCRs new flyers, regenerates `dist/`, pushes site rebuild and updated `deadlines.json`. |
+| `rsvp-summary.yml` | `30 18 */3 * *` | Every 3 days, 2:30 PM EDT / 1:30 PM EST | Sends per-zone RSVP digest to each zone's Telegram chat. |
+| `final-summary.yml` | `0 1 * * *` | 9:00 PM EDT daily | Sends final event-day RSVP roll-call before cleanup runs the next morning. |
+| `cleanup-past-rsvps.yml` | `0 8 * * *` and `0 9 * * *` | 4 AM ET (year-round via dual cron) | Moves past-event rows from `rsvps` to `rsvps_archive` and clears the Sheet. |
+| `sync-check.yml` | `*/10 * * * *` | Every 10 minutes | Cross-checks Google Sheet vs Supabase `rsvps`; alerts Telegram only on drift. |
+| `supabase-keepalive.yml` | `0 13 * * *` | 9:00 AM EDT / 8:00 AM EST daily | Curls a trivial `vip_passes` SELECT so the free-tier Supabase project never auto-pauses. |
 
----
-
-## OG Image Generation
-
-- Sharp splits the flyer at exactly 50% height
-- Left panel: top half of flyer, resized to 600×630
-- Right panel: bottom half of flyer, cover-cropped to 600×630
-- Final: 1200×630 JPEG
-- Used for WhatsApp/social link previews on `/{zone}` URLs
-- `/np/{zone}` strips all OG tags — for sharing on WhatsApp without any preview
+The workflows compose with the runtime stack like this — most fire scripts under `scripts/` (see Automation Scripts), which read/write Supabase (see Supabase Schema) and push Telegram notifications (see Telegram Bot). Flyer commits land in this same repo and the resulting site is published by Netlify (see Netlify Config & Build).
 
 ---
 
-## Admin Portal
+### `cleanup-past-rsvps.yml` — Event-Night RSVP Cleanup
 
-Login at `/login`. Role-based tab access:
+- **File:** `.github/workflows/cleanup-past-rsvps.yml`
+- **Trigger:** schedule + `workflow_dispatch` (no inputs).
+- **Schedule:** two crons — `0 8 * * *` (8 AM UTC = 4 AM EDT, Mar–Nov) and `0 9 * * *` (9 AM UTC = 4 AM EST, Nov–Mar). Both fire every day year-round; only the one that lands at 4 AM America/New_York on that date does real work. The other run computes `todayInNY()` inside `scripts/cleanup-past-rsvps.js`, sees no event with `eventDate < today`, and exits silently.
+- **Concurrency:** `group: cleanup-past-rsvps`, `cancel-in-progress: false` — serializes overlapping dispatches.
+- **Permissions block:** none (default `GITHUB_TOKEN` permissions; the job never writes back to the repo).
+- **Steps:**
+  1. `actions/checkout@v5` — checks out the repo so `scripts/` is available.
+  2. `actions/setup-node@v5` with `node-version: '22'`.
+  3. `Install dependencies` — `cd scripts && npm install` installs `@supabase/supabase-js`, `googleapis`, etc. from `scripts/package.json`.
+  4. `Run cleanup` — `node scripts/cleanup-past-rsvps.js` with all secrets injected via `env:` block.
+- **Secrets used:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- **Script:** `scripts/cleanup-past-rsvps.js`.
 
-| Tab | Who sees it |
-|-----|-------------|
-| VIP Passes | All authenticated managers |
-| RSVPs | Managers with `view_rsvps` permission |
-| Managers | Superadmin only |
-| Events | Superadmin only |
-
-Sessions expire after 24 hours and are stored in localStorage (`admin_token`, `admin_role`, `admin_permissions`).
-
-**Superadmin note:** Superadmin sessions have `manager_id: null` in the `manager_sessions` table. All Netlify functions must check for this before any Supabase join query — see `superadmin-events.js` for the established pattern.
-
----
-
-## External Services
-
-### Anthropic Claude API
-- Model: `claude-sonnet-4-20250514`
-- Used for: OCR of flyer images to extract event details
-- Images over 4MB are compressed with Sharp before sending
-- Secret: `ANTHROPIC_API_KEY`
-
-### Netlify
-- Site: `screvents.com`
-- Deploy method: Netlify CI (watches for pushes to `main`, deploys `dist/`)
-- Functions directory: `netlify/functions/`
-- Secrets: `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`
-
-### Supabase
-- Tables: `vip_passes`, `managers`, `manager_sessions`, `events`, `telegram_upload_sessions`, `zone_events`
-- `manager_sessions.manager_id` is nullable — `null` indicates a superadmin session
-- RLS enabled on all public tables with no policies (correct given service role usage)
-- Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`
-
-### Google Sheets — "Parasabha RSVPs"
-- Tab name: `responses`
-- Columns: `zone` | `name` | `guests` | `submitted` | `__PowerAppsId__`
-- Read by `summary.js` as public CSV export (no auth)
-- Edited/deleted by `get-rsvps.js` via googleapis service account
-
-### Microsoft Forms + Power Automate
-- One form per zone, embedded as iframes on zone pages
-- One Power Automate flow per zone: `When a new response is submitted` → `Get response details` → `Insert row` (Google Sheets)
-- Insert row retry policy: Exponential, count 4, interval PT5S
-
-### Telegram
-- Bot: `@parasabha_bot`
-- Bot sends: RSVP summaries, late RSVP notifications, deploy confirmations, flyer images
-- Bot receives: `/summary`, `/getflyer`, `/uploadflyer`, `/removeflyer`, `/cancel` + inline keyboard callbacks
-- Privacy mode: **off** (required to receive photo messages in supergroups)
-- Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+**Purpose.** Runs the morning AFTER an event (4 AM local) so attendees can still be checked in at the door on event day itself. For every zone in `deadlines.json` whose `eventDate` is strictly before today (America/New_York), the script upserts `rsvps_archive` (keyed on `id`), deletes the matching rows from `rsvps`, best-effort deletes the matching rows from the Google Sheet, then posts an archive summary to `TELEGRAM_CHAT_ID`. The dual-cron pattern means EDT/EST switchovers are handled without DST math in the workflow.
 
 ---
 
-## GitHub Actions Secrets Required
+### `final-summary.yml` — Final RSVP Summary
 
-| Secret | Used By |
-|--------|---------|
-| `ANTHROPIC_API_KEY` | `automate.js` — Claude OCR |
-| `NETLIFY_AUTH_TOKEN` | `automate.js` — Netlify deploy |
-| `NETLIFY_SITE_ID` | `automate.js` — Netlify deploy |
-| `TELEGRAM_BOT_TOKEN` | `automate.js`, `summary.js`, `late-rsvp.js` |
-| `TELEGRAM_CHAT_ID` | `automate.js`, `summary.js`, admin group |
-| `GOOGLE_SHEET_ID` | `summary.js` |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | `get-rsvps.js` |
-| `GITHUB_PAT` | `telegram-webhook.js` — workflow dispatch + GitHub Contents API |
-| `ADMIN_PASSWORD` | `manager-auth.js`, `admin-passes.js`, `get-rsvps.js` |
-| `SUPABASE_URL` | All Netlify functions |
-| `SUPABASE_SERVICE_KEY` | All Netlify functions |
-| `SUPABASE_ANON_KEY` | `get-pass.js` (public) |
+- **File:** `.github/workflows/final-summary.yml`
+- **Trigger:** schedule + `workflow_dispatch` (no inputs).
+- **Schedule:** `0 1 * * *` (1:00 AM UTC = 9:00 PM EDT / 8:00 PM EST the previous evening).
+- **Concurrency:** `group: final-summary`, `cancel-in-progress: false`.
+- **Permissions block:** none.
+- **Steps:**
+  1. `actions/checkout@v5`.
+  2. `actions/setup-node@v5` with `node-version: '22'`.
+  3. `Install dependencies` — `cd scripts && npm install`.
+  4. `Send final RSVP summary` — `cd scripts && node final-summary.js` with `TEST_MODE: false` pinned at the workflow level so scheduled runs always hit the real chat.
+- **Secrets used:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GOOGLE_SHEET_ID`.
+- **Script:** `scripts/final-summary.js`.
+
+**Purpose.** Sends the end-of-day "final RSVP" Telegram digest. For each zone whose `eventDate` equals today in America/New_York, the script downloads the public CSV export of the Google Sheet, filters by zone, formats a name + guest-count list with totals, and posts one HTML message per active zone to `TELEGRAM_CHAT_ID`. It's deliberately the last summary push of the day so organizers see the most current headcount before going to bed. Drives strictly off the CSV — no Supabase credentials in this workflow.
 
 ---
 
-## Known Issues & Fixes
+### `rsvp-automation.yml` — RSVP Automation
 
-**Upload script not triggering GitHub workflow**
-Cause: Leftover local state causes `git pull` to fail silently — nothing commits, workflow never fires.
-Fix: Script now stashes before pulling and pops after. Push failures surface as a Mac notification.
+- **File:** `.github/workflows/rsvp-automation.yml`
+- **Trigger:** schedule + push to `main` (with `paths-ignore: ['dist/**']` so the workflow's own `dist/` rebuild commits don't recurse) + `workflow_dispatch` with two inputs:
+  - `force_all` (default `'false'`) — when `'true'`, OCR every zone regardless of cache.
+  - `zone_override` (default `''`) — when set to a zone slug (e.g. `scranton`), force OCR only that zone.
+- **Schedule:** `0 8 * * *` (8 AM UTC, ~4 AM EDT / 3 AM EST) — daily safety-net OCR run.
+- **Concurrency:** `group: rsvp-automation-deploy`, `cancel-in-progress: false` — queues new runs behind the in-flight one so a rapid sequence of flyer-builder pushes (remove + upload flyer + upload og) collapses to one surviving run instead of racing on `deadlines.json` and `dist/`.
+- **Permissions block:** `contents: write` at job level — required to commit `deadlines.json` back to `main`.
+- **Steps:**
+  1. `actions/checkout@v5` with `fetch-depth: 0` — full history is needed to find the last `deploy: update dist` commit.
+  2. `actions/setup-node@v5` with `node-version: '22'`.
+  3. `Install dependencies` — `cd scripts && npm install` (pulls `@anthropic-ai/sdk`, `sharp`, `googleapis`, etc.).
+  4. `Process all new flyers` — bash block that:
+     - Reads `LAST_DEPLOY=$(git log --pretty=%H --grep='^deploy: update dist' -1 || echo "")`.
+     - Verifies `LAST_DEPLOY` is an ancestor of `HEAD` (`git merge-base --is-ancestor`); if not (force-push rewrote history), emits a `::warning::` and falls back to empty.
+     - Sets `DIFF_BASE` to `LAST_DEPLOY` if non-empty and != HEAD, else `HEAD~1`.
+     - Computes `FLYERS=$(git diff --name-only "$DIFF_BASE" HEAD | grep -E 'flyers/.*\.(jpg|jpeg|png)$' | tr '\n' ',')` — comma-joined list of changed flyer paths.
+     - Runs `FLYER_PATHS="$FLYERS" FORCE_ALL="${{ github.event.inputs.force_all || 'false' }}" ZONE_OVERRIDE="${{ github.event.inputs.zone_override || '' }}" node automate.js`.
+  5. `Commit deadlines.json` — configures `github-actions` git identity, stages `deadlines.json`, no-ops if there's no diff, otherwise commits `Auto-update deadlines.json [skip ci]` and pushes to `origin main`. Retries up to 3 times with `git pull --rebase --autostash origin main` between attempts to survive a remote that moved during the run. The `[skip ci]` tag stops the resulting commit from re-triggering this workflow.
+- **Secrets used:** `ANTHROPIC_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`. `GITHUB_REPOSITORY` is also passed (filled by `${{ github.repository }}`).
+- **Script:** `scripts/automate.js`.
 
-**Removed flyer still showing on homepage**
-Cause: Old script skipped zones with no new files — `git rm` cleanup never ran.
-Fix: Cleanup now always runs for every zone regardless of new files.
+**Purpose.** The core flyer-to-event pipeline. It detects flyer image changes since the last successful dist deploy, OCRs each one through the Anthropic Claude vision API to extract event metadata (name, date, time, location, RSVP deadline), regenerates per-zone HTML pages and OG images into `dist/`, commits `dist/` back to `main` (which Netlify auto-deploys), and finally commits the refreshed `deadlines.json` to the repo root. The combination of `paths-ignore: ['dist/**']`, the LAST_DEPLOY diff anchor, and the concurrency group together guarantee a fast burst of flyer-builder pushes processes every change exactly once. See Automation Scripts for the `automate.js` internals and Flyer Builder Flow for how flyers get into the `flyers/` folder in the first place.
 
-**Supabase join crash in Netlify functions**
-Cause: Superadmin sessions have `manager_id: null`, which breaks join queries.
-Fix: Check `if (!session.manager_id)` first → grant full permissions → skip manager lookup.
+---
 
-**Flyer image exceeding Claude API limit**
-Cause: Large flyers exceed the 4MB base64 limit.
-Fix: `automate.js` pre-compresses with Sharp (resize to 1800px wide, JPEG 85%) before encoding.
+### `rsvp-summary.yml` — RSVP Summary
 
-**Power Automate Insert row broken after editing flow**
-Cause: 429 rate limit hit while saving — schema loads incorrectly.
-Fix: Wait ~10 min, reopen flow, reselect the worksheet dropdown, verify all field mappings, save again.
+- **File:** `.github/workflows/rsvp-summary.yml`
+- **Trigger:** schedule + `workflow_dispatch` with three inputs:
+  - `target_zone` (default `'all'`) — `scranton` | `mountain-top` | `moosic` | `bloomsburg` | `mandir` | `all`. `mandir` expands to `satsang-sabha` + `mandir-1..5`.
+  - `trigger_chat_id` (default `''`) — Telegram chat ID to reply into. Set when an admin runs `/summary` in a Telegram chat and `netlify/functions/telegram-webhook.js` dispatches this workflow.
+  - `test_mode` (default `'false'`) — when `'true'`, ignores the per-zone event-date filter and runs every zone.
+- **Schedule:** `30 18 */3 * *` (18:30 UTC every 3 days = 2:30 PM EDT / 1:30 PM EST).
+- **Concurrency:** none.
+- **Permissions block:** none.
+- **Steps:**
+  1. `actions/checkout@v5`.
+  2. `actions/setup-node@v5` with `node-version: '22'`.
+  3. `Install dependencies` — `cd scripts && npm install`.
+  4. `Send RSVP Summary` — `cd scripts && node summary.js` with dispatch inputs piped through `${{ github.event.inputs.X || 'default' }}` so scheduled runs use sensible defaults.
+- **Secrets used:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CHAT_ID_SCRANTON`, `TELEGRAM_CHAT_ID_MOUNTAIN_TOP`, `TELEGRAM_CHAT_ID_MOOSIC`, `TELEGRAM_CHAT_ID_BLOOMSBURG`, `TELEGRAM_CHAT_ID_MANDIR`.
+- **Script:** `scripts/summary.js`.
 
-**Photo messages not received in supergroup**
-Cause: Bot privacy mode was on — bots only receive command messages by default in supergroups.
-Fix: Disable privacy mode in BotFather → remove bot from group → re-add bot → re-grant admin.
+**Purpose.** Sends a per-zone RSVP headcount digest to each zone's Telegram group every 3 days. On a scheduled run (no `trigger_chat_id`), each zone's summary goes to its dedicated zone chat; on a manual dispatch with `trigger_chat_id`, the script replies into that chat instead — used by the Telegram bot's `/summary` command. The script reads `rsvps` directly from Supabase (not the Sheet) and gates by `today <= eventDate` so closed-RSVP-but-event-day zones still get a final headcount. See Telegram Bot for the `/summary` callback path.
 
-**Netlify function state lost between invocations**
-Cause: In-memory objects are reset on each cold start.
-Fix: Use Supabase `telegram_upload_sessions` to persist upload/remove flow state across invocations.
+---
 
-**Telegram can't fetch screvents.com URLs**
-Cause: Palo Alto Networks firewall blocks Telegram's servers from fetching the domain.
-Fix: Always fetch image buffers server-side and upload as multipart/form-data. Never pass screvents.com URLs directly to Telegram's sendPhoto API.
+### `supabase-keepalive.yml` — Supabase Keep-Alive
 
-**`@supabase/supabase-js` not available in Netlify functions**
-Cause: No `package.json` in `netlify/functions/` directory.
-Fix: Run `cd netlify/functions && npm init -y && npm install @supabase/supabase-js` and commit the generated files.
+- **File:** `.github/workflows/supabase-keepalive.yml`
+- **Trigger:** schedule + `workflow_dispatch` (no inputs).
+- **Schedule:** `0 13 * * *` (13:00 UTC = 9:00 AM EDT / 8:00 AM EST).
+- **Concurrency:** none.
+- **Permissions block:** none.
+- **Steps:**
+  1. `Ping Supabase database` — inline bash. Aborts if `SUPABASE_SERVICE_KEY` is empty, then runs:
+     ```bash
+     status=$(curl -s -o /dev/null -w "%{http_code}" \
+       "${SUPABASE_URL}/rest/v1/vip_passes?select=id&limit=1" \
+       -H "apikey: ${SUPABASE_SERVICE_KEY}" \
+       -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}")
+     ```
+     Logs the HTTP status and exits non-zero unless it's `200` or `206`.
+- **Secrets used:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Script:** none — pure inline `curl`, no checkout, no `npm install`, no Node.
+
+**Purpose.** Supabase's free tier pauses projects after about a week of database inactivity. A daily authenticated REST read against the `vip_passes` table is enough to count as activity and keep the project warm so all the other workflows and Netlify functions never wake up to a paused DB. Failing the job on any non-2xx status surfaces a real Supabase outage as a red workflow run in the Actions log.
+
+---
+
+### `sync-check.yml` — RSVP Sync Check
+
+- **File:** `.github/workflows/sync-check.yml`
+- **Trigger:** schedule + `workflow_dispatch` (no inputs).
+- **Schedule:** `*/10 * * * *` (every 10 minutes — the realistic floor given GitHub Actions cron drift).
+- **Concurrency:** `group: sync-check`, `cancel-in-progress: false`.
+- **Permissions block:** none.
+- **Steps:**
+  1. `actions/checkout@v5`.
+  2. `actions/setup-node@v5` with `node-version: '22'`.
+  3. `Install dependencies` — `cd scripts && npm install`.
+  4. `Run sync check` — `node scripts/sync-check.js`.
+- **Secrets used:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- **Script:** `scripts/sync-check.js`.
+
+**Purpose.** Cross-checks the Google Sheet `responses` tab against the Supabase `rsvps` table every 10 minutes. The script keys rows by `sheet_row_id`, diffs into three buckets (sheet-only, supabase-only, mismatched guests/name/zone), stays completely silent on parity, and only posts to Telegram when real drift is detected (capped at 10 entries per bucket). Infrastructure failures (Sheets API outage, etc.) intentionally do NOT alert Telegram — the red workflow run is the signal — to avoid spamming the admin chat during external outages. Healing is intentionally manual so drift is reviewed by a human.
+
+---
+
+I have enough context. Now I'll write the section.
+
+## 8. Supabase Schema
+The project uses a single Supabase Postgres project (URL + service-role key live in `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` — see Env Vars Master) as the system of record for RSVPs, VIP passes, manager accounts, sessions, flyer reviews, IP rate-limit state, and Telegram bot wizard state. There is **no schema definition in this repo** — no `supabase/` folder, no `migrations/`, no `.sql` files. Every table, foreign key, and index lives only in the Supabase project that the deployed env vars point at. The shape below is reverse-engineered from the queries the Netlify functions and GitHub Actions scripts actually run. The Schema Bootstrap subsection at the end is a paste-into-the-Supabase-SQL-editor recreation of that inferred shape.
+
+### How the Supabase client is created
+
+Every consumer creates the client at request time (never module-load), using the service-role key:
+
+```js
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+```
+
+A handful of older endpoints have a defensive fallback to the anon key — `netlify/functions/admin-passes.js`, `netlify/functions/get-archived-rsvps.js`, `netlify/functions/manager-auth.js`, `netlify/functions/superadmin-events.js`, `netlify/functions/superadmin-managers.js` — written as `process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY`. That fallback is effectively dead code because the SQL these functions run (writing `manager_sessions`, reading `managers.permissions`, updating `events`, etc.) requires `service_role` unless RLS policies allow anon access — and no RLS policies are defined in the repo. In practice `SUPABASE_SERVICE_KEY` must be set for the deployment to work; `netlify/functions/get-rsvps.js` errors out immediately if it is missing.
+
+The GitHub Actions scripts (`scripts/automate.js`, `scripts/cleanup-past-rsvps.js`, `scripts/summary.js`, `scripts/sync-check.js`) construct the same client with the service key from GitHub repo secrets.
+
+**The frontend never talks to Supabase directly.** A `grep` for `createClient` or `SUPABASE` against `public/` and `dist/` returns nothing — `supabase-js` is never loaded in the browser, no anon key is ever shipped to the client. Every browser-side data interaction routes through a Netlify Function which then talks to Supabase server-side with the service key.
+
+**No `auth.users` involvement.** No file in `netlify/functions/` or `scripts/` calls `supabase.auth.*`. Managers are an entirely app-managed table (`managers`) with bcrypt-hashed passwords and a custom session table (`manager_sessions`) — Supabase Auth is bypassed completely. Public guests authenticating to view their VIP pass do so via a name+phone lookup (`netlify/functions/lookup-pass.js`) that returns the `vip_passes.id` UUID as a bearer credential — also not Supabase Auth.
+
+---
+
+### Table: `rsvps`
+
+**Purpose.** Live (upcoming-event) RSVP submissions, populated from the public zone landing pages. Source of truth for headcounts. Each row is dual-written to the legacy Google Sheet `responses` tab so the merge view in `netlify/functions/get-rsvps.js` keeps working during the transition.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | Set client-side via `crypto.randomUUID()` in `submit-rsvp.js`. |
+| `zone` | `text` | One of `scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`, `mandir-1`..`mandir-5`. |
+| `name` | `text` | |
+| `guests` | `int` | Server-clamped to `>= 1`, hard-rejected if `> 100`. |
+| `event_name` | `text` | Denormalized snapshot from the RSVP page. |
+| `submitted_at` | `timestamptz` | Set to `new Date().toISOString()` in `submit-rsvp.js`. |
+| `sheet_row_id` | `text` | Cross-store key. For new rows equals `id`; for rows imported by `backfill-rsvps.js` preserves the original Power Apps row id from the Google Sheet column E. |
+
+**Read by.** `netlify/functions/get-rsvps.js` (`SELECT zone, name, guests, submitted_at, sheet_row_id ORDER BY submitted_at DESC`); `netlify/functions/backfill-rsvps.js` (`SELECT sheet_row_id` for dedup); `scripts/cleanup-past-rsvps.js` (`SELECT id, zone, name, guests, event_name, submitted_at, sheet_row_id WHERE zone IN (...)`); `scripts/sync-check.js` (full table scan); `scripts/summary.js` (full table scan, filtered in JS).
+
+**Written by.** `netlify/functions/submit-rsvp.js` (`INSERT`); `netlify/functions/get-rsvps.js` (`UPDATE guests WHERE sheet_row_id`, `DELETE WHERE sheet_row_id`); `netlify/functions/restore-rsvps.js` (`UPSERT onConflict: 'id'`); `scripts/cleanup-past-rsvps.js` (`DELETE WHERE zone IN (...)`).
+
+**RLS posture.** Service-key only. No anon path. Safety is enforced at the function layer (`x-admin-password`, `x-manager-token`, server-side `rsvp_settings` toggle check).
+
+**Suggested indexes.**
+- `(submitted_at DESC)` — admin list ordering.
+- `(sheet_row_id)` — `UPDATE`/`DELETE` lookup key from `get-rsvps.js`.
+- `(zone)` — cleanup script `WHERE zone IN (...)` filter.
+
+---
+
+### Table: `rsvps_archive`
+
+**Purpose.** Historical RSVPs for past events. `scripts/cleanup-past-rsvps.js` moves rows here once the event date is strictly before today (America/New_York), so the admin view stays focused on the next event without losing history. `netlify/functions/get-archived-rsvps.js` exposes a read-only view; `netlify/functions/restore-rsvps.js` can pull rows back into `rsvps` if an archive run was premature.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | Preserved from `rsvps.id` so restore is idempotent (`UPSERT onConflict: 'id'`). |
+| `zone` | `text` | |
+| `name` | `text` | |
+| `guests` | `int` | |
+| `event_name` | `text` | |
+| `submitted_at` | `timestamptz` | |
+| `sheet_row_id` | `text` | |
+| `event_date` | `date` | The event date the archived row was tied to (from `deadlines.json[zone].eventDate`). |
+| `archived_at` | `timestamptz` | Set when `cleanup-past-rsvps.js` moves the row. |
+
+**Read by.** `netlify/functions/get-archived-rsvps.js` (`SELECT id, zone, name, guests, event_name, submitted_at, sheet_row_id, event_date, archived_at` plus a separate facet query `SELECT zone, event_date`); `netlify/functions/restore-rsvps.js` (`SELECT id, zone, name, guests, event_name, submitted_at, sheet_row_id, event_date`).
+
+**Written by.** `scripts/cleanup-past-rsvps.js` (`UPSERT onConflict: 'id'`); `netlify/functions/restore-rsvps.js` (`DELETE WHERE id IN (...)` after live-table restore succeeds).
+
+**RLS posture.** Service-key only.
+
+**Suggested indexes.**
+- `(archived_at DESC, submitted_at DESC)` — list ordering in `get-archived-rsvps.js`.
+- `(zone, event_date)` — admin filter facets.
+
+---
+
+### Table: `rsvp_settings`
+
+**Purpose.** Per-zone (plus a special `global`) on/off toggle for the RSVP form. Read by every zone landing page on load (`netlify/functions/rsvp-status.js`) and re-checked server-side at submit time so a stale tab cannot bypass a closed event.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `zone` | `text` PK | `onConflict: 'zone'` upsert target. One of `global`, `scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`, `mandir-1`..`mandir-5`. |
+| `enabled` | `boolean` | Absent row defaults to `true` in both `rsvp-status.js` and `submit-rsvp.js`. |
+
+**Read by.** `netlify/functions/rsvp-status.js` (`SELECT zone, enabled`); `netlify/functions/submit-rsvp.js` (`SELECT zone, enabled WHERE zone IN ['global', zone]`).
+
+**Written by.** `netlify/functions/manage-rsvp.js` (`UPSERT { zone, enabled } onConflict: 'zone'`, superadmin only).
+
+**RLS posture.** Service-key only. `manage-rsvp.js` gates writes behind superadmin auth at the function layer.
+
+**Suggested indexes.** Primary key on `zone` is sufficient — every query is either a full table scan or a PK lookup.
+
+---
+
+### Table: `managers`
+
+**Purpose.** Manager (admin sub-user) accounts. Each row carries a bcrypt password hash and a JSONB `permissions` blob enumerating what they can do (`view_rsvps`, `edit_rsvps`, `delete_rsvps`, `view_passes`, `create_delete_passes`, `edit_passes`, `manage_managers`, `manage_events`, `flyer_builder`, `flyer_builder_advanced`, `flyer_zones[]`, `upload_flyers`, `remove_flyers`, `refresh_flyers`). The superadmin is *not* a row here — they are identified by `manager_sessions.manager_id IS NULL`.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `username` | `text` UNIQUE | Lowercased + trimmed before insert. PG error `23505` is caught on conflict in `superadmin-managers.js`. |
+| `password_hash` | `text` | `bcryptjs` cost 10. |
+| `permissions` | `jsonb` | |
+| `created_at` | `timestamptz` | `ORDER BY created_at DESC` in admin list. |
+
+**Read by.** `netlify/functions/manager-auth.js` (login by username + verify embedded join `managers(username, permissions)`); `netlify/functions/superadmin-managers.js` (list); `netlify/functions/get-rsvps.js`, `get-archived-rsvps.js`, `manage-flyers.js`, `refresh-flyers.js`, `create-builder-session.js`, `admin-passes.js`, `review-flyer.js` (`SELECT permissions` or `SELECT username, permissions` by id during per-request authz).
+
+**Written by.** `netlify/functions/superadmin-managers.js` (`INSERT` with bcrypt hash, `UPDATE` username / re-hash / replace permissions, `DELETE`).
+
+**RLS posture.** Service-key only. bcrypt comparison happens in Node, not Postgres.
+
+**Suggested indexes.**
+- `UNIQUE (username)` — required by the `23505` conflict detection and the login lookup.
+- PK on `id` — used by per-request `SELECT permissions WHERE id = ?` in every gated endpoint.
+
+---
+
+### Table: `manager_sessions`
+
+**Purpose.** Bearer-token sessions for managers and superadmin. The token in the `x-manager-token` header is the lookup key. Superadmin sessions are marked with `manager_id IS NULL` — that's the only place "superadmin" is encoded. This is the hottest table in the app: every authenticated request does a `.eq('token', token).single()` lookup.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `token` | `text` UNIQUE | 64-char hex (`crypto.randomBytes(32).toString('hex')`). Effective primary key for lookups. |
+| `manager_id` | `uuid` NULL | FK → `managers.id`. `NULL` = superadmin session. |
+| `expires_at` | `timestamptz` | 24h after issue. No sliding refresh. |
+
+**Read by.** Every gated endpoint: `manager-auth.js` (`/verify` with embedded `managers(username, permissions)`), `admin-rate-limit.js`, `admin-passes.js`, `get-rsvps.js`, `get-archived-rsvps.js`, `manage-flyers.js`, `manage-rsvp.js`, `refresh-flyers.js`, `superadmin-events.js`, `superadmin-managers.js`, `trigger-redeploy.js`, `update-event-name.js`, `create-builder-session.js`.
+
+**Written by.** `manager-auth.js` (`INSERT` on login, `DELETE WHERE token` on logout); `superadmin-managers.js` (`DELETE WHERE manager_id = ?` is run manually before deleting a manager because the FK is *not* `ON DELETE CASCADE` — `manager-auth.js` `/verify` has explicit fallback logic for orphaned sessions whose `manager_id` points at a deleted manager).
+
+**RLS posture.** Service-key only.
+
+**Suggested indexes.**
+- `UNIQUE (token)` — mandatory; every auth check is a token lookup.
+- `(manager_id)` — used by `superadmin-managers.js` `DELETE WHERE manager_id = ?` on manager delete.
+
+---
+
+### Table: `events`
+
+**Purpose.** VIP-pass-bearing events. Defines event name, date window, time window, max-passes cap, and free-form notes. `netlify/functions/admin-passes.js` validates new pass creation against `max_passes` and embeds `events(event_name, start_date)` when listing passes.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `event_name` | `text` | |
+| `start_date` | `date` | `ORDER BY start_date ASC` on list. |
+| `end_date` | `date` | If `start_date === end_date` the pass's `event_date` is a single date, else `start_date – end_date`. |
+| `start_time` | `text` | Default `''` if not provided. |
+| `end_time` | `text` | Default `''`. |
+| `max_passes` | `int` | Default `50`. |
+| `notes` | `text` | |
+
+**Read by.** `netlify/functions/superadmin-events.js` (`SELECT *`); `netlify/functions/admin-passes.js` (`SELECT max_passes, event_name, start_date, end_date WHERE id = ?` and Supabase FK embed `events(event_name, start_date)`).
+
+**Written by.** `netlify/functions/superadmin-events.js` only (`INSERT`, `UPDATE`, `DELETE`). GET is open to any authed user; mutations are superadmin-only.
+
+**RLS posture.** Service-key only.
+
+**Suggested indexes.**
+- PK on `id`.
+- `(start_date)` — admin list ordering.
+
+---
+
+### Table: `vip_passes`
+
+**Purpose.** One VIP pass per guest per event. Phone is normalized to digits-only 10-digit US format in `phone_normalized` so the public name+phone `lookup-pass` flow can match reliably regardless of how the admin typed the number. Each pass `id` is itself the bearer token for `/vip/<id>` — the URL is the credential, the UUID's unguessability is the security.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `guest_name` | `text` | |
+| `phone` | `text` | Original input, trimmed. |
+| `phone_normalized` | `text` | Digits only, 10 chars (US). Lookup + dedup key. |
+| `event_id` | `uuid` FK → `events.id` | |
+| `event_name` | `text` | Denormalized at creation time so the public `/vip/<id>` page can render without a join. |
+| `event_date` | `text` | `'YYYY-MM-DD'` or `'YYYY-MM-DD – YYYY-MM-DD'` depending on whether the event's start/end match. |
+| `created_at` | `timestamptz` | `ORDER BY created_at DESC`. |
+
+**Read by.** `netlify/functions/admin-passes.js` (full select with `events(event_name, start_date)` embed, plus per-event dedup `SELECT phone_normalized WHERE event_id = ? AND phone_normalized IN (...)` and count `SELECT * count exact head true WHERE event_id = ?`); `netlify/functions/lookup-pass.js` (`SELECT id, guest_name, event_id, created_at WHERE phone_normalized = ? ORDER BY created_at DESC`); `netlify/functions/get-pass.js` (`SELECT id, guest_name, event_name, event_date WHERE id = ?`).
+
+**Written by.** `netlify/functions/admin-passes.js` only (single + batch `INSERT`, `UPDATE` for edit, `DELETE` single + batch).
+
+**RLS posture.** Service-key only. `get-pass.js` is publicly callable by id — security depends on the id being an unguessable UUID. `lookup-pass.js` is rate-limited via `invite_lookup_attempts`.
+
+**Suggested indexes.**
+- PK on `id`.
+- `(phone_normalized)` — every guest lookup.
+- `(event_id, phone_normalized)` — per-event dedup `eq + in` filter.
+- `(event_id)` — list filter + count.
+- `(created_at DESC)` — admin list ordering.
+
+---
+
+### Table: `flyer_reviews`
+
+**Purpose.** Pending → processing → approved | rejected state machine for flyers submitted from the flyer-builder. Each row points at a Supabase Storage object in the `flyer-reviews` bucket and carries the form data needed to rebuild the builder UI on reject. Approval commits the flyer to the `pritpnp/rsvp-automation` GitHub repo and deletes the storage objects.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | Set client-side via `crypto.randomUUID()` in `review-flyer.js`. |
+| `zone` | `text` | Includes `satsang-sabha-santos` as a sub-variant; the GitHub-write step in `telegram-webhook.js` strips `-santos` before pathing. |
+| `storage_path` | `text` | `${reviewId}/${zone}-flyer.jpg` in bucket `flyer-reviews`. |
+| `og_storage_path` | `text` NULL | `${reviewId}/${zone}-og.jpg`, nullable if no 1200×630 preview was uploaded. |
+| `event_data` | `jsonb` | `{ date, time, rsvpDate, host, addr1, addr2, mahaprasad, santos, zone, rejectUrl }`. `rejectUrl` is pre-built at upload time. |
+| `status` | `text` | `'pending'` \| `'processing'` \| `'approved'` \| `'rejected'`. |
+| `created_by` | `text` | Manager username, or `'Superadmin'`. |
+
+**Read by.** `netlify/functions/telegram-webhook.js` (`SELECT * WHERE id = ?` on reject).
+
+**Written by.** `netlify/functions/review-flyer.js` (`INSERT` with `status: 'pending'`; rollback `DELETE WHERE id = ?` on Telegram-prep failure); `netlify/functions/telegram-webhook.js`. The atomic claim on approve is the key safety pattern — it survives Telegram webhook redelivery and admin double-clicks:
+
+```js
+const { data: claimed } = await supabase
+  .from('flyer_reviews')
+  .update({ status: 'processing' })
+  .eq('id', reviewId).eq('status', 'pending')
+  .select();
+// only one caller can flip pending -> processing; duplicate callbacks no-op
+```
+
+On GitHub-commit failure the same handler rolls back with a guarded `UPDATE status='pending' WHERE id=? AND status='processing'` so a concurrent reject is not clobbered.
+
+**RLS posture.** Service-key only.
+
+**Suggested indexes.** PK on `id` is sufficient — every operation is by id.
+
+---
+
+### Table: `builder_sessions`
+
+**Purpose.** Short-lived (30-minute) one-shot-ish tickets issued by `netlify/functions/create-builder-session.js` so the flyer-builder page in the browser can carry a narrowed-scope token in the URL (`/flyer-builder/?session=<uuid>`) without ever exposing the manager's main `x-manager-token`. Used by `verify-builder-session.js` to populate the UI and by `review-flyer.js` (`x-builder-session` header) to authorize the eventual review submission.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | The session token. |
+| `manager_id` | `uuid` NULL FK → `managers.id` | `NULL` = superadmin session. |
+| `is_superadmin` | `boolean` | |
+| `allowed_zones` | `text[]` | Locked to `manager.permissions.flyer_zones` (or the full 5-zone list for superadmin). |
+| `allow_advanced` | `boolean` | From `manager.permissions.flyer_builder_advanced`. |
+| `expires_at` | `timestamptz` | `now() + 30 minutes`. |
+| `used` | `boolean` | Set `false` on insert. **No code path ever flips it to `true`** — the session is reusable within its 30-minute window despite the column name implying one-shot. |
+
+**Read by.** `netlify/functions/verify-builder-session.js` (`SELECT * WHERE id = ?`); `netlify/functions/review-flyer.js` (`SELECT * WHERE id = ?`).
+
+**Written by.** `netlify/functions/create-builder-session.js` (`INSERT` only).
+
+**RLS posture.** Service-key only.
+
+**Suggested indexes.** PK on `id`.
+
+---
+
+### Table: `zone_events`
+
+**Purpose.** Per-zone canonical event name (and last-updated timestamp). `scripts/automate.js` consults this first when rendering a zone landing page and only falls back to OCR'd text from the flyer if no row exists for the zone; if OCR seeds a name, the script `UPSERT`s it so admins can later edit it from the admin portal without losing it on the next OCR run. `netlify/functions/update-event-name.js` is the superadmin UI for editing it.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `zone` | `text` PK | One of the 10 valid zones (`scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`, `mandir-1`..`mandir-5`). Used as upsert key. |
+| `event_name` | `text` | `''` when the flyer for that zone has been removed (`automate.js` does a bulk `UPDATE event_name = ''`). |
+| `updated_at` | `timestamptz` | Set explicitly on upsert. |
+
+**Read by.** `scripts/automate.js` (`SELECT event_name WHERE zone = ?`); `netlify/functions/update-event-name.js` (`SELECT zone, event_name, updated_at ORDER BY zone`).
+
+**Written by.** `scripts/automate.js` (`UPSERT`, `UPDATE event_name WHERE zone = ?`, bulk `UPDATE event_name = '' WHERE zone IN (...)`); `netlify/functions/update-event-name.js` (`UPSERT { zone, event_name, updated_at }`).
+
+**RLS posture.** Service-key only. `update-event-name.js` is superadmin-only at the function layer.
+
+**Suggested indexes.** PK on `zone`.
+
+---
+
+### Table: `telegram_upload_sessions`
+
+**Purpose.** Multi-step wizard state for the Telegram bot's `/uploadflyer` and `/removeflyer` commands. One row per Telegram chat at a time, upserted as the wizard advances and deleted on cancel/finish.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `chat_id` | `text` PK | Telegram chat id as string. Upsert target. |
+| `step` | `text` | `'awaiting_photo'` \| `'awaiting_zone'` \| `'awaiting_confirm'` \| `'awaiting_remove_zone'` \| `'awaiting_remove_confirm'`. |
+| `photo_file_id` | `text` NULL | Telegram `file_id` of the photo the user sent. |
+| `zone` | `text` NULL | Zone slug the user selected. |
+| `updated_at` | `timestamptz` | Bumped on every upsert. |
+
+**Read by.** `netlify/functions/telegram-webhook.js` (`SELECT * WHERE chat_id = ?`).
+
+**Written by.** `netlify/functions/telegram-webhook.js` (`UPSERT`, `DELETE WHERE chat_id = ?`).
+
+**RLS posture.** Service-key only. Perimeter security is the `X-Telegram-Bot-Api-Secret-Token` constant-time compare in the webhook itself.
+
+**Suggested indexes.** PK on `chat_id`.
+
+---
+
+### Table: `invite_lookup_attempts`
+
+**Purpose.** Audit log of every `/invite` name+phone lookup attempt. Drives both the per-IP rate limit (5 fails per 60 minutes) and the admin "recent activity" feed.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `ip` | `text` | Extracted from `x-nf-client-connection-ip`, then `x-forwarded-for[0]`, then `client-ip`, fallback `'unknown'`. |
+| `success` | `boolean` | |
+| `name_attempted` | `text` | Capped 100 chars in `lookup-pass.js`. |
+| `phone_attempted` | `text` | Capped 30 chars in `lookup-pass.js`. |
+| `attempted_at` | `timestamptz` | |
+
+**Read by.** `netlify/functions/lookup-pass.js` (`COUNT WHERE ip = ? AND success = false AND attempted_at >= window`); `netlify/functions/admin-rate-limit.js` (`SELECT id, ip, success, name_attempted, phone_attempted, attempted_at ORDER BY attempted_at DESC LIMIT 100` plus a separate windowed failure query).
+
+**Written by.** `netlify/functions/lookup-pass.js` (fire-and-forget `INSERT`, intentionally not awaited so logging never delays the response; blocked attempts are *not* logged to avoid extending the window forever).
+
+**RLS posture.** Service-key only.
+
+**Suggested indexes.**
+- `(ip, success, attempted_at)` — the rate-limit count query, hot path on every lookup.
+- `(attempted_at DESC)` — admin activity feed.
+
+---
+
+### Table: `invite_ip_whitelist`
+
+**Purpose.** IPs that bypass the rate limit on the public `/invite` lookup. Managed from the admin portal's "Invite Lookup Security" card via `netlify/functions/admin-rate-limit.js`.
+
+**Columns (inferred):**
+
+| column | type | notes |
+| --- | --- | --- |
+| `ip` | `text` PK | `onConflict: 'ip'` upsert target. |
+| `note` | `text` | Capped 200 chars in `admin-rate-limit.js`. |
+| `added_by` | `text` | Hard-coded `'superadmin'` for both password and token auth paths. |
+| `added_at` | `timestamptz` | `ORDER BY added_at DESC`. |
+
+**Read by.** `netlify/functions/lookup-pass.js` (`SELECT ip WHERE ip = ? maybeSingle` — fired on every public lookup); `netlify/functions/admin-rate-limit.js` (`SELECT ip, note, added_by, added_at`).
+
+**Written by.** `netlify/functions/admin-rate-limit.js` (`UPSERT onConflict: 'ip'`, `DELETE WHERE ip = ?`).
+
+**RLS posture.** Service-key only.
+
+**Suggested indexes.** PK on `ip` is sufficient — read is always a single point lookup.
+
+---
+
+### Storage: `flyer-reviews` bucket
+
+Not a table but worth documenting alongside the schema because `flyer_reviews` rows reference it. A single Supabase Storage bucket named `flyer-reviews` holds pending review images at:
+
+- `${reviewId}/${zone}-flyer.jpg` — the 923-px-wide printable JPEG (`image/jpeg`, `upsert: false`).
+- `${reviewId}/${zone}-og.jpg` — the optional 1200×630 social preview.
+
+Written by `netlify/functions/review-flyer.js`. Read via short-lived signed URLs (3600 s on send, 300 s on approve) by `netlify/functions/review-flyer.js` (to forward to Telegram) and `netlify/functions/telegram-webhook.js` (to download and commit to GitHub). Deleted via `supabase.storage.from('flyer-reviews').remove([...])` after approve, reject, or rollback. There is no Storage RLS — all access uses the service key.
+
+---
+
+### Schema Bootstrap
+
+The repo has no migrations, so this SQL is the closest thing to a canonical schema definition. Paste it into the Supabase SQL editor on a fresh project to recreate the inferred shape. **Some column types are best-guess** — they are flagged with `-- guess:` comments. Adjust to taste based on what you actually want to enforce.
+
+```sql
+-- ─── extensions ────────────────────────────────────────────────────────────
+create extension if not exists "pgcrypto"; -- for gen_random_uuid() if you want server-side ids
+
+-- ─── managers + sessions (admin auth) ──────────────────────────────────────
+create table managers (
+  id uuid primary key default gen_random_uuid(),
+  username text not null unique,
+  password_hash text not null,                -- bcrypt, cost 10
+  permissions jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table manager_sessions (
+  token text primary key,                     -- 64-char hex from crypto.randomBytes(32)
+  manager_id uuid references managers(id),    -- NULL = superadmin session
+  expires_at timestamptz not null
+);
+create index manager_sessions_manager_id_idx on manager_sessions (manager_id);
+
+-- ─── events + vip passes ───────────────────────────────────────────────────
+create table events (
+  id uuid primary key default gen_random_uuid(),
+  event_name text not null,
+  start_date date not null,
+  end_date date not null,
+  start_time text not null default '',        -- guess: stored as free text, e.g. "5:00 pm"
+  end_time text not null default '',          -- guess: same
+  max_passes int not null default 50,
+  notes text not null default ''
+);
+create index events_start_date_idx on events (start_date);
+
+create table vip_passes (
+  id uuid primary key default gen_random_uuid(),
+  guest_name text not null,
+  phone text not null,                        -- raw trimmed input
+  phone_normalized text not null,             -- digits-only US 10-digit
+  event_id uuid not null references events(id) on delete cascade,
+  event_name text not null default '',        -- denormalized snapshot
+  event_date text not null default '',        -- guess: 'YYYY-MM-DD' or 'YYYY-MM-DD – YYYY-MM-DD'
+  created_at timestamptz not null default now()
+);
+create index vip_passes_phone_normalized_idx on vip_passes (phone_normalized);
+create index vip_passes_event_id_phone_idx on vip_passes (event_id, phone_normalized);
+create index vip_passes_event_id_idx on vip_passes (event_id);
+create index vip_passes_created_at_idx on vip_passes (created_at desc);
+
+-- ─── rsvps (live + archive) ────────────────────────────────────────────────
+create table rsvps (
+  id uuid primary key,                        -- set client-side; do not default here
+  zone text not null,
+  name text not null,
+  guests int not null check (guests >= 1 and guests <= 100),
+  event_name text not null default '',
+  submitted_at timestamptz not null,
+  sheet_row_id text not null                  -- equals id for new rows; preserves legacy id for backfill
+);
+create index rsvps_submitted_at_idx on rsvps (submitted_at desc);
+create index rsvps_sheet_row_id_idx on rsvps (sheet_row_id);
+create index rsvps_zone_idx on rsvps (zone);
+
+create table rsvps_archive (
+  id uuid primary key,                        -- preserved from rsvps.id
+  zone text not null,
+  name text not null,
+  guests int not null,
+  event_name text,
+  submitted_at timestamptz,
+  sheet_row_id text,
+  event_date date,                            -- guess: cleanup writes deadlines.json[zone].eventDate
+  archived_at timestamptz not null default now()
+);
+create index rsvps_archive_archived_at_idx on rsvps_archive (archived_at desc, submitted_at desc);
+create index rsvps_archive_zone_event_date_idx on rsvps_archive (zone, event_date);
+
+create table rsvp_settings (
+  zone text primary key,                      -- 'global' or a zone slug
+  enabled boolean not null default true
+);
+
+-- ─── zone-level event-name override (admin canonical name per zone) ────────
+create table zone_events (
+  zone text primary key,                      -- 'scranton' | 'mountain-top' | 'moosic' | 'bloomsburg' | 'satsang-sabha' | 'mandir-1'..'mandir-5'
+  event_name text not null default '',
+  updated_at timestamptz not null default now()
+);
+
+-- ─── flyer review pipeline ─────────────────────────────────────────────────
+create table builder_sessions (
+  id uuid primary key default gen_random_uuid(),
+  manager_id uuid references managers(id),    -- NULL = superadmin
+  is_superadmin boolean not null default false,
+  allowed_zones text[] not null default '{}',
+  allow_advanced boolean not null default false,
+  expires_at timestamptz not null,
+  used boolean not null default false         -- present in code, never flipped to true
+);
+
+create table flyer_reviews (
+  id uuid primary key,                        -- set client-side via crypto.randomUUID()
+  zone text not null,                         -- includes 'satsang-sabha-santos' variant
+  storage_path text not null,                 -- in Supabase Storage bucket 'flyer-reviews'
+  og_storage_path text,
+  event_data jsonb not null default '{}'::jsonb,
+  status text not null default 'pending'      -- 'pending' | 'processing' | 'approved' | 'rejected'
+    check (status in ('pending','processing','approved','rejected')),
+  created_by text not null default ''
+);
+
+-- ─── telegram bot wizard state ─────────────────────────────────────────────
+create table telegram_upload_sessions (
+  chat_id text primary key,
+  step text not null,                         -- 'awaiting_photo' | 'awaiting_zone' | 'awaiting_confirm' | 'awaiting_remove_zone' | 'awaiting_remove_confirm'
+  photo_file_id text,
+  zone text,
+  updated_at timestamptz not null default now()
+);
+
+-- ─── invite lookup rate-limit + whitelist ──────────────────────────────────
+create table invite_lookup_attempts (
+  id uuid primary key default gen_random_uuid(),
+  ip text not null,
+  success boolean not null,
+  name_attempted text,                        -- capped 100 chars in app
+  phone_attempted text,                       -- capped 30 chars in app
+  attempted_at timestamptz not null default now()
+);
+create index invite_lookup_attempts_ip_success_at_idx
+  on invite_lookup_attempts (ip, success, attempted_at);
+create index invite_lookup_attempts_at_idx
+  on invite_lookup_attempts (attempted_at desc);
+
+create table invite_ip_whitelist (
+  ip text primary key,
+  note text not null default '',
+  added_by text not null default '',
+  added_at timestamptz not null default now()
+);
+
+-- ─── storage bucket (run in the Storage UI or via the management API) ──────
+-- Bucket name: flyer-reviews
+-- Public: false (all access via service key + short-lived signed URLs)
+-- Allowed MIME: image/jpeg
+```
+
+You will also need to create the `flyer-reviews` Storage bucket in the Supabase Dashboard (or via the management API). Leave it private; the code path uses the service key and signed URLs.
+
+**No RLS policies are defined or required for this app.** Every reader and writer is server-side and authenticates with `SUPABASE_SERVICE_KEY`, which bypasses RLS. If you want to harden the database (defense in depth in case the service key ever leaks), enable RLS on every table and add a single deny-all policy — the app will continue to work because the service key still bypasses. Do *not* enable RLS without that deny-all unless you intend to also add the anon-readable policies that none of the current code paths require.
+
+---
+
+## 9. Telegram Bot Integration
+The bot is the operational nerve center for the project: admins drive flyer uploads/removals, approve or reject builder submissions, request RSVP digests, and broadcast event-day reminders — all from Telegram chats. The webhook handler lives at `netlify/functions/telegram-webhook.js` and is the single entry point for every Telegram update.
+
+### One-time bot setup (outside the repo)
+
+1. Open Telegram, message [@BotFather](https://t.me/BotFather), and run `/newbot`. Pick a display name and a unique username. BotFather returns an HTTP API token like `123456789:AAH...` — store it as `TELEGRAM_BOT_TOKEN` in both Netlify and GitHub Secrets.
+2. Generate a random webhook secret:
+   ```bash
+   openssl rand -hex 32
+   ```
+   Store it as `TELEGRAM_WEBHOOK_SECRET` in Netlify (this env var is only consumed by the webhook function — see Environment Variables).
+3. Add the bot to each Telegram group (admin group + every zone group), then capture the numeric chat IDs. The quickest path is to send one message in each group, then call:
+   ```bash
+   curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates" | jq '.result[].message.chat | {id, title}'
+   ```
+   Map each `id` to the right env var (see "Zone-to-chat mapping" below).
+4. Register the webhook URL with Telegram, baking in the secret token:
+   ```bash
+   curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "url": "https://screvents.com/.netlify/functions/telegram-webhook",
+       "secret_token": "<TELEGRAM_WEBHOOK_SECRET>",
+       "allowed_updates": ["message", "callback_query"]
+     }'
+   ```
+   Telegram now injects the header `X-Telegram-Bot-Api-Secret-Token: <TELEGRAM_WEBHOOK_SECRET>` on every webhook POST. Verify with `curl ".../bot<TOKEN>/getWebhookInfo"` — `url` should match and `has_custom_certificate` false.
+
+To rotate the secret later, repeat step 2 and re-call `setWebhook` with the new value; update the Netlify env var in the same change window.
+
+### Zone-to-chat mapping
+
+A "zone" in this system is a geographic congregation (Scranton, Mountain Top, Moosic, Bloomsburg) plus a Mandir aggregate that covers `satsang-sabha` and `mandir-1`..`mandir-5`. Every zone has a Telegram group chat; the bot identifies which zone a message came from by reverse-lookup on the chat ID:
+
+| Env var | Maps `chat.id` to zone slug |
+|---|---|
+| `TELEGRAM_CHAT_ID` | Admin group (no zone — this chat is the only one allowed to issue `/uploadflyer`, `/removeflyer`, `/refreshall`, `/cancel`, and review approve/reject buttons) |
+| `TELEGRAM_CHAT_ID_SCRANTON` | `scranton` |
+| `TELEGRAM_CHAT_ID_MOUNTAIN_TOP` | `mountain-top` |
+| `TELEGRAM_CHAT_ID_MOOSIC` | `moosic` |
+| `TELEGRAM_CHAT_ID_BLOOMSBURG` | `bloomsburg` |
+| `TELEGRAM_CHAT_ID_MANDIR` | `mandir` (umbrella — bare `/getflyer` here loops through `satsang-sabha`, `mandir-1` … `mandir-5`) |
+
+`telegram-webhook.js` builds the reverse map (`ZONE_CHAT_MAP`) at module load and defensively only inserts pairs where the env var is defined, so multiple unset vars don't collapse onto a single `'undefined'` key. Missing zone env vars are logged on cold start: `Missing TELEGRAM_CHAT_ID_* env vars (zone routing disabled for these): …`.
+
+The Mandir umbrella maps `chat.id → 'mandir'` only inside the webhook. The other Telegram consumers (`netlify/functions/late-rsvp.js`, `scripts/summary.js`) read the same `TELEGRAM_CHAT_ID_MANDIR` env var and use it to broadcast Mandir/Satsang-Sabha notifications, since those six event slots all share one congregation chat.
+
+### Security model
+
+The webhook is intentionally hostile to probes:
+
+- **Non-POST → 200 OK with body `"OK"`** (no info leak).
+- **Missing/wrong secret → 200 OK with empty body.** The check is constant-time via `crypto.timingSafeEqual` after `Buffer.from()` length check, comparing `process.env.TELEGRAM_WEBHOOK_SECRET` against both lowercase `x-telegram-bot-api-secret-token` and TitleCase variants:
+  ```js
+  const constantTimeEqual = (a, b) => {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const aBuf = Buffer.from(a);
+    const bBuf = Buffer.from(b);
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto.timingSafeEqual(aBuf, bBuf);
+  };
+  ```
+  If `TELEGRAM_WEBHOOK_SECRET` is unset, every request is silently rejected — Telegram traffic only flows once the env var is configured AND `setWebhook` was called with the same value.
+- **Malformed JSON → 200 OK** (Telegram won't retry).
+- **Empty update → 200 OK** (no `message` or `callback_query`).
+- **Admin-only commands and all `callback_query` work** are gated to `chatId === process.env.TELEGRAM_CHAT_ID`. Non-admin callback presses get an empty `answerCallbackQuery` (just dismisses the loading spinner) and the handler returns — no error message is sent.
+
+All Supabase writes use `SUPABASE_SERVICE_KEY` (see Supabase Schema); the webhook secret is the only perimeter check.
+
+### Commands
+
+Every command is matched on `text.toLowerCase().replace(/@\S+/g, '').trim()` so `/cmd@MyBotName` works the same as bare `/cmd`.
+
+| Command | Allowed chats | Behavior |
+|---|---|---|
+| `/uploadflyer` | Admin chat only | Sets `telegram_upload_sessions.step='awaiting_photo'` for that chat; replies "Please send the flyer image now, or type /cancel to abort." |
+| `/removeflyer` | Admin chat only | Sets `step='awaiting_remove_zone'` and renders the zone keyboard (callback prefix `removezone:`). |
+| `/cancel` | Admin chat only | Clears the session row and replies "Cancelled." |
+| `/refreshall` | Admin chat only | Dispatches `.github/workflows/rsvp-automation.yml` via `POST /repos/pritpnp/rsvp-automation/actions/workflows/rsvp-automation.yml/dispatches` with `{ ref: 'main', inputs: { force_all: 'true' } }`. Confirms "Full refresh triggered! All zones will be re-OCRd and redeployed (~2 minutes)." |
+| `/getflyer` | Any zone chat; or any chat with a suffix | Bare `/getflyer` in a zone chat looks up `ZONE_CHAT_MAP[chatId]` and re-sends `https://screvents.com/<zone>/flyer.jpg` (mapped to `/mandir/<N>/flyer.jpg` for `mandir-N`). Bare command in the Mandir chat loops through `MANDIR_ZONES = ['satsang-sabha','mandir-1'..'mandir-5']`. Suffix variants: `/getflyerscranton`, `/getflyermountaintop`, `/getflyermoosic`, `/getflyerbloomsburg`, `/getflyersatsang`, `/getflyermandir`, `/getflyermandir1`..`/getflyermandir5`. Unknown suffix → help message. |
+| `/summary` | Any chat | Replies "Generating RSVP summary... check back in ~30 seconds." then dispatches `.github/workflows/rsvp-summary.yml` with `{ target_zone, trigger_chat_id: chatId, test_mode: 'false' }`. Bare `/summary` resolves `target_zone` via `ZONE_CHAT_MAP[chatId]` (fallback `'all'`). Suffix variants: `/summaryscranton`, `/summarymountaintop`, `/summarymoosic`, `/summarybloomsburg`, `/summarymandir`. Suffix `mandir` is passed through verbatim — `scripts/summary.js` expands it to all six Mandir zones. Anything else falls back to `'all'`. |
+| Bare `/uploadflyer` / `/removeflyer` from non-admin chats | — | Silently 200 OK (no reply). |
+| Any other text in any chat | — | Silent no-op. |
+
+#### Photo uploads (`/uploadflyer` flow)
+
+When the admin chat is in `step='awaiting_photo'` and a photo message arrives:
+
+1. Picks `message.photo[message.photo.length - 1]` (Telegram's highest-resolution variant).
+2. Stashes `file_id` in `telegram_upload_sessions.photo_file_id`, advances `step='awaiting_zone'`.
+3. Renders the zone keyboard (callback prefix `zone:`).
+
+The full state machine for `telegram_upload_sessions` is: `awaiting_photo → awaiting_zone → awaiting_confirm` (upload), `awaiting_remove_zone → awaiting_remove_confirm` (remove). Cancel at any step deletes the row.
+
+### Callback queries (inline button presses)
+
+`callback_query.data` values the handler recognizes:
+
+| `callback_data` | Required session step | Action |
+|---|---|---|
+| `action:cancel` | any | Clears session, edits message to "Cancelled." |
+| `zone:<slug>` | `awaiting_zone` | Stores zone, advances to `awaiting_confirm`, shows confirmation prompt with `upload:confirm` / `action:cancel` buttons. |
+| `upload:confirm` | `awaiting_confirm` | Downloads photo via `getFile` → `https://api.telegram.org/file/bot<TOKEN>/<file_path>`, base64-encodes, commits to GitHub (see flow below). |
+| `removezone:<slug>` | `awaiting_remove_zone` | Advances to `awaiting_remove_confirm`, shows `remove:confirm` / `action:cancel`. |
+| `remove:confirm` | `awaiting_remove_confirm` | Calls `deleteFlyerFromGitHub(zone)` which fetches the file's `sha` then `DELETE`s `flyers/<zone>/flyer.jpg`. |
+| `review:approve:<reviewId>` | — (admin chat only) | Runs the flyer-review approval state machine (next section). |
+| `review:reject:<reviewId>` | — (admin chat only) | Marks the review rejected, removes Supabase Storage objects, replies with a prefilled rebuild link. |
+| anything else / stale | — | `answerCallbackQuery(id, 'Session expired. Try your command again.')` |
+
+`<slug>` ∈ `{scranton, mountain-top, moosic, bloomsburg, satsang-sabha, mandir-1, mandir-2, mandir-3, mandir-4, mandir-5}`.
+
+### Flyer-review state machine
+
+A flyer arrives from `netlify/functions/review-flyer.js` (see Flyer Builder Flow) and lands in the admin chat as a Telegram `sendPhoto` with caption and an inline keyboard:
+
+```
+[ ✅ Approve ]  [ ❌ Reject ]
+```
+
+The buttons carry `callback_data='review:approve:<reviewId>'` and `'review:reject:<reviewId>'`. The lifecycle (column = `flyer_reviews.status`):
+
+```
+pending ──(admin clicks Approve)──► processing ──(commit OK)──► approved
+   ▲                                    │
+   │                            (commit fails)
+   └────────────────────────────────────┘   (atomic rollback to pending)
+
+pending ──(admin clicks Reject)──► rejected
+```
+
+The critical hardening is the **atomic claim** on approve:
+
+```js
+const { data: review, error: claimErr } = await supabase
+  .from('flyer_reviews')
+  .update({ status: 'processing' })
+  .eq('id', reviewId)
+  .eq('status', 'pending')
+  .select()
+  .single();
+
+if (claimErr || !review) {
+  // Lost the race (already processing/approved/rejected) — silently ack.
+  return { statusCode: 200, body: 'OK' };
+}
+```
+
+The `eq('id').eq('status','pending')` filter combined with PostgREST's `UPDATE … RETURNING` means only one caller can flip `pending → processing`. Telegram webhook redeliveries, an admin double-click, or two admins racing all converge on a single GitHub commit.
+
+If anything inside the try-block throws after the claim, the handler rolls back with a guarded update:
+
+```js
+await supabase
+  .from('flyer_reviews')
+  .update({ status: 'pending' })
+  .eq('id', reviewId)
+  .eq('status', 'processing');   // guard so we don't clobber a manual reject
+```
+
+and edits the review caption to `❌ Approval failed: <msg>` so the admin can retry. Reject is simpler — no claim is needed because rejection has no GitHub side effects to dedup; it just flips `status='rejected'`, removes the Supabase Storage objects (`flyer-reviews` bucket), edits the photo caption to `❌ Rejected — <zone label> flyer was not approved.`, and sends a follow-up plain-text message with `review.event_data.rejectUrl` (a prefilled `/flyer-builder/?...` URL the manager can use to fix and resubmit).
+
+### GitHub commit flow on approval
+
+On a successful approval claim, the handler downloads two assets and commits them to the `rsvp-automation` repo on branch `main`:
+
+1. **Download from Supabase Storage** — 300-second signed URLs against the `flyer-reviews` bucket for `review.storage_path` (main flyer) and optionally `review.og_storage_path` (the 1200×630 social preview). Both are base64-encoded for the GitHub Contents API.
+2. **Normalize the zone slug** — `const zone = review.zone.replace('-santos', '');` so the `satsang-sabha-santos` variant maps back to the `satsang-sabha` directory.
+3. **Clear stale flyer files** — `GET /repos/pritpnp/rsvp-automation/contents/flyers/<zone>` lists the folder, and any file matching `/\.(jpg|jpeg|png)$/i` is deleted via the file's `url` + `sha`, commit message:
+   ```
+   Remove old flyer for <zone> before approved upload
+   ```
+4. **Commit the new `flyer.jpg`** — `PUT /repos/pritpnp/rsvp-automation/contents/flyers/<zone>/flyer.jpg`, commit message:
+   ```
+   Upload flyer for <zone> via flyer builder (approved)
+   ```
+5. **Commit the new `og.jpg`** — `PUT /repos/pritpnp/rsvp-automation/contents/flyers/<zone>/og.jpg` with the OG preview bytes, or the main flyer bytes if no OG was captured. Commit message:
+   ```
+   Upload og.jpg for <zone> via flyer builder (approved)
+   ```
+6. **Finalize** — `UPDATE flyer_reviews SET status='approved'`, then `supabase.storage.from('flyer-reviews').remove([storage_path, og_storage_path].filter(Boolean))` to garbage-collect the storage objects. Edit the Telegram photo caption to `✅ Approved — <zone label> flyer uploaded. GitHub Actions will process it now (~2 minutes).`
+
+The direct `/uploadflyer` path (admin-typed `upload:confirm`) and `/removeflyer` path use simpler single-file flows — `commitFlyerToGitHub` and `deleteFlyerFromGitHub` — with commit messages `Upload flyer for <zone> via Telegram` and `Remove flyer for <zone> via Telegram`.
+
+All GitHub calls share the same headers:
+
+```js
+{
+  'Authorization': `Bearer ${GITHUB_PAT}`,
+  'Accept':        'application/vnd.github.v3+json',
+  'Content-Type':  'application/json',
+}
+```
+
+`GITHUB_PAT` is set in Netlify only (the browser never sees it). The PAT needs `repo` + `workflow` scopes on `pritpnp/rsvp-automation` (classic) or `Contents: Read and write` + `Actions: Read and write` + `Metadata: Read` (fine-grained). The commits in `flyers/<zone>/` trigger the `rsvp-automation` workflow, which OCRs the flyer with Claude and redeploys — see Scripts and Workflows.
+
+### Scheduled and broadcast Telegram messages
+
+The webhook is only the inbound side. Three Node scripts running in GitHub Actions push notifications back into the same chats:
+
+- **`scripts/summary.js`** (cron `30 18 */3 * *` via `.github/workflows/rsvp-summary.yml`, plus on-demand from `/summary`): Per-zone RSVP headcount digest. Pulls all rows from Supabase `rsvps` (see Supabase Schema), filters per zone, and either replies to `TRIGGER_CHAT_ID` (when invoked by the bot) or fans out to the zone-specific Telegram chat IDs (when scheduled). Skips zones whose event date has passed unless `TEST_MODE=true`.
+- **`scripts/final-summary.js`** (cron `0 1 * * *` via `.github/workflows/final-summary.yml`): The end-of-event-day "Final RSVP List" Telegram message. For every zone whose `eventDate` in `deadlines.json` equals today (America/New_York), it downloads the Google Sheet CSV, filters by zone, and posts a `🏁 Final RSVP List — <Zone>` message to `TELEGRAM_CHAT_ID` (admin chat).
+- **`scripts/cleanup-past-rsvps.js`** (cron `0 8 * * *` and `0 9 * * *` via `.github/workflows/cleanup-past-rsvps.yml`): After archiving past-event RSVPs into `rsvps_archive`, posts a per-zone Telegram summary to `TELEGRAM_CHAT_ID` ("aborted" / "partial" / per-zone counts depending on outcome).
+- **`scripts/sync-check.js`** (cron `*/10 * * * *` via `.github/workflows/sync-check.yml`): Cross-checks Google Sheet vs Supabase `rsvps`. Silent on parity; only posts to `TELEGRAM_CHAT_ID` on detected drift with capped buckets (`sheet_only`, `supabase_only`, `mismatch`).
+- **`netlify/functions/late-rsvp.js`**: Fired by zone RSVP pages when the deadline has passed. Sends a Telegram alert to both the zone chat (`TELEGRAM_CHAT_ID_<ZONE>`) and the admin chat (`TELEGRAM_CHAT_ID`), HTML-escaped and length-capped, so organizers can manually accept the latecomer.
+- **`netlify/functions/review-flyer.js`**: Sends the initial review card with the Approve/Reject inline keyboard to `TELEGRAM_CHAT_ID` when a manager submits via the flyer builder (see Flyer Builder Flow).
+
+All scripts read `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` from GitHub Secrets and use raw `https.request` (or `fetch`) against `https://api.telegram.org/bot<TOKEN>/sendMessage` with `parse_mode: 'HTML'`. The zone-specific chat IDs in `scripts/summary.js` are read from the same `TELEGRAM_CHAT_ID_*` env vars listed in the zone-to-chat table above.
+
+---
+
+I have enough to write the section.
+
+## 10. Flyer Builder Flow
+The flyer builder is a browser-side WYSIWYG composer that lets a manager design a zone flyer (plus a 1200×630 social-card preview), submit it for review, and — after an admin presses Approve in Telegram — ship it to the live site without anyone hand-editing the repo. The entire pipeline is broken into eight phases. See **Netlify Functions**, **Supabase Schema**, **Telegram Bot Webhook**, and **Frontend Pages** for the building blocks each phase depends on.
+
+### 1. Manager opens the builder from the admin portal
+
+- **Actor:** Manager (already logged into `/admin` with `x-manager-token` in `localStorage`).
+- **File:** `netlify/functions/create-builder-session.js`.
+- **What happens:** The admin portal POSTs to `/.netlify/functions/create-builder-session` with header `x-manager-token: <token>`. The function:
+  1. Looks up the token in `manager_sessions` and rejects if expired (see **Auth and Security**).
+  2. If `manager_id IS NULL` it treats the caller as superadmin and grants `allowed_zones = ['scranton','mountain-top','moosic','bloomsburg','satsang-sabha']` with `allow_advanced = true`.
+  3. Otherwise it reads `managers.permissions` and requires `permissions.flyer_builder === true` and a non-empty `permissions.flyer_zones[]`; `allow_advanced` is mirrored from `permissions.flyer_builder_advanced`.
+  4. Inserts a row into the Supabase `builder_sessions` table and returns the new row's UUID as `sessionId`.
+- **Row written (Supabase `builder_sessions`):**
+
+```json
+{
+  "id": "<uuid v4>",
+  "manager_id": "<uuid|null>",
+  "is_superadmin": true,
+  "allowed_zones": ["scranton","mountain-top","moosic","bloomsburg","satsang-sabha"],
+  "allow_advanced": true,
+  "expires_at": "<now + 30 minutes ISO>",
+  "used": false
+}
+```
+
+- **TTL:** 30 minutes (`Date.now() + 30 * 60 * 1000`). The `used` column is set to `false` and never flipped by any later function, so within the 30-minute window the same token can submit multiple drafts — the TTL is the only revocation mechanism.
+- **Why a separate session?** The manager's main session token lives in `localStorage` under the admin origin. Handing the builder its own opaque, zone-scoped, short-lived token means the builder URL (which lives in the address bar and gets opened in a new tab) never carries the long-lived admin credential.
+
+The admin portal then opens `/flyer-builder/?session=<sessionId>` in a new tab.
+
+### 2. Builder UI loads and verifies the session
+
+- **Actor:** Manager's browser at `/flyer-builder/`.
+- **Files:** `public/flyer-builder/index.html` (UI) and `netlify/functions/verify-builder-session.js` (server check).
+- **What happens:**
+  1. The page reads `?session=<sessionId>` from the URL and POSTs `{ sessionId }` to `/.netlify/functions/verify-builder-session`.
+  2. `verify-builder-session.js` selects the row from `builder_sessions` by primary key, rejects with 401 if missing or `expires_at < now`, and returns `{ ok, isSuperadmin, allowedZones, allowAdvanced, managerId }`.
+  3. The page stashes `sessionId` on `window.BUILDER_SESSION_ID` / `window.ADMIN_TOKEN`, hides any zone button not present in `allowedZones`, and reveals the Advanced Settings panel only if `allowAdvanced === true`.
+- **Standalone mode:** If no `?session` is present the page sets `window.ADMIN_TOKEN = 'standalone'` so the UI works for offline design work; the server-side review submit will reject standalone tokens in phase 5.
+
+### 3. Manager designs the flyer
+
+- **Actor:** Manager (in browser).
+- **File:** `public/flyer-builder/index.html`.
+- **Assets pulled from the site (must be cross-origin readable, see CORS note in phase 8):**
+
+```
+/flyer-builder/templates/<zone>.png        ← printable-flyer background
+/flyer-builder/preview-templates/<zone>.png ← 1200×630 OG / social card background
+/flyer-builder/fonts/AddingtonCF.otf       ← date / time / address bevel text
+/flyer-builder/fonts/GothamRegular.ttf     ← host-name line
+/flyer-builder/fonts/AppleSDGothicNeoH.ttf ← RSVP line
+```
+
+The shipped templates are `bloomsburg.png`, `moosic.png`, `mountain-top.png`, `satsang-sabha.png`, `scranton.png`, plus a `satsang-sabha-santos.png` variant (auto-selected when the manager toggles "Santos will be present"). `preview-templates/` ships the same five base zones (no santos variant — the OG card reuses the regular `satsang-sabha.png` preview).
+
+The form collects: zone, event date, hour and minute (PM), RSVP-by date, host name, two address lines, mahaprasad sentence, and optional toggles (`santos`, "Event is at Mandir" — which prefills the BAPS Scranton Mandir address). The Advanced panel (superadmin / `allow_advanced` only) exposes per-element font size, line height, and unlock-and-drag positioning; it can export a `flyer-positions.json` for calibration. A separate "Preview" tab renders the social-card layout onto `preview-templates/<zone>.png`.
+
+### 4. Manager clicks "Send for Review" — client-side capture
+
+- **Actor:** Manager (in browser).
+- **File:** `public/flyer-builder/index.html` (`sendForReview()`).
+- **What happens:**
+  1. Validates date, hour, and address line 1 are filled.
+  2. Calls `html2canvas` on `#flyer-wrap` at `scale = 923 / wrap.offsetWidth` and exports to JPEG `quality: 0.85` → base64 → `imageBase64`.
+  3. Switches to the Preview tab, waits for the background image to load, then `html2canvas` on `#preview-wrap` at `scale = 1200 / offsetWidth` → JPEG `quality: 0.85` → base64 → `ogBase64`.
+  4. POSTs to `/.netlify/functions/review-flyer` with header `x-builder-session: <sessionId>` and JSON body:
+
+```json
+{
+  "zone": "scranton",
+  "imageBase64": "<base64-jpeg, ~923px wide>",
+  "ogBase64": "<base64-jpeg, 1200×630>",
+  "eventData": {
+    "date": "2026-08-15",
+    "time": "6:00 PM",
+    "rsvpDate": "2026-08-12",
+    "host": "Patel Family",
+    "addr1": "311 Oak Street",
+    "addr2": "Scranton, PA",
+    "mahaprasad": "Mahaprasad will be served",
+    "santos": "true",
+    "zone": "scranton"
+  }
+}
+```
+
+On HTTP 200 the page navigates to `/flyer-builder/review-sent/`.
+
+### 5. `review-flyer.js` intake — Supabase storage + Supabase row
+
+- **Actor:** Netlify function (server).
+- **File:** `netlify/functions/review-flyer.js`.
+- **Authorization:** Requires header `x-builder-session: <uuid>`. The function re-fetches the `builder_sessions` row by id, rejects on missing or `expires_at < now` (HTTP 401), and re-enforces `allowedZones`. The submitted `zone` must be one of `scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`, `satsang-sabha-santos`. For non-superadmins the function strips the `-santos` suffix off `zone` before checking it against `allowed_zones` (so a manager with `scranton` access cannot publish to `satsang-sabha-santos`, but a manager with `satsang-sabha` access can publish either variant).
+- **Storage write:** Generates `reviewId = crypto.randomUUID()`. Decodes the two base64 strings to `Buffer`s and uploads to Supabase Storage bucket `flyer-reviews` with `contentType: 'image/jpeg', upsert: false`:
+
+```
+flyer-reviews/<reviewId>/<zone>-flyer.jpg   ← always uploaded
+flyer-reviews/<reviewId>/<zone>-og.jpg      ← uploaded only if ogBase64 present
+```
+
+- **DB write (Supabase `flyer_reviews`):** A reject-recovery URL is pre-built by URL-encoding the `eventData` keys onto `https://screvents.com/flyer-builder/?date=…&zone=…` (with `-santos` stripped from `zone`) and baked into `event_data.rejectUrl`. Then:
+
+```json
+{
+  "id": "<reviewId>",
+  "zone": "scranton",
+  "storage_path": "<reviewId>/scranton-flyer.jpg",
+  "og_storage_path": "<reviewId>/scranton-og.jpg",
+  "event_data": { "...eventData...": true, "rejectUrl": "https://screvents.com/flyer-builder/?..." },
+  "status": "pending",
+  "created_by": "<manager username | 'Superadmin'>"
+}
+```
+
+- **Rollback contract:** If the DB insert fails, the function `remove()`s both storage objects and returns 500. If the subsequent Telegram send fails (phase 6), it removes both storage objects AND deletes the `flyer_reviews` row, so a failed submission never leaves orphans.
+
+### 6. Telegram notification to the admin chat
+
+- **Actor:** Netlify function `review-flyer.js` calling the Telegram Bot API.
+- **What happens:**
+  1. Creates a 1-hour signed URL for `<reviewId>/<zone>-flyer.jpg` via `supabase.storage.from('flyer-reviews').createSignedUrl(storagePath, 3600)`.
+  2. Fetches the bytes, hand-builds a `multipart/form-data` body, and POSTs `sendPhoto` to `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto` with `chat_id = process.env.TELEGRAM_CHAT_ID` (the admin group — NOT the zone group).
+  3. The caption uses Markdown:
+
+```
+📋 *Flyer Review Request*
+
+Zone: *<zoneLabel>*
+Submitted by: *<managerName>*
+
+Please review and approve or reject.
+```
+
+  4. Attaches an `inline_keyboard` with two callback buttons:
+
+```json
+{
+  "inline_keyboard": [[
+    { "text": "✅ Approve", "callback_data": "review:approve:<reviewId>" },
+    { "text": "❌ Reject",  "callback_data": "review:reject:<reviewId>" }
+  ]]
+}
+```
+
+The `callback_data` shape is exactly `review:<action>:<reviewId>` so the webhook can `startsWith('review:approve:')` / `startsWith('review:reject:')` and recover the id by string slice.
+
+On success, returns `{ ok: true, reviewId }` to the browser. The page redirects to `/flyer-builder/review-sent/` which shows the confirmation card (see **Frontend Pages**).
+
+### 7. Admin taps Approve in Telegram → atomic claim → GitHub commit
+
+- **Actor:** Admin tapping the inline button in the admin Telegram group.
+- **File:** `netlify/functions/telegram-webhook.js` (the `review:approve:<id>` and `review:reject:<id>` callback branches).
+- **Perimeter check:** The webhook verifies `X-Telegram-Bot-Api-Secret-Token` against `process.env.TELEGRAM_WEBHOOK_SECRET` with `crypto.timingSafeEqual`. Callback queries are dropped silently unless `callback_query.message.chat.id === process.env.TELEGRAM_CHAT_ID` (admin group only).
+- **Atomic claim (pending → processing):** Approve runs
+
+```js
+supabase.from('flyer_reviews')
+  .update({ status: 'processing' })
+  .eq('id', reviewId)
+  .eq('status', 'pending')
+  .select()
+  .single();
+```
+
+If the update returns no row, the handler silently 200s — the caller lost the race (Telegram redelivery, double-tap, or another admin already approved/rejected). Only the first caller proceeds.
+- **Download from Supabase Storage:** Creates fresh 5-minute signed URLs for `storage_path` and (if set) `og_storage_path`, fetches both, and base64-encodes them. If the OG download fails or `og_storage_path` is null, the main flyer bytes are reused as the OG payload.
+- **GitHub commit (target: `pritpnp/rsvp-automation`, branch `main`):** Auth header is `Authorization: Bearer ${process.env.GITHUB_PAT}`, content type `application/vnd.github.v3+json`. The zone is normalized by stripping `-santos` so Santos variants land at the canonical `satsang-sabha` path.
+
+  1. **Clear old flyers in the folder.** `GET https://api.github.com/repos/pritpnp/rsvp-automation/contents/flyers/<zone>` lists the directory; every entry matching `/\.(jpg|jpeg|png)$/i` is deleted by its own `file.url` with commit message `"Remove old flyer for <zone> before approved upload"` and the file's `sha`. This handles stale extension/casing variants left behind by older uploads.
+  2. **PUT `flyers/<zone>/flyer.jpg`** with body `{ message: "Upload flyer for <zone> via flyer builder (approved)", content: <base64> }` — no `sha` (the prior step guarantees no file exists at this path).
+  3. **PUT `flyers/<zone>/og.jpg`** with body `{ message: "Upload og.jpg for <zone> via flyer builder (approved)", content: <base64 og or flyer fallback> }`.
+
+  Commit author is whatever the `GITHUB_PAT` is provisioned as (the bot owner's account) — the bot does not override `committer`/`author`.
+
+- **State finalization:** `flyer_reviews.status` is updated to `'approved'`, then `[storage_path, og_storage_path].filter(Boolean)` is removed from Supabase Storage so the bucket stays empty between reviews. The admin's photo caption is replaced with `✅ Approved — <zoneLabel> flyer uploaded. GitHub Actions will process it now (~2 minutes).` and the inline keyboard is cleared.
+- **Rollback on failure:** Any thrown error in the approve branch triggers
+
+```js
+supabase.from('flyer_reviews')
+  .update({ status: 'pending' })
+  .eq('id', reviewId)
+  .eq('status', 'processing');
+```
+
+The `eq('status','processing')` guard makes the rollback safe against a concurrent reject — if another path moved the row to `rejected` while this one was failing, the rollback is a no-op. The admin sees `❌ Approval failed: <msg>` and can retry.
+- **Reject branch:** No atomic claim is needed (the row is being terminated). The handler updates `status` to `rejected`, removes both storage objects, edits the photo caption to `❌ Rejected — <zoneLabel> flyer was not approved.`, and sends a follow-up `sendMessage` containing `event_data.rejectUrl` as plain text (not Markdown) so the original manager can click straight back into the builder with all their inputs prefilled.
+
+### 8. Live site picks up the new flyer
+
+- **Actor:** GitHub Actions + Netlify.
+- **Files:** `.github/workflows/rsvp-automation.yml` → `scripts/automate.js`, then Netlify CI on `pritpnp/rsvp-automation`.
+- **What happens:** The two commits to `flyers/<zone>/flyer.jpg` and `flyers/<zone>/og.jpg` trigger the `rsvp-automation.yml` workflow on push. `scripts/automate.js` re-OCRs the new flyer with Claude, regenerates the per-zone `dist/<zone>/index.html` (and the `/np/<zone>/` no-preview mirror), rebuilds the `og.jpg` and `flyer.jpg` in `dist/`, and pushes `dist/` back to `main`. Netlify rebuilds and serves the new assets at `https://screvents.com/<zone>/flyer.jpg` (or `https://screvents.com/mandir/<n>/flyer.jpg` for the mandir zones). Total time from Approve tap to live site is typically ~2 minutes.
+
+### Related admin-portal functions
+
+These are not part of the builder flow per se, but they share the same `flyers/<zone>/` paths in `pritpnp/rsvp-automation` so it's worth pinning down what they do:
+
+- **`netlify/functions/manage-flyers.js`** — direct upload/delete bypass used from the admin portal's Flyers tab. POST takes `{ zone, imageBase64 }` and PUTs `flyers/<zone>/flyer.jpg` directly (no Telegram review). DELETE removes the same path. Both paths also DELETE `flyers/<zone>/og.jpg` so the next `automate.js` run regenerates a fresh OG image. Auth is `x-manager-token` + `permissions.upload_flyers` / `permissions.remove_flyers` (superadmin bypasses both perm checks). Commit messages are `"Upload flyer for <zone> via admin portal"` and `"Remove flyer for <zone> via admin portal"`.
+- **`netlify/functions/refresh-flyers.js`** — fires `workflow_dispatch` on `rsvp-automation.yml` with `{ force_all, zone_override }` to re-run OCR + page generation without committing any new flyer. Used after a flyer's metadata (event name, etc.) needs to be re-derived. Auth: `x-manager-token` + `permissions.refresh_flyers` (or superadmin).
+- **`netlify/functions/trigger-redeploy.js`** — superadmin-only `workflow_dispatch` on `rsvp-automation.yml` with no inputs, for the "force a fresh deploy" button.
+
+### Why CORS is open on `/flyer-builder/templates|preview-templates|fonts/*`
+
+`netlify.toml` adds three `[[headers]]` blocks that set `Access-Control-Allow-Origin = "*"`:
+
+```toml
+[[headers]]
+  for = "/flyer-builder/templates/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/preview-templates/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/fonts/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+```
+
+These three paths are static asset folders that the builder page loads via `<img>` / `Image()` and `@font-face`, then composites onto a `<canvas>` so `html2canvas` can rasterize the result to a JPEG (phase 4). Two practical reasons the wildcard is required:
+
+1. **Canvas tainting.** When the builder page is loaded standalone or proxied through a non-`screvents.com` origin (admin previews, local dev mirrors, Netlify deploy-preview URLs like `<branch>--<site>.netlify.app`), `drawImage()`-ing a cross-origin PNG into the canvas marks it as tainted and `toDataURL()` / `toBlob()` throws a `SecurityError`. `Access-Control-Allow-Origin: *` plus the page's `crossOrigin = 'anonymous'` attribute on those `Image` objects lets the bytes be read back out so we can produce `imageBase64` / `ogBase64`.
+2. **Cross-origin `@font-face`.** Browsers require CORS on font files loaded by `@font-face` (`AddingtonCF.otf`, `GothamRegular.ttf`, `AppleSDGothicNeoH.ttf`) any time the font request origin differs from the document origin. Without the wildcard, the fonts would silently fall back to the browser default and the rasterized JPEG would be off-brand.
+
+The rest of the site is same-origin so the open CORS is scoped to exactly the three asset directories that need it; nothing under `/admin`, `/.netlify/functions/*`, or the per-event pages relies on it.
+
+### End-to-end sequence diagram
+
+```
+Manager browser     create-builder-session       Supabase            verify-builder-session   review-flyer        Supabase Storage    flyer_reviews      Telegram Bot API   Admin (Telegram)   telegram-webhook    GitHub API           GH Actions / Netlify
+      │                       │                      │                        │                     │                     │                  │                    │                    │                    │                    │                        │
+  1.  │── POST /create-builder-session ─────────────►│ INSERT builder_sessions │                     │                     │                  │                    │                    │                    │                    │                        │
+      │◄──── { sessionId } ──────────────────────────│                        │                     │                     │                  │                    │                    │                    │                    │                        │
+      │                                                                                                                                                                                                                                                                                          │
+  2.  │── GET /flyer-builder/?session=<id> ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────►│                        │
+      │── POST /verify-builder-session ───────────────────────────────────────►│ SELECT builder_sessions ──────────────────│                  │                    │                    │                    │                    │                        │
+      │◄──── { isSuperadmin, allowedZones, allowAdvanced, managerId } ─────────│                                            │                  │                    │                    │                    │                    │                        │
+      │                                                                                                                                                                                                                                                                                          │
+  3.  │── GET /flyer-builder/templates|preview-templates|fonts/* (CORS *) ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────►│ (static assets)        │
+      │ (manager fills form, html2canvas → imageBase64 + ogBase64)                                                                                                                                                                                                                                │
+      │                                                                                                                                                                                                                                                                                          │
+  4-5.│── POST /review-flyer  (x-builder-session) ─────────────────────────────────────────────────────►│ check builder_sessions, allowedZones │                  │                    │                    │                    │                        │
+      │                                                                                                  │── upload <reviewId>/<zone>-flyer.jpg / -og.jpg ────►│                  │                    │                    │                    │                        │
+      │                                                                                                  │── INSERT flyer_reviews { status:'pending' } ──────────────────────────►│                  │                    │                    │                    │                        │
+  6.  │                                                                                                  │── createSignedUrl(1h) ───────────────────────────►│                  │                    │                    │                    │                        │
+      │                                                                                                  │── POST sendPhoto (caption + inline_keyboard) ──────────────────────────────────────────────►│                    │                    │                    │                        │
+      │◄──── { ok:true, reviewId } ───────────────────────────────────────────────────────────────────────│                                                  │                    │                    │                    │                    │                        │
+      │── redirect /flyer-builder/review-sent/                                                                                                                  │                    │                    │                    │                    │                        │
+      │                                                                                                                                                       │                    │                    │                    │                    │                        │
+  7.  │                                                                                                                                                       │                    │ admin taps ✅ ──►│ POST webhook (callback_query review:approve:<id>) │                        │
+      │                                                                                                                                                       │                    │                    │ verify TELEGRAM_WEBHOOK_SECRET                       │                        │
+      │                                                                                                                                                       │                    │                    │ UPDATE flyer_reviews SET status='processing' WHERE id=? AND status='pending' ─────►│
+      │                                                                                                                                                       │                    │                    │ createSignedUrl(5m) for storage_path + og_storage_path ──►│                       │
+      │                                                                                                                                                       │                    │                    │ GET flyers/<zone>/ list                                  │── list ──────────►│
+      │                                                                                                                                                       │                    │                    │ DELETE every .jpg/.jpeg/.png in folder                   │── delete loop ───►│
+      │                                                                                                                                                       │                    │                    │ PUT flyers/<zone>/flyer.jpg                              │── commit ────────►│
+      │                                                                                                                                                       │                    │                    │ PUT flyers/<zone>/og.jpg                                 │── commit ────────►│
+      │                                                                                                                                                       │                    │                    │ UPDATE flyer_reviews SET status='approved'               │                       │
+      │                                                                                                                                                       │                    │                    │ storage.remove([storage_path, og_storage_path])          │                       │
+      │                                                                                                                                                       │                    │                    │ editMessageCaption '✅ Approved …'                       │                       │
+      │                                                                                                                                                       │                    │                    │                                                          │                       │
+  8.  │                                                                                                                                                       │                    │                    │                                                          │                       │── on-push: automate.js OCR + dist rebuild + Netlify deploy → https://screvents.com/<zone>/flyer.jpg
+```
+
+---
+
+I have enough detail to write the section comprehensively.
+
+## 11. RSVP & VIP Pass Flow
+This section documents two parallel guest journeys that the project supports: the public **RSVP** flow (anyone with a flyer URL can submit a headcount) and the invite-only **VIP Pass** flow (a guest looks themselves up by name + phone and gets a personalized pass page). The two systems share authentication infrastructure (see Auth & Security) but write to different Supabase tables (`rsvps` vs `vip_passes` — see Supabase Schema) and are surfaced on different routes (see Frontend Pages and Event Routing).
+
+### Glossary
+
+- **Zone** — geographic congregation slug (`scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`, `mandir-1` … `mandir-5`). Drives URL routing, Telegram routing, and per-zone RSVP toggles.
+- **Event key** — the slug used in `deadlines.json` and `dist/<key>/index.html`. Para-sabha events use the zone slug directly (e.g. `scranton`); mandir events live under `mandir/<slot>`.
+- **RSVP** — a public, unauthenticated headcount submission (name + guest count). No login, no email collected.
+- **VIP Pass** — an invitee row pre-created by an admin in the `vip_passes` table. The invitee retrieves their pass URL by submitting **name + phone** at `/invite`.
+
+---
+
+### 1. RSVP Lifecycle (end-to-end)
+
+#### Step 1 — Inviter shares a link
+
+Two link shapes are in circulation:
+
+- **Canonical event link:** `https://screvents.com/<zone>` (e.g. `https://screvents.com/scranton`, `https://screvents.com/mandir/1`). Triggers the full Open Graph unfurl card with the flyer image.
+- **No-preview link:** `https://screvents.com/np/<zone>` — identical RSVP form, but the `<head>` strips every `og:*` / `twitter:*` meta tag so a paste into Telegram/iMessage does NOT auto-render a giant flyer card. See Frontend Pages › `npFolderPurpose`.
+
+There is no `/invite/<event-key>` route for *RSVP* — `/invite` is exclusively the VIP-pass lookup form (see §2 below).
+
+#### Step 2 — Page boot + admin toggle check
+
+The static page at `dist/<zone>/index.html` (generated by `scripts/automate.js` → `buildHtmlPage()` / `buildMandirPage()`) renders the flyer, event details from `deadlines.json`, and an RSVP card. On page load the inline JS calls:
+
+```http
+GET /.netlify/functions/rsvp-status
+```
+
+`netlify/functions/rsvp-status.js` returns a flat map of every zone with its enabled state, defaulting any missing row to `true`:
+
+```json
+{
+  "global": true,
+  "scranton": true,
+  "mountain-top": true,
+  "moosic": true,
+  "bloomsburg": true,
+  "satsang-sabha": true,
+  "mandir-1": true,
+  "mandir-2": true,
+  "mandir-3": true,
+  "mandir-4": true,
+  "mandir-5": true
+}
+```
+
+If `result[RSVP_ZONE] === false` or `result.global === false`, the page swaps the RSVP form for a "RSVPs are currently closed" panel. The page additionally compares the local clock against `deadlines.json` to decide whether to show the **late-RSVP** panel instead (see Step 8).
+
+#### Step 3 — User fills the form
+
+The RSVP card has exactly two fields plus a button:
+
+| Field | Type | Validation |
+|---|---|---|
+| Name | text | non-empty |
+| Guests | number (default 1) | clamped to ≥1, hard rejected at >100 |
+| Submit RSVP → | button | POSTs JSON |
+
+No email, no phone, no event-specific custom fields. `RSVP_ZONE` and `RSVP_EVENT_NAME` are baked into the page at build time by `automate.js`.
+
+#### Step 4 — Submit to `submit-rsvp`
+
+```http
+POST /.netlify/functions/submit-rsvp
+Content-Type: application/json
+
+{ "zone": "scranton", "name": "First Last", "guests": 3, "eventName": "Para Satsang Sabha" }
+```
+
+`netlify/functions/submit-rsvp.js` does, in order:
+
+1. Trims `zone`, `name`, `eventName`; clamps `guests` to `Math.max(1, parseInt(...) || 1)`.
+2. Re-reads `rsvp_settings` server-side for `['global', zone]` — a stale tab cannot bypass a closed event. If either is explicitly `false`, returns `403`.
+3. Generates `id = crypto.randomUUID()` and `submitted_at = new Date().toISOString()`.
+4. `INSERT` into `rsvps` with `{ id, zone, name, guests, event_name, submitted_at, sheet_row_id: id }`. `sheet_row_id` is set to the same UUID so cross-store lookups against the legacy Google Sheet work.
+5. Best-effort `spreadsheets.values.append` on the legacy `responses` sheet. Failure is logged but **not** propagated — Supabase is the source of truth.
+
+Response shapes:
+
+```json
+// 200
+{ "ok": true, "id": "<uuid>" }
+// 400 — bad input
+{ "error": "Name is required." }
+{ "error": "Guest count is too high — please contact the organizer directly." }
+// 403 — toggle off
+{ "error": "RSVPs are currently closed for this event." }
+// 500 — Supabase insert failure
+{ "error": "Could not save your RSVP. Please try again." }
+// 503 — settings read failure
+{ "error": "Could not verify RSVP status. Please try again in a moment." }
+```
+
+#### Step 5 — Confirmation; no email, no auto-pass
+
+On `200` the page hides the form and shows a thank-you panel. **The RSVP flow does NOT generate a VIP pass** — they are two separate systems. The only side effect outside `rsvps` is the Google Sheet append.
+
+#### Step 6 — Status / re-check
+
+There is no per-RSVP status endpoint for the guest. `rsvp-status.js` only exposes the per-zone open/closed toggle. To verify their RSVP, a guest either re-submits (no dedup — a second submit creates a second row) or contacts the organizer.
+
+#### Step 7 — Post-event archival
+
+`deadlines.json` (top-level, auto-committed by `.github/workflows/rsvp-automation.yml`) carries an `eventDate` field per zone in `YYYY-MM-DD`. The morning **after** an event:
+
+- Workflow: `.github/workflows/cleanup-past-rsvps.yml` (cron `0 8 * * *` and `0 9 * * *` — covers 4 AM America/New_York year-round across EDT/EST).
+- Script: `scripts/cleanup-past-rsvps.js`.
+
+For every zone whose `eventDate` is strictly less than today (America/New_York), the script:
+
+1. `SELECT id, zone, name, guests, event_name, submitted_at, sheet_row_id FROM rsvps WHERE zone IN (...)`.
+2. Early-exits silently if Supabase already has no rows for those zones.
+3. `UPSERT` into `rsvps_archive ON CONFLICT (id)` with `archived_at` and `event_date` appended. Archive-first — never delete before the upsert succeeds.
+4. `DELETE FROM rsvps WHERE zone IN (...)` — only after the archive succeeds. A failure here sends a "partial" Telegram alert noting the archive succeeded but live delete did not.
+5. Best-effort deletes the matching rows from the Google Sheet via `batchUpdate.deleteDimension` (sorted descending row indices).
+6. Posts a per-zone HTML summary to `TELEGRAM_CHAT_ID` (admin group).
+
+To **undo** an early/accidental archive, `netlify/functions/restore-rsvps.js` (superadmin password only — `x-admin-password`) walks `rsvps_archive`, optionally filtered by `{ zone, event_date }`, `UPSERT`s back into `rsvps` on conflict `id`, deduplicates against Sheet column E and re-appends the missing rows, then deletes the restored rows from the archive. Response shape:
+
+```json
+{ "ok": true, "restored": 42, "sheet_restored": 41, "zones": ["scranton"], "event_dates": ["2026-06-19"] }
+```
+
+#### Step 8 — Late RSVPs
+
+If the page boots and `deadlines.json[zone].deadline` is in the past, the standard RSVP form is hidden and a **late-RSVP** panel is shown instead. That panel POSTs to `netlify/functions/late-rsvp.js`:
+
+```http
+POST /.netlify/functions/late-rsvp
+{ "name": "First Last", "guests": 2, "zone": "scranton", "eventName": "Para Satsang Sabha" }
+```
+
+This function does **not** write to Supabase. It only routes a notification to two Telegram chats (deduplicated with a `Set`):
+
+- `TELEGRAM_CHAT_ID` (admin group)
+- `ZONE_CHAT_IDS[zone]` — one of `TELEGRAM_CHAT_ID_SCRANTON` / `_MOUNTAIN_TOP` / `_MOOSIC` / `_BLOOMSBURG`, or `TELEGRAM_CHAT_ID_MANDIR` for `satsang-sabha` and every `mandir-1..5` slot.
+
+Message body (HTML-escaped, sliced to 80 chars):
+
+```
+🔔 Late RSVP
+<eventName>
+<name> — <guests> guest(s)
+```
+
+Returns `{ "ok": true }`. Organizers then manually add the guest at the door or via the admin portal.
+
+#### Step 9 — Admin manages live RSVPs
+
+The `/admin` SPA (`public/admin/index.html`) drives the live list:
+
+- `GET /.netlify/functions/get-rsvps` → returns Supabase `rsvps` as source-of-truth, merged with Sheet-only legacy rows not yet backfilled. Response shape: `[{ zone, name, guests, submitted, powerapps_id }, …]` newest-first.
+- `PATCH /.netlify/functions/get-rsvps` with `{ powerapps_id, guests }` → dual-write: Supabase by `sheet_row_id` then Sheet column C.
+- `DELETE /.netlify/functions/get-rsvps` with `{ powerapps_id }` → dual-write: Supabase delete by `sheet_row_id` then Sheet `batchUpdate.deleteDimension`.
+- `GET /.netlify/functions/get-archived-rsvps?zone=&event_date=&q=` → reads `rsvps_archive` plus filter facets `{ zones, event_dates }`.
+- `POST /.netlify/functions/manage-rsvp` with `{ zone, enabled }` → superadmin-only `rsvp_settings` upsert; the `global` meta-zone short-circuits every zone.
+
+All four are gated by `x-admin-password` (superadmin shortcut) or `x-manager-token` mapped to `manager_sessions`, plus per-action permissions on the `managers.permissions` JSONB blob (`view_rsvps`, `edit_rsvps`, `delete_rsvps`). See Auth & Security.
+
+#### Step 10 — Periodic Telegram summaries
+
+Two scheduled workflows push headcount digests:
+
+| Script | Workflow | Cadence | Source | Audience |
+|---|---|---|---|---|
+| `scripts/summary.js` | `.github/workflows/rsvp-summary.yml` | cron `30 18 */3 * *` (every 3 days, 2:30 PM EDT) | Supabase `rsvps` | Per-zone Telegram group (or `TRIGGER_CHAT_ID` reply when invoked from a bot) |
+| `scripts/final-summary.js` | `.github/workflows/final-summary.yml` | cron `0 1 * * *` (9 PM EDT the evening before) | Google Sheet CSV export | `TELEGRAM_CHAT_ID` admin group, only for zones whose `eventDate` equals today (NY) |
+
+`summary.js` resolves the destination chat from a slug→env-var map (`TELEGRAM_CHAT_ID_SCRANTON`, etc., with `TELEGRAM_CHAT_ID_MANDIR` covering `satsang-sabha` + `mandir-1..5`). The `target_zone` dispatch input accepts `scranton | mountain-top | moosic | bloomsburg | mandir | all`; `mandir` expands to the six-zone mandir umbrella. `final-summary.js` is intentionally pinned to `TEST_MODE=false` in the workflow env. The Telegram bot's `/summary[suffix]` command (see Telegram Bot) dispatches the same workflow with `trigger_chat_id` so the reply lands in whichever chat ran the command.
+
+A parallel parity-check workflow, `.github/workflows/sync-check.yml` running `scripts/sync-check.js` every 10 minutes, diffs `rsvps` against the Sheet and only alerts on drift — silent when in sync.
+
+---
+
+### 2. VIP Pass Model
+
+#### What "VIP" means here
+
+A VIP pass is **not** an upgrade tier or seat assignment — it is a pre-authorized, named, single-guest invitation to a specific event in the `events` table. Admins create passes ahead of time (typically by bulk-uploading a guest list with phone numbers); each invitee then visits `/invite`, identifies themselves by name + phone, and gets a personalized pass URL at `/vip/<pass-id>` that serves as their entry token. The badge is a stylized digital ticket card rendered live by `public/vip/index.html` (no static pass image is generated or stored — see "Pass image" below).
+
+A VIP pass is **completely independent** of an RSVP submission. Holding a pass does not register the holder as RSVPed; submitting an RSVP does not create a pass. The two stores (`vip_passes` and `rsvps`) never reference each other.
+
+#### Data model recap
+
+See Supabase Schema for full column lists. The relevant tables:
+
+- `events` — `id, event_name, start_date, end_date, start_time, end_time, max_passes, notes`. `max_passes` defaults to 50.
+- `vip_passes` — `id, guest_name, phone, phone_normalized, event_id (FK), event_name, event_date, created_at`. `phone_normalized` is the 10-digit US-only lookup key.
+- `invite_lookup_attempts` — append-only audit log of every `/invite` POST (success or fail, IP, capped 100-char name, capped 30-char phone, `attempted_at`).
+- `invite_ip_whitelist` — IPs that bypass the rate limit (`ip` PK, `note`, `added_by`, `added_at`).
+
+#### Admin creates passes — `netlify/functions/admin-passes.js`
+
+Single-pass create:
+
+```http
+POST /.netlify/functions/admin-passes
+x-manager-token: <token>     (or x-admin-password: <pw>)
+Content-Type: application/json
+
+{ "guest_name": "First Last", "phone": "(570) 555-0123", "event_id": "<uuid>" }
+```
+
+Batch create:
+
+```json
+{ "event_id": "<uuid>", "guests": [
+  { "name": "Alice", "phone": "5705550101" },
+  { "name": "Bob",   "phone": "5705550102" }
+] }
+```
+
+Server-side enforcement before insert:
+
+1. `normalizePhone()` strips non-digits, drops a leading `1`, requires exactly 10 digits.
+2. Per-event uniqueness — a phone may only have ONE pass per `event_id`, but the same phone may hold passes across different events.
+3. Batch dedup within the upload (rejects duplicate phones inside the same payload).
+4. `count(*) FROM vip_passes WHERE event_id = ?` is compared against `events.max_passes`. Batch insert is rejected if `guests.length > remaining`.
+5. `event_date` is denormalized at insert time: `start_date` if `start_date == end_date`, else `"<start> – <end>"`.
+
+Permissions matrix (per `managers.permissions`):
+
+| Method | Permission | Notes |
+|---|---|---|
+| `GET ?event_id=` | `view_passes` | embeds `events(event_name, start_date)`; sorted by `created_at desc` |
+| `POST` (single or batch) | `create_delete_passes` | |
+| `PATCH` `{ id, guest_name?, phone? }` | `edit_passes` | re-checks per-event phone uniqueness |
+| `DELETE` `{ id }` or `{ ids: [...] }` | `create_delete_passes` | hard delete |
+
+Superadmin (via `x-admin-password` or a `manager_sessions` row with `manager_id IS NULL`) gets all four permissions implicitly.
+
+Response shapes:
+
+```json
+// POST single
+{ "id": "<uuid>", "guest_name": "First Last", "phone": "(570) 555-0123",
+  "phone_normalized": "5705550123", "event_id": "<uuid>",
+  "event_name": "…", "event_date": "2026-06-19", "created_at": "…" }
+
+// POST batch
+{ "created": 2, "passes": [ { ...pass1 }, { ...pass2 } ] }
+
+// DELETE single
+{ "success": true }
+
+// DELETE batch
+{ "deleted": 2 }
+```
+
+#### Guest retrieves pass — `/invite` → `lookup-pass.js`
+
+The guest opens `https://screvents.com/invite` (`public/invite/index.html` → routed via `netlify.toml` `/invite/*` → `/invite/index.html`). The form has two inputs (Full Name, Phone Number) and POSTs:
+
+```http
+POST /.netlify/functions/lookup-pass
+Content-Type: application/json
+
+{ "name": "First Last", "phone": "(570) 555-0123" }
+```
+
+`netlify/functions/lookup-pass.js`:
+
+1. Resolves the caller's IP from `x-nf-client-connection-ip` → `x-forwarded-for[0]` → `client-ip` → `'unknown'`.
+2. If IP is known and present in `invite_ip_whitelist`, skip rate-limit. Otherwise count failed attempts in `invite_lookup_attempts` for this IP in the last **60 minutes**; if `>= 5`, return `429` **without logging the blocked attempt** (so the window cannot be self-extended).
+3. `SELECT id, guest_name, event_id, created_at FROM vip_passes WHERE phone_normalized = ? ORDER BY created_at DESC` — phone is the primary key here; multiple passes may match if the guest is on lists for several events.
+4. Loose name match (`namesMatch`): exact, substring either direction, or any ≥2-char token overlap on whitespace-split tokens. Handles "First" vs "First Last", common nicknames, mixed case.
+5. Fire-and-forget `INSERT` into `invite_lookup_attempts` (success or fail, capped lengths) — does NOT block the response.
+
+Response shapes:
+
+```json
+// 200 — success, browser redirects to /vip/<id>
+{ "id": "<pass-uuid>" }
+
+// 400 — missing input
+{ "error": "Name and phone are required" }
+
+// 404 — no name+phone match
+{ "error": "No invitation found for that name and phone." }
+
+// 429 — rate-limited
+{ "error": "Too many failed attempts. Please contact the event organizer to verify your invitation." }
+
+// 500 — DB error
+{ "error": "Lookup failed" }
+```
+
+On 200 the browser does `window.location = "/vip/" + id`.
+
+#### Pass page — `/vip/<id>` → `get-pass.js`
+
+`netlify.toml` rewrites `/vip/*` to `/vip/index.html`. The page parses `id` from `window.location.pathname` (last segment) and calls:
+
+```http
+GET /.netlify/functions/get-pass?id=<pass-uuid>
+```
+
+`netlify/functions/get-pass.js`:
+
+```js
+SELECT id, guest_name, event_name, event_date FROM vip_passes WHERE id = $1
+```
+
+Response:
+
+```json
+// 200
+{ "id": "<uuid>", "guest_name": "First Last", "event_name": "…", "event_date": "2026-06-19" }
+// 400
+{ "error": "Missing id" }
+// 404
+{ "error": "Pass not found" }
+```
+
+The page then renders a ticket-style card (perforated notch design) with the guest name, event name, event date, and the pass id (uppercased) printed at the bottom of the notch. **The pass ID itself IS the credential** — anyone with the UUID can view the page, so the URL should be treated like a bearer token. The unguessability of a v4 UUID is what makes this safe.
+
+#### Pass image — there is none
+
+There is **no rendered pass JPEG/PNG generated or stored**. `vip_passes` has no image column. Supabase Storage has no per-pass bucket (the only image bucket is `flyer-reviews`, used by the flyer builder approval flow — see Flyer Builder Flow). The "badge" is purely the live HTML at `/vip/<id>`; if a guest wants something portable they screenshot the page. This intentionally minimizes attack surface — the server hands out only the four denormalized fields above and never an artifact that could be re-issued or forged offline.
+
+---
+
+### 3. Rate Limiting (`/invite` lookups)
+
+Hard-coded constants in `netlify/functions/lookup-pass.js`:
+
+```js
+const RATE_LIMIT_WINDOW_MIN = 60;
+const RATE_LIMIT_MAX_FAILS  = 5;
+```
+
+A failed lookup (no matching pass for that phone, or a phone match where every `guest_name` fails `namesMatch`) is `INSERT`ed into `invite_lookup_attempts`. Successful lookups are also logged (with `success: true`) but **only failures count toward the 5-per-60-min window**:
+
+```sql
+SELECT count(*) FROM invite_lookup_attempts
+WHERE ip = ? AND success = false AND attempted_at >= now() - interval '60 minutes';
+```
+
+If `count >= 5`, the function returns `429` and crucially **does not** insert a new attempt row — otherwise repeatedly hitting the endpoint would forever push the window forward. The block clears 60 minutes after the most recent counted failure.
+
+Whitelisted IPs (rows in `invite_ip_whitelist`) skip the count entirely. IPs that resolve to `'unknown'` (rare, behind a proxy that strips every header) skip BOTH the whitelist check and the rate-limit count, because a global `'unknown'` bucket would unfairly block real users.
+
+#### Admin surface — `admin-rate-limit.js`
+
+The `/admin` SPA has an "Invite Lookup Security" card that drives `netlify/functions/admin-rate-limit.js` (superadmin only):
+
+```http
+GET    /.netlify/functions/admin-rate-limit
+POST   /.netlify/functions/admin-rate-limit   { "ip": "1.2.3.4", "note": "team device" }
+DELETE /.netlify/functions/admin-rate-limit   { "ip": "1.2.3.4" }
+```
+
+`GET` returns the full security state:
+
+```json
+{
+  "threshold": 5,
+  "window_minutes": 60,
+  "blocked":   [ { "ip": "...", "fail_count": 7, "last_attempt": "...", "last_name": "...", "last_phone": "..." } ],
+  "watching":  [ { ...same shape, fail_count >= 3 but < 5 } ],
+  "whitelist": [ { "ip": "...", "note": "...", "added_by": "superadmin", "added_at": "..." } ],
+  "recent":    [ /* last 100 attempts, newest first */ ]
+}
+```
+
+`blocked` and `watching` are computed in JS over the 60-min window with whitelisted IPs filtered out. The two write methods upsert and delete on `invite_ip_whitelist` (PK `ip`). `added_by` is always written as `"superadmin"` (both the password and superadmin-session auth paths collapse to the same label).
+
+#### Note: no rate limit on admin login
+
+`netlify/functions/manager-auth.js` (the admin/manager login endpoint) has **no IP throttle and no failed-attempt counter**. The rate-limit table is exclusively for the public `/invite` lookup. Admin login protection relies on the long, server-stored `ADMIN_PASSWORD` and on bcrypt-hashed manager passwords (see Auth & Security).
+
+---
+
+### 4. End-to-end sequence diagrams
+
+#### RSVP path
+
+```
+guest browser              page (static)             submit-rsvp.js         Supabase
+     │   GET /scranton          │                          │                    │
+     │ ─────────────────────────▶                          │                    │
+     │ ◀─── HTML + flyer ───────│                          │                    │
+     │                          │ GET rsvp-status         │                    │
+     │                          │ ────────────────────────▶ SELECT rsvp_settings│
+     │                          │ ◀────── { …toggles } ────│                    │
+     │ ─── click Submit RSVP ──▶│                          │                    │
+     │                          │ POST submit-rsvp         │                    │
+     │                          │ ────────────────────────▶ SELECT rsvp_settings│
+     │                          │                          │ INSERT rsvps        │
+     │                          │                          │ (best-effort)
+     │                          │                          │  Sheet append      │
+     │                          │ ◀────── { ok, id } ──────│                    │
+     │ ◀── thank-you panel ─────│                          │                    │
+```
+
+#### VIP pass path
+
+```
+guest browser           /invite page          lookup-pass.js         Supabase
+     │ GET /invite           │                       │                   │
+     │ ────────────────────▶ │                       │                   │
+     │ ◀───── form HTML ─────│                       │                   │
+     │ fill name+phone, ─────▶                       │                   │
+     │ submit              POST lookup-pass          │                   │
+     │                     ─────────────────────────▶ SELECT invite_ip_whitelist
+     │                                              │ SELECT count(*) invite_lookup_attempts
+     │                                              │ SELECT vip_passes
+     │                                              │      WHERE phone_normalized = ?
+     │                                              │ namesMatch() in JS
+     │                                              │ (async) INSERT invite_lookup_attempts
+     │                     ◀────── { id } ──────────│                   │
+     │ window.location = /vip/<id>                   │                   │
+     │ GET /vip/<id>         │                       │                   │
+     │ ────────────────────▶ vip/index.html parses id, GET get-pass?id=  │
+     │                                              │ ─────────────────▶ SELECT vip_passes
+     │                                              │ ◀──── pass row ───│
+     │ ◀── rendered ticket card ─────────────────────                    │
+```
+
+---
+
+I now have enough verified detail to write the section.
+
+## 12. Authentication & Access Control
+This project has **nine distinct auth surfaces**, each with its own credential, transport, and enforcement point. The frontend never holds a Supabase key, never holds `ADMIN_PASSWORD`, and never holds `GITHUB_PAT` — every privileged action is brokered through a Netlify function or a GitHub Actions workflow that holds the secret server-side.
+
+### Auth surface matrix
+
+| Surface | Who/what calls it | Credential | Where the credential lives | Enforcement code |
+| --- | --- | --- | --- | --- |
+| Public RSVP submit | Any browser on a zone page | None (server-enforced toggle only) | n/a | `netlify/functions/submit-rsvp.js` |
+| Public VIP lookup | Any browser on `/invite` | Name + phone, IP-rate-limited | n/a | `netlify/functions/lookup-pass.js` |
+| Public VIP pass view | Anyone with the URL | Unguessable `vip_passes.id` UUID | URL path | `netlify/functions/get-pass.js` |
+| Superadmin (legacy header path) | Server-to-server only | `x-admin-password: $ADMIN_PASSWORD` | Netlify env `ADMIN_PASSWORD` | Per-function checks |
+| Superadmin (UI path) | `/admin` SPA | Opaque 64-hex session token, `manager_id IS NULL` | Browser `localStorage.admin_token` | `manager-auth.js` issues; every function re-verifies |
+| Manager (UI path) | `/admin` SPA | Opaque 64-hex session token mapped to `managers` row | Browser `localStorage.admin_token` | `manager-auth.js` issues; per-function permission gate |
+| Builder session | `/flyer-builder` SPA | Short-lived `builder_sessions.id` UUID | URL `?session=…` then in-memory | `create-builder-session.js` / `verify-builder-session.js` / `review-flyer.js` |
+| Telegram webhook | Telegram servers | `X-Telegram-Bot-Api-Secret-Token: $TELEGRAM_WEBHOOK_SECRET` | Netlify env + Telegram's `setWebhook` registration | `telegram-webhook.js` constant-time compare |
+| GitHub REST (from Netlify) | Functions that commit flyers / dispatch workflows | `Authorization: Bearer $GITHUB_PAT` | Netlify env `GITHUB_PAT` | `manage-flyers.js`, `refresh-flyers.js`, `trigger-redeploy.js`, `telegram-webhook.js` |
+| GitHub `git push` (from Actions) | `scripts/automate.js` in CI | Ambient `GITHUB_TOKEN` written into `http.extraheader` by `actions/checkout@v5` | GitHub-managed, never exposed | `.github/workflows/rsvp-automation.yml` `permissions: contents: write` |
+| Supabase (all reads/writes) | All functions + scripts | `SUPABASE_SERVICE_KEY` (service_role, bypasses RLS) | Netlify env + GitHub Secrets | Every server file's `createClient()` call |
+
+### 1. Public — anonymous RSVP submission
+
+There is no auth on the RSVP path. Anyone with a zone URL can POST to `/.netlify/functions/submit-rsvp` with `{ zone, name, eventName, guests }`. There is no captcha, no IP rate limit, no honeypot, and no bot challenge. The only protections are server-side:
+
+- **Toggle enforcement.** `submit-rsvp.js` (lines 63–77) reads the `rsvp_settings` row for both `'global'` and the requested `zone` in one query. If either row exists with `enabled: false` the request is rejected `403 "RSVPs are currently closed for this event."` This prevents a stale browser tab from slipping past a manager turning RSVPs off (see Netlify Functions / `manage-rsvp.js`).
+- **Input bounds.** `guests` is clamped to `Math.max(1, parseInt(...))` and hard-rejected over 100. `name` and `zone` are trimmed and required.
+- **No phone, no email, no IP logged.** Submissions write `{id, zone, name, guests, event_name, submitted_at, sheet_row_id}` to Supabase `rsvps`, then best-effort to the Google Sheet.
+
+The same applies to the late-RSVP path (`netlify/functions/late-rsvp.js`) — public POST, length-capped, only enforces that `zone` is in the hard-coded `ZONE_CHAT_IDS` keyset before relaying to Telegram.
+
+### 2. Public VIP lookup — name + phone with IP rate limit
+
+`/.netlify/functions/lookup-pass.js` is the only public endpoint that has anti-abuse plumbing:
+
+```js
+// netlify/functions/lookup-pass.js
+const RATE_LIMIT_WINDOW_MIN = 60;
+const RATE_LIMIT_MAX_FAILS  = 5;
+
+function getClientIp(event) {
+  return event.headers['x-nf-client-connection-ip']
+      || (event.headers['x-forwarded-for'] || '').split(',')[0].trim()
+      || event.headers['client-ip']
+      || 'unknown';
+}
+```
+
+Each failed lookup is fire-and-forget inserted into `invite_lookup_attempts`. Before answering, the function counts failed rows for the IP in the last 60 minutes and rejects with `429` if the count reached 5 — unless the IP is in `invite_ip_whitelist`. Successful lookups don't count toward the limit, and once an IP is blocked further attempts are NOT logged again so the sliding window can't be extended.
+
+The rate-limit dashboard at `/.netlify/functions/admin-rate-limit` (superadmin-only, see below) lets an operator inspect blocked IPs, the "watching" list (under threshold), the recent activity feed, and add/remove entries in `invite_ip_whitelist`.
+
+### 3. Superadmin password — `ADMIN_PASSWORD`
+
+A single env var, server-side only. Two server-side validation paths exist:
+
+**(a) `x-admin-password` header** — accepted by `admin-passes.js`, `admin-rate-limit.js`, `backfill-rsvps.js`, `get-archived-rsvps.js`, `get-rsvps.js`, `manage-rsvp.js`, `restore-rsvps.js`, `superadmin-events.js`, `superadmin-managers.js`. Each does a literal `=== process.env.ADMIN_PASSWORD` compare, e.g. `admin-rate-limit.js` lines 12–14:
+
+```js
+const adminPassword = event.headers['x-admin-password'];
+if (adminPassword === process.env.ADMIN_PASSWORD) {
+  return { ok: true, username: 'superadmin' };
+}
+```
+
+This path is **not used by the shipped UI** — `grep -rn "x-admin-password" public dist` returns nothing. It exists for server-to-server / curl operations (e.g. `backfill-rsvps.js` and `restore-rsvps.js` are explicitly password-only).
+
+**(b) Login path through `/login`** — the UI submits `{ username: 'admin', password }` to `/.netlify/functions/manager-auth/login`. `manager-auth.js` lines 30–46 compares plaintext, and on match mints a `crypto.randomBytes(32).toString('hex')` token, inserts a row into `manager_sessions` with `manager_id = null` (the marker for superadmin) and a 24-hour `expires_at`, then returns `{ token, username:'admin', role:'superadmin', permissions: SUPERADMIN_PERMISSIONS }`.
+
+**No login rate limit.** `manager-auth.js` has no IP throttle, no failed-attempt counter, no lockout. The 5-fails-per-60-min limiter belongs to `lookup-pass.js`, not to admin login. Pick a long random `ADMIN_PASSWORD` (e.g. `openssl rand -hex 32`).
+
+**`/superadmin` is just a 302** to `/admin` (`netlify.toml` lines 38–41). There is no distinct page or function suite — the role is a flag, the UI conditionally renders extra tabs (Managers, Events, Flyers full controls, Invite Lookup Security) when `localStorage.admin_role === 'superadmin'`, and the functions re-check server-side.
+
+### 4. Manager accounts — `managers` table + bcrypt
+
+Row schema in `managers` (see Supabase Schema):
+
+```
+id (uuid PK) | username (text, lowercased+trimmed, unique)
+password_hash (text, bcryptjs cost 10) | permissions (jsonb) | created_at
+```
+
+CRUD lives in `netlify/functions/superadmin-managers.js`, superadmin-gated. Create (line 50) and PATCH (line 70) hash via `bcrypt.hash(password, 10)`. DELETE pre-deletes `manager_sessions WHERE manager_id = id` before deleting the row (FKs are not `ON DELETE CASCADE`).
+
+**Login** in `manager-auth.js` lines 49–70:
+
+```js
+const { data: manager } = await supabase
+  .from('managers')
+  .select('id, username, password_hash, permissions')
+  .eq('username', username.toLowerCase().trim())
+  .single();
+// ...
+const valid = await bcrypt.compare(password, manager.password_hash);
+// ...
+const token = crypto.randomBytes(32).toString('hex');
+const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+await supabase.from('manager_sessions').insert([{ manager_id: manager.id, token, expires_at }]);
+```
+
+Failure returns the same `"Invalid username or password"` string for missing user and bad password — no user-enumeration leak.
+
+**Session validation on subsequent calls** — the token is sent in a custom header `x-manager-token`. The browser stores it in `localStorage` (see `public/admin/index.html` lines 523–525, 645):
+
+```js
+let sessionToken = localStorage.getItem('admin_token') || '';
+// ...
+function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
+```
+
+Every protected function repeats the same lookup:
+
+```js
+const token = event.headers['x-manager-token'];
+const { data: session } = await supabase
+  .from('manager_sessions')
+  .select('manager_id, expires_at')
+  .eq('token', token)
+  .single();
+if (!session || new Date(session.expires_at) < new Date()) return 401;
+const isSuperadmin = !session.manager_id;
+```
+
+If `isSuperadmin`, the function grants everything. Otherwise it SELECTs the `managers` row by `session.manager_id` and gates each method against the `permissions` JSON keys (`view_rsvps`, `edit_rsvps`, `delete_rsvps`, `view_passes`, `create_delete_passes`, `edit_passes`, `manage_managers`, `manage_events`, `upload_flyers`, `remove_flyers`, `refresh_flyers`, `flyer_builder`, `flyer_builder_advanced`, `flyer_zones[]`).
+
+**Token shape.** 64-char hex random, opaque, **not a JWT**, all state in DB. Stored in `localStorage` (so visible to any XSS in `/admin`), not a cookie — there is no CSRF surface but also no `HttpOnly`/`SameSite` defense in depth. TTL is 24 hours, no sliding refresh, no refresh endpoint; the user must re-login.
+
+**Logout** POSTs the token to `/.netlify/functions/manager-auth/logout`, which hard-deletes the row.
+
+### 5. Builder sessions — separate, short-lived, URL-bearer
+
+The `/flyer-builder` page authenticates with a different token type entirely. Rationale: the builder is opened via a URL query parameter (`/flyer-builder/?session=<uuid>`) and the long-lived `admin_token` must never be exposed in a URL (browser history, referer headers, screenshots). So the admin portal exchanges the manager token for a narrowed-scope, 30-minute ticket:
+
+```js
+// netlify/functions/create-builder-session.js
+const token = event.headers['x-manager-token'];          // long-lived manager session
+// ...verify manager_sessions row, look up manager.permissions...
+const { data: builderSession } = await supabase
+  .from('builder_sessions')
+  .insert({
+    manager_id: managerId,
+    is_superadmin: isSuperadmin,
+    allowed_zones: allowedZones,           // intersected with manager.permissions.flyer_zones
+    allow_advanced: allowAdvanced,         // manager.permissions.flyer_builder_advanced
+    expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    used: false,
+  })
+  .select('id').single();
+return { sessionId: builderSession.id };
+```
+
+The builder page POSTs the UUID to `verify-builder-session.js`, which returns `{ ok, isSuperadmin, allowedZones, allowAdvanced, managerId }` — no header check, possession of the UUID is the credential. The same UUID is sent as the `x-builder-session` header to `review-flyer.js`, which re-verifies the row, checks `expires_at`, and re-enforces the zone allowlist (after stripping a `-santos` suffix from the zone).
+
+The `used` column is initialized `false` but never flipped — within the 30-minute window the session is reusable, not strictly one-shot.
+
+### 6. Telegram webhook — secret token + admin chat gate
+
+`netlify/functions/telegram-webhook.js` is registered with Telegram via `setWebhook` with the `secret_token` parameter. Telegram then sends that string back in the `X-Telegram-Bot-Api-Secret-Token` header on every callback. The function does a **constant-time** compare (lines 5–11, 42–48):
+
+```js
+const constantTimeEqual = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const aBuf = Buffer.from(a); const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+};
+// ...
+const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+const providedSecret =
+  (event.headers && (event.headers['x-telegram-bot-api-secret-token']
+                  || event.headers['X-Telegram-Bot-Api-Secret-Token'])) || '';
+if (!expectedSecret || !constantTimeEqual(providedSecret, expectedSecret)) {
+  return { statusCode: 200, body: '' };  // silent — no probe signal
+}
+```
+
+Mismatches and non-POSTs both return `200` with empty body so attackers can't fingerprint the endpoint. Beyond the secret, most admin commands (`/uploadflyer`, `/removeflyer`, `/cancel`, `/refreshall`, all `callback_query` handling including `review:approve` / `review:reject`) further check `chatId === process.env.TELEGRAM_CHAT_ID` so even a leaked secret can't drive admin actions from a non-admin chat.
+
+To rotate the secret, generate a new random string (`openssl rand -hex 32`), update Netlify env `TELEGRAM_WEBHOOK_SECRET`, then re-call Telegram's `setWebhook` API with the matching `secret_token` parameter.
+
+### 7. GitHub REST calls from Netlify functions — `GITHUB_PAT`
+
+Functions that commit flyer files or dispatch GitHub Actions workflows authenticate as `Authorization: Bearer ${process.env.GITHUB_PAT}` against `https://api.github.com`:
+
+- `netlify/functions/manage-flyers.js` — `PUT`/`DELETE` `/repos/pritpnp/rsvp-automation/contents/flyers/<zone>/flyer.jpg` (and stale `og.jpg`).
+- `netlify/functions/refresh-flyers.js` — `POST` `/repos/pritpnp/rsvp-automation/actions/workflows/rsvp-automation.yml/dispatches` with `force_all` / `zone_override` inputs.
+- `netlify/functions/trigger-redeploy.js` — same workflow dispatch, no inputs.
+- `netlify/functions/telegram-webhook.js` — on `review:approve`, lists `flyers/<zone>/`, deletes any existing `.jpg`/`.jpeg`/`.png`, then `PUT`s `flyers/<zone>/flyer.jpg` and `og.jpg`. On `/refreshall` and `/summary`, dispatches `rsvp-automation.yml` and `rsvp-summary.yml`.
+
+**Scopes required.**
+- **Classic PAT:** `repo` (full — needed for contents write on the private `pritpnp/rsvp-automation` repo) and `workflow` (needed for `workflow_dispatch`).
+- **Fine-grained PAT** scoped to `pritpnp/rsvp-automation`: `Contents: Read and write`, `Actions: Read and write`, `Metadata: Read`.
+
+The PAT is server-side only — never exposed to the browser. Admin UI buttons call the Netlify function, which holds the secret.
+
+### 8. GitHub `git push` from Actions — ambient `GITHUB_TOKEN`
+
+`scripts/automate.js` pushes the regenerated `dist/` back to `main` at the end of every workflow run. It does **not** use `GITHUB_PAT`. Instead it relies on the token that `actions/checkout@v5` already wrote into `http.extraheader`:
+
+```js
+// scripts/automate.js — push step
+run('git config user.email "actions@github.com"');
+run('git config user.name "GitHub Actions"');
+// ...
+// Push via the ambient origin — actions/checkout@v5 already wrote
+// `http.https://github.com/.extraheader: AUTHORIZATION: basic …` using
+// the workflow's GITHUB_TOKEN (granted write access via the workflow's
+// permissions: contents: write block).
+run('git push origin HEAD:main');
+```
+
+Write access is granted by the workflow's job-level permissions block in `.github/workflows/rsvp-automation.yml` (lines 32–33):
+
+```yaml
+permissions:
+  contents: write
+```
+
+Without that, `actions/checkout@v5` would inject a read-only token and the push would fail with `403`. The `deadlines.json` commit step in the same workflow uses the same ambient credential and retries up to 3 times with `git pull --rebase --autostash` to survive a remote that moved during the run.
+
+### 9. Supabase — service-role everywhere
+
+Every server-side file creates a Supabase client with `SUPABASE_SERVICE_KEY` (service_role). This key **bypasses Row Level Security**. The frontend never holds Supabase credentials and never calls Supabase directly — all access is mediated by Netlify functions or by GitHub Actions scripts running with the service key from repo secrets.
+
+```js
+// pattern repeated in every protected function and script
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+```
+
+A handful of admin-side files (`admin-passes.js`, `manager-auth.js`, `get-archived-rsvps.js`, `superadmin-events.js`, `superadmin-managers.js`) have a defensive `process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY` fallback, but the SQL they run (INSERT `manager_sessions`, UPDATE `events`, SELECT `password_hash`) requires service_role in practice — the anon fallback is effectively dead code. `get-rsvps.js` explicitly errors if `SUPABASE_SERVICE_KEY` is unset, confirming the design.
+
+**Security implication.** Because the database has no RLS protection from the application's perspective, **every authorization check has to live in the function code.** A bug that forgets to verify `x-manager-token`, forgets to check `permissions.delete_rsvps`, or forgets the `manager_id IS NULL` superadmin check is functionally equivalent to a full DB compromise for the affected table. Audit accordingly:
+
+- All write paths and all permission gates are in `netlify/functions/*.js` — read each one before adding new tables or roles.
+- The browser is never trusted: `public/admin/index.html` does role-based UI rendering for UX only, and every function re-verifies the session row + permissions server-side.
+- Public endpoints (`submit-rsvp.js`, `lookup-pass.js`, `get-pass.js`, `rsvp-status.js`, `late-rsvp.js`, `verify-builder-session.js`) all use the service key too — the perimeter is the function logic, not the database.
+
+If you ever want to harden this, add Supabase RLS policies as defense-in-depth, but expect to keep the service-key path because almost every endpoint needs to write to tables a non-authenticated user shouldn't see.
+
+### CORS — wide open, intentional for assets
+
+`netlify.toml` adds three explicit `Access-Control-Allow-Origin: *` header blocks, scoped to the flyer-builder asset folders only:
+
+```toml
+[[headers]]
+  for = "/flyer-builder/templates/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/preview-templates/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/fonts/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+```
+
+The builder fetches these as same-origin from `screvents.com`, so in practice the headers are defensive — they exist so the canvas-based flyer composition can `drawImage` template PNGs and `@font-face` can load `.ttf`/`.otf` faces without being tainted or blocked if the page is ever opened from a sibling origin (e.g. a Netlify preview deploy URL).
+
+Every Netlify function reviewed also sets `Access-Control-Allow-Origin: *` in its response headers and `200`s any `OPTIONS` preflight. There is no `Access-Control-Allow-Credentials`, no per-origin allowlist, and no narrowing of allowed methods/headers. Because sessions live in `localStorage` (not cookies) and there is no cookie-based auth, classical CSRF is not the threat model — but the wide-open CORS does mean credential-stuffing scripts can be hosted on any origin and posted at `/.netlify/functions/manager-auth/login`. Combined with the absence of login rate-limiting (see §3), the only practical defenses are a strong `ADMIN_PASSWORD` and strong manager passwords; consider adding an IP-based throttle to `manager-auth.js` if abuse appears.
+
+---
+
+Good — np/scranton has zero `og:` references (confirming OG-strip). Now I'll write the section.
+
+## 13. Per-Event Configuration & Deadlines
+The SCREvents site is a multi-tenant static site: every event lives in its own URL slug, has its own RSVP form, its own flyer, and its own Telegram zone group. The single source of truth that wires a slug to a date, a deadline, a display name, a venue, and the per-event landing page is `deadlines.json` at the repo root. The static pages under `dist/` are built around that file by `scripts/automate.js` (see Automation Scripts / Workflows).
+
+### Event Inventory
+
+The 8 keys currently live in `deadlines.json` and back the routes below. The `Has eventDate?` column reflects whether `deadlines.json[<key>].eventDate` is populated — empty for events whose calendar year is not pinned in that field.
+
+| Key | Display Name (`eventName`) | Public URL | `dist/` assets | `np/` mirror | Telegram zone chat | `deadline` populated | `eventDate` populated |
+|---|---|---|---|---|---|---|---|
+| `scranton` | Para Satsang Sabha | `https://screvents.com/scranton` | `dist/scranton/{index.html, flyer.jpg, og.jpg}` | `dist/np/scranton/index.html` | `TELEGRAM_CHAT_ID_SCRANTON` | yes | yes |
+| `mountain-top` | Para Satsang Sabha | `https://screvents.com/mountain-top` | `dist/mountain-top/{index.html, flyer.jpg, og.jpg}` | `dist/np/mountain-top/index.html` | `TELEGRAM_CHAT_ID_MOUNTAIN_TOP` | yes | yes |
+| `moosic` | Para Satsang Sabha | `https://screvents.com/moosic` | `dist/moosic/{index.html, flyer.jpg, og.jpg}` | `dist/np/moosic/index.html` | `TELEGRAM_CHAT_ID_MOOSIC` | yes | yes |
+| `bloomsburg` | Para Satsang Sabha | `https://screvents.com/bloomsburg` | `dist/bloomsburg/{index.html, flyer.jpg, og.jpg}` | `dist/np/bloomsburg/index.html` | `TELEGRAM_CHAT_ID_BLOOMSBURG` | yes | yes |
+| `satsang-sabha` | Satsang Sabha | `https://screvents.com/satsang-sabha` | `dist/satsang-sabha/{index.html, flyer.jpg, og.jpg}` | `dist/np/satsang-sabha/index.html` | `TELEGRAM_CHAT_ID_MANDIR` | no (`""`) | yes |
+| `mandir-1` | Mountain Top July 4th Picnic | `https://screvents.com/mandir/1` | `dist/mandir/1/{index.html, flyer.jpg, og.jpg}` | `dist/np/mandir/1/index.html` | `TELEGRAM_CHAT_ID_MANDIR` | yes | no (`""`) |
+| `mandir-2` | Scranton July 4th Picnic | `https://screvents.com/mandir/2` | `dist/mandir/2/{index.html, flyer.jpg, og.jpg}` | `dist/np/mandir/2/index.html` | `TELEGRAM_CHAT_ID_MANDIR` | yes | no (`""`) |
+| `mandir-3` | Walkathon | `https://screvents.com/mandir/3` | `dist/mandir/3/{index.html, flyer.jpg, og.jpg}` | `dist/np/mandir/3/index.html` | `TELEGRAM_CHAT_ID_MANDIR` | no (`""`) | yes |
+
+Notes on the table:
+
+- **Slug → URL mapping.** Para-sabha-style keys (`scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`) are served at `/<key>/`. Mandir-slot keys (`mandir-1` … `mandir-5`) are served at `/mandir/<N>/` — the slug-to-URL rewrite happens inside `scripts/automate.js` (line 753: `MANDIR_SLOTS.includes(zone) ? '/mandir/' + zone.replace('mandir-', '') : '/' + zone`). The flat repo-level slug (`mandir-1`) is still what `deadlines.json`, the RSVP page's `RSVP_ZONE` constant, and every Netlify function expects in API calls.
+- **Mandir Telegram chat is shared.** All six Mandir-style zones (`satsang-sabha`, `mandir-1`..`mandir-5`) route to the single `TELEGRAM_CHAT_ID_MANDIR` chat — see the `ZONE_CHAT_IDS` map in `netlify/functions/late-rsvp.js` (lines 9–19) and `MANDIR_ZONES` in `scripts/automate.js` (line 22).
+- **Empty `eventDate` vs empty `deadline`.** Both fields can legally be empty strings. An empty `eventDate` means the year isn't pinned in `deadlines.json` (the two July 4th picnics do this — the year is implied from the flyer image). An empty `deadline` means the event has no enforced RSVP cutoff (`satsang-sabha`, `mandir-3`). See Automation Scripts / Workflows for how each empty value affects `scripts/cleanup-past-rsvps.js`, `scripts/summary.js`, and the per-page deadline UI.
+
+### `deadlines.json` Schema
+
+`deadlines.json` is a flat top-level JSON object. Keys are event slugs, values are objects with exactly these six fields:
+
+```json
+{
+  "<event-slug>": {
+    "deadline":  "YYYY-MM-DD",
+    "eventName": "Human-readable title",
+    "date":      "Weekday, Month Day",
+    "eventDate": "YYYY-MM-DD",
+    "time":      "5:00 pm",
+    "location":  "Street, City, ST ZIP"
+  }
+}
+```
+
+Field-by-field:
+
+- **`deadline`** — ISO `YYYY-MM-DD` of the RSVP cutoff date. Empty string `""` if the event has no RSVP deadline. Consumed by the per-event landing page (`dist/<slug>/index.html`) to render the "RSVP By" detail row, by `scripts/summary.js` as a fallback gating field when `eventDate` is empty, and by the late-RSVP code path that routes overdue submissions to `netlify/functions/late-rsvp.js` (see Netlify Functions).
+- **`eventName`** — Display title shown in the landing page `<h1>`, in `<title>`, in the OG card description, and (for the marketing root) on the `dist/index.html` cards. Also baked into `RSVP_ZONE`/`RSVP_EVENT_NAME` constants in the static page and POSTed back to `netlify/functions/submit-rsvp.js` as the `eventName` body field. Admin-overrideable through the `zone_events` Supabase table — see `netlify/functions/update-event-name.js` and the `resolveEventName()` helper in `scripts/automate.js`.
+- **`date`** — Pretty natural-language event date string (e.g. `"Friday, June 19"`, `"Saturday, July 4th"`). Used purely for UI rendering. Built by Claude OCR in `scripts/automate.js` `extractEventInfo()` and normalized back to `Weekday, Month Day`.
+- **`eventDate`** — ISO `YYYY-MM-DD` of the event itself. This is the only field the cleanup workflow (`scripts/cleanup-past-rsvps.js`) compares against `todayInNY()` to decide whether to archive RSVPs, and the only field `scripts/summary.js` uses to decide whether the event is still "active" enough to summarize. Empty string means the slug is exempt from those date-gated jobs. Derived by `scripts/automate.js` from `eventInfo.date` plus the current year, with a +1 year bump if the parsed date is more than ~3 months in the past (see lines 1167–1184 of `automate.js`).
+- **`time`** — Display string of the event start (or window) time. Free-form (e.g. `"5:00 pm"`, `"10:00 am - 12:00 pm"`).
+- **`location`** — Full venue street address. Rendered as the "Location" detail row on the landing page, linked to a Google Maps search URL by the page HTML.
+
+### Who Writes `deadlines.json` (And Why You Should Not Edit It By Hand)
+
+`deadlines.json` is auto-rewritten by the **RSVP Automation** workflow (`.github/workflows/rsvp-automation.yml`) on every run. Specifically:
+
+1. `scripts/automate.js` walks every zone folder under `flyers/`, OCRs each new/changed flyer with Claude (or reuses the cached entry if unchanged), resolves the canonical event name against Supabase `zone_events`, computes `eventDate` from the OCR'd `date`, and assembles a fresh per-zone object (lines 1185–1195 of `automate.js`).
+2. It merges that fresh object on top of the existing file (`const merged = { ...existing, ...deadlines }; fs.writeFileSync(deadlinesPath, JSON.stringify(merged, null, 2));`) — so an existing entry whose flyer didn't change survives, but an entry whose flyer ran through OCR will get every field overwritten.
+3. The workflow then commits the file with message `Auto-update deadlines.json [skip ci]` and force-pushes to `main` with up to 3 rebase retries (see `.github/workflows/rsvp-automation.yml` lines 93–115). The `[skip ci]` tag stops the commit from re-triggering the workflow.
+
+Triggers for this workflow (see Automation Scripts / Workflows for full detail):
+
+- Daily cron at `0 8 * * *` UTC (~4 AM EDT).
+- Every push to `main` whose changes touch anything outside `dist/**`.
+- Manual `workflow_dispatch` with `force_all` and `zone_override` inputs.
+
+**Practical consequence:** any field you hand-edit in `deadlines.json` will be overwritten the next time the matching flyer goes through OCR (which can be as soon as the next push). The supported way to override a value is to (a) set the event name via the admin portal — Settings → "Zone Event Name" which writes to `zone_events` and is read back by `resolveEventName()`, or (b) re-upload the flyer image with the corrected information so OCR re-derives the fields.
+
+### The `np/` Folder — No-Preview Mirrors
+
+For every event whose landing page sits at `dist/<slug>/index.html`, a byte-near-identical copy lives at `dist/np/<slug>/index.html` (mandir slots use `dist/np/mandir/<N>/index.html`). The two pages are generated in the same loop inside `scripts/automate.js` by calling `buildHtmlPage()` / `buildMandirPage()` twice — once with `noPreview=false` (canonical) and once with `noPreview=true` (mirror).
+
+What is different in the `np/` copy: the entire Open Graph + Twitter Card `<meta>` block in `<head>` is omitted. The canonical page has `og:title`, `og:description`, `og:image`, `og:url`, `og:type`, `og:image:width`, `og:image:height`, `og:image:type`, `twitter:card`, `twitter:title`, `twitter:description`, and `twitter:image` tags; the `np/` page has none of them (verified — `grep -c 'og:' dist/np/scranton/index.html` returns 0). The `<title>`, body markup, RSVP form, `RSVP_ZONE`/`RSVP_EVENT_NAME` constants, share buttons, and POST target (`/.netlify/functions/submit-rsvp`) are unchanged.
+
+What is different in the `np/` folder layout: the mirror does **not** ship its own `flyer.jpg` or `og.jpg`. The `<img>` `src` inside `dist/np/<slug>/index.html` points at the absolute canonical URL (e.g. `https://screvents.com/scranton/flyer.jpg`), so there is exactly one flyer asset per event and the mirror reuses it.
+
+Why this exists: when a manager pastes a `/scranton` link into Telegram, WhatsApp, iMessage, or Slack, the chat client auto-unfurls a big preview card built from the OG tags. That's the right behavior for headline announcements but the wrong behavior for follow-up reminders, where you want the URL to render as a plain hyperlink. Pasting `/np/scranton` instead of `/scranton` suppresses the unfurl entirely.
+
+### Adding a New Event from Scratch
+
+The minimum viable flow that hooks a new zone into every system (admin portal, Telegram notifications, automated summaries, RSVP archival) looks like this. The first three steps cover the static site; steps 4–6 wire in the cross-cutting plumbing.
+
+**1. Pick a slug.** Use a stable kebab-case identifier (e.g. `wilkes-barre`). The slug must be unique across both Para-sabha keys (`scranton`, `mountain-top`, `moosic`, `bloomsburg`) and Mandir-slot keys (`mandir-1` … `mandir-5`). It will be the URL path segment (`https://screvents.com/<slug>/`), the `zone` body field on every `submit-rsvp` / `manage-flyers` / `late-rsvp` call, the row key in Supabase `zone_events` and `rsvp_settings`, and the directory name under `flyers/<slug>/` in the `pritpnp/rsvp-automation` repo.
+
+**2. Add the slug to every server-side allowlist.** Several functions and scripts hard-code the valid-zone set and will return 400 / "Invalid zone" until updated:
+
+- `netlify/functions/manage-flyers.js` — `VALID_ZONES` array (lines 47–50).
+- `netlify/functions/late-rsvp.js` — `ZONE_CHAT_IDS` map (lines 9–19) — map your slug to the appropriate Telegram chat env var.
+- `netlify/functions/review-flyer.js` — `VALID_ZONES` (also includes `satsang-sabha-santos` as a variant).
+- `netlify/functions/manage-rsvp.js` and `netlify/functions/update-event-name.js` — zone validation lists.
+- `netlify/functions/telegram-webhook.js` — `UPLOAD_ZONES`, the `removezone:` / `zone:` callback handler keyboards, and the `/getflyer<suffix>` suffix map.
+- `scripts/automate.js` — add to `PARASABHA_ZONES` (line 21) for a Para-sabha-style page, or to `MANDIR_ZONES` / `MANDIR_SLOTS` (lines 22–23) for a Mandir-style page; also extend the `zones` array at line 1066.
+- `scripts/summary.js` — `getZoneChatIds()` so per-zone summaries route correctly.
+
+**3. Drop the flyer image.** Add `flyers/<slug>/flyer.jpg` (or `.jpeg`/`.png`) in the `pritpnp/rsvp-automation` GitHub repo. Either commit it directly, upload via the admin portal (`/admin` → Flyers tab → calls `netlify/functions/manage-flyers.js`), or send it through the Telegram bot's `/uploadflyer` wizard. Any of those paths triggers `.github/workflows/rsvp-automation.yml`, which runs `scripts/automate.js`:
+
+- OCRs the flyer, derives `eventName`/`date`/`time`/`location`/`rsvpDeadline` via Claude.
+- Adds a new entry to `deadlines.json` with all six fields populated.
+- Builds `dist/<slug>/index.html`, regenerates `flyer.jpg` (resized to 1080w q80 JPEG), builds `og.jpg` (1200×630 social preview).
+- Builds the `np/` mirror at `dist/np/<slug>/index.html` (or `dist/np/mandir/<N>/index.html` for a Mandir slot).
+- Commits `dist/` and `deadlines.json` and pushes to `main` — Netlify rebuilds and the new URL is live within ~2 minutes.
+
+You only need to write `dist/<slug>/index.html` by hand if you are bypassing `automate.js`. The committed `dist/` directory is the publish root, so a hand-written page works (copy an existing zone's page and update `RSVP_ZONE`, `RSVP_EVENT_NAME`, `FLYER_URL`, the OG tags, the `<title>`, and the location/deadline display strings) — but the next `automate.js` run will overwrite it the moment a matching flyer is detected.
+
+**4. (Optional) Add a dedicated Telegram zone group.** If the new zone should have its own zone chat (separate from the existing Scranton / Mountain Top / Moosic / Bloomsburg / Mandir groups), do the following:
+
+- Add the bot to the new Telegram group, then call `https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates` to read the new `chat.id`.
+- Set `TELEGRAM_CHAT_ID_<UPPER_SLUG>` (e.g. `TELEGRAM_CHAT_ID_WILKES_BARRE`) in **both** GitHub Actions secrets (used by `scripts/*.js`) and Netlify environment variables (used by `netlify/functions/*.js`). See Environment Variables Master List for the dual-set pattern.
+- Wire the env var into `netlify/functions/telegram-webhook.js` — append a pair to `ZONE_CHAT_PAIRS` (around line 16) and a pair to the `MISSING_ZONE_ENV_VARS` warning list (around line 23) so the module-scope `ZONE_CHAT_MAP` learns to route bare `/getflyer` and `/summary` invocations from the new chat.
+- Wire the env var into `netlify/functions/late-rsvp.js` `ZONE_CHAT_IDS` map (line 9), mapping the new slug to `process.env.TELEGRAM_CHAT_ID_<UPPER_SLUG>`.
+- Wire the env var into `scripts/summary.js` `getZoneChatIds()` so the scheduled `rsvp-summary.yml` workflow knows where to post.
+
+If you instead want the new zone to share the existing Mandir umbrella chat (the same pattern `satsang-sabha` + `mandir-1`..`mandir-5` use), skip the new-env-var work and just map the slug to `process.env.TELEGRAM_CHAT_ID_MANDIR` in the three files above.
+
+**5. (Optional) Add the np/ mirror.** If you are hand-rolling rather than letting `automate.js` regenerate, copy `dist/<slug>/index.html` to `dist/np/<slug>/index.html` (or `dist/np/mandir/<N>/index.html` for a Mandir slot), strip every `og:*` and `twitter:*` `<meta>` tag from `<head>`, and change the flyer `<img src>` from the relative `flyer.jpg` to the absolute `https://screvents.com/<slug>/flyer.jpg`. No `flyer.jpg` / `og.jpg` files are needed in the `np/` folder — the mirror reuses the canonical assets.
+
+**6. (Optional) Add event-specific RSVP form fields.** The shipped form on every per-event landing page collects exactly two fields — `name` (text) and `guests` (integer, clamped 1–100). If a new event needs additional inputs (e.g. dietary preference), the change spans both the static page and the server:
+
+- In `dist/<slug>/index.html`, add the input element under the `#rsvp-card` block and include its value in the `JSON.stringify({...})` body of the `submitRsvp()` `fetch` call (currently `{ zone: RSVP_ZONE, name, guests, eventName: RSVP_EVENT_NAME }` — see lines 188–207 of `dist/scranton/index.html` for the reference shape).
+- In `netlify/functions/submit-rsvp.js`, extend the body destructure to pull the new field, validate it, and pass it into the Supabase `rsvps` INSERT. The current schema only stores `id, zone, name, guests, event_name, submitted_at, sheet_row_id` (see Supabase Schema), so a new column on `rsvps` is required first — and if you need the field to survive cleanup, add it to `rsvps_archive` as well.
+- The same field needs to be plumbed through `scripts/sync-check.js` (for Sheet ↔ Supabase parity) and `scripts/summary.js` (if it should appear in the digest) — otherwise drift alerts and summaries will silently ignore the new column.
+- Mirror the form change into `dist/np/<slug>/index.html` so the no-preview link behaves identically.
+
+Once steps 1–3 succeed end-to-end, the new event is automatically picked up by the rest of the platform with no further code: the admin portal lists it (Events / RSVPs / Passes tabs), the Telegram bot answers `/getflyer<slug>` and `/summary<slug>`, `scripts/cleanup-past-rsvps.js` archives its RSVPs the morning after `eventDate`, `scripts/final-summary.js` posts the 9 PM EDT roll call on event day, and `scripts/summary.js` includes it in the every-3-days digest.
+
+---
+
+## 14. Build & Deployment
+This section is the runbook for getting SCREvents from a fresh `git clone` to a live Netlify deploy on your own domain. Read top-to-bottom if you are forking the project; jump to the runbook at the end for the from-scratch checklist.
+
+### Build command and publish directory
+
+The Netlify build is configured entirely from `netlify.toml` at the repo root:
+
+```toml
+[build]
+  command = "bash build.sh"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+```
+
+- `command = "bash build.sh"` — runs the project's `build.sh` shell script (see below). There is no bundler, no `npm install` at the site level, no asset pipeline.
+- `publish = "dist"` — Netlify serves everything from the repo's `dist/` directory after `build.sh` completes. `dist/` is committed to git.
+- `directory = "netlify/functions"` — Netlify auto-mounts every `*.js` in `netlify/functions/` at `/.netlify/functions/<name>`. Each function has its own dependency manifest at `netlify/functions/package.json` (`@supabase/supabase-js`, `bcryptjs`, `googleapis`), which Netlify installs automatically as part of the function bundle. The site-level `build.sh` does NOT run `npm install` for functions — Netlify handles that based on the functions folder's own `package.json`.
+
+### What `build.sh` actually does
+
+`build.sh` is intentionally a seven-line shell script. Its only job is to copy the four pieces of `public/flyer-builder/` into `dist/flyer-builder/` so the deployed Flyer Builder reflects the latest source:
+
+```bash
+#!/bin/bash
+# Sync public/ into dist/
+cp -r public/flyer-builder/templates/ dist/flyer-builder/templates/
+cp -r public/flyer-builder/preview-templates/ dist/flyer-builder/preview-templates/
+cp -r public/flyer-builder/fonts/ dist/flyer-builder/fonts/
+cp public/flyer-builder/index.html dist/flyer-builder/index.html
+echo "✅ dist synced"
+```
+
+The four things synced on every deploy:
+
+1. `public/flyer-builder/templates/` → `dist/flyer-builder/templates/` — the high-resolution PNG flyer backgrounds (one per zone, plus a Santos variant).
+2. `public/flyer-builder/preview-templates/` → `dist/flyer-builder/preview-templates/` — the 1200×630 social-card PNGs.
+3. `public/flyer-builder/fonts/` → `dist/flyer-builder/fonts/` — `AddingtonCF.otf`, `GothamRegular.ttf`, `AppleSDGothicNeoH.ttf` (used by `@font-face`).
+4. `public/flyer-builder/index.html` → `dist/flyer-builder/index.html` — the Flyer Builder SPA shell itself.
+
+Everything else under `dist/` is **NOT** rebuilt at deploy time. `build.sh` does not touch `dist/admin/`, `dist/login/`, `dist/invite/`, `dist/vip/`, `dist/index.html` (the marketing root), or any of the per-event landing pages under `dist/scranton/`, `dist/moosic/`, `dist/mountain-top/`, `dist/bloomsburg/`, `dist/satsang-sabha/`, `dist/mandir/1/`, `dist/mandir/2/`, `dist/mandir/3/`, or the `dist/np/` no-preview mirror.
+
+### Why most of `dist/` is checked into git
+
+The `dist/` directory is committed to the repository on purpose — it is not generated from sources at deploy time. Two reasons drive that choice:
+
+- **Per-event pages are hand-curated content.** Each `dist/<zone>/index.html` (and its `flyer.jpg` / `og.jpg`) is the live, customer-facing flyer for an upcoming community event. The HTML, the flyer image, the Open Graph image, the deadline, the location — all of it is content, not output. Building it on every deploy from a script would be brittle (one OCR drift and a flyer goes live with the wrong date) and slow.
+- **The static admin SPAs are pre-built.** `dist/admin/index.html`, `dist/login/index.html`, `dist/invite/index.html`, `dist/vip/index.html`, and `dist/flyer-builder/review-sent/index.html` are single-file SPAs with inline `<script>` blocks. There is no Webpack, Vite, or Next.js step to run — the HTML is the artifact.
+
+The result: Netlify's build step is trivial (a few `cp` commands), deploys are fast, and there is zero possibility of a green build producing a different `dist/` than what the developer reviewed locally.
+
+The single side-effect of this model is that `dist/` is also the source of truth for content edits. When a developer changes a per-event page, a flyer, or the marketing root, they edit the file under `dist/<zone>/` directly and commit it.
+
+### The deploy pattern
+
+The workflow for getting a change live, end-to-end:
+
+1. Make the change.
+   - If editing the Flyer Builder SPA, fonts, templates, or preview templates → edit under `public/flyer-builder/`.
+   - If editing the marketing root, an event page, an admin SPA, the invite page, or the VIP pass page → edit the file directly under `dist/`.
+2. Run `bash build.sh` locally. This is only meaningful when you touched `public/flyer-builder/` — it re-syncs into `dist/flyer-builder/`. For pure `dist/` edits it is a no-op.
+3. Verify locally with `netlify dev` (see Local Development below).
+4. Commit the resulting `dist/` changes. The conventional message for content/asset updates is `deploy: update dist`. This is the marker the RSVP automation pipeline looks for when diffing flyer changes — see Scripts & Automation Pipeline for `scripts/automate.js` and the `LAST_DEPLOY` diff anchor.
+5. Push to `main`. Netlify detects the push, runs `bash build.sh`, and serves the new `dist/` within a minute or two.
+
+There is no staging environment configured in `netlify.toml`. Production deploy = push to `main`.
+
+### Branch model
+
+`main` is the only branch in the repository and is the deploy branch. There is no `develop`, no `staging`, no per-feature long-lived branches checked in. Feature work happens in short-lived local branches or directly on `main`; PRs are the only protection.
+
+A few project subsystems also write directly to `main` via GitHub Actions with `contents: write`:
+
+- The deadlines auto-updater in `.github/workflows/rsvp-automation.yml` commits `deadlines.json` back to `main` with `[skip ci]` to avoid a loop. See Scripts & Automation Pipeline.
+- The Flyer Builder approval path commits flyers via the GitHub Contents API into a separate `pritpnp/rsvp-automation` repo's `main` branch — that is NOT this repo. See Flyer Builder Flow.
+
+If you fork SCREvents, plan accordingly: scheduled workflows in `.github/workflows/` will run on a schedule on your fork the moment you enable Actions, and `manage-flyers.js`, `refresh-flyers.js`, `trigger-redeploy.js`, and `telegram-webhook.js` all target the hard-coded `pritpnp/rsvp-automation` repo path — you will need to grep for it and replace it with your own `<owner>/<repo>` before deploying.
+
+### Local development workflow
+
+There are three independent `package.json` manifests and they install into three different places:
+
+| Path | Used by | Install command |
+|------|---------|-----------------|
+| `package.json` (root) | Legacy / convenience — pinned at `@supabase/supabase-js`, `bcryptjs`, `googleapis` for ad-hoc Node scripts | `npm install` |
+| `scripts/package.json` | The automation scripts under `scripts/` run by GitHub Actions | `cd scripts && npm install` |
+| `netlify/functions/package.json` | Every Netlify Function under `netlify/functions/` | `cd netlify/functions && npm install` (Netlify CLI runs this automatically) |
+
+Step-by-step:
+
+```bash
+# 1. Clone
+git clone https://github.com/<your-fork>/SCREvents.git
+cd SCREvents
+
+# 2. Install function deps so `netlify dev` can run the functions locally
+cd netlify/functions && npm install && cd ../..
+
+# 3. (Optional) install script deps if you want to run scripts/* locally
+cd scripts && npm install && cd ..
+
+# 4. Install the Netlify CLI globally if you don't have it
+npm install -g netlify-cli
+
+# 5. Link the local checkout to your Netlify site
+netlify login
+netlify link        # pick the site you created in the runbook below
+
+# 6. Pull production env vars into a local .env-equivalent
+#    (Netlify CLI stores them in process.env for `netlify dev` automatically)
+netlify env:list    # confirm the vars are visible
+
+# 7. Run the dev server
+netlify dev
+```
+
+`netlify dev` does three things at once:
+
+- Serves `dist/` as static files on `http://localhost:8888` (port may vary; the CLI prints it).
+- Runs every `netlify/functions/*.js` on the same port at `/.netlify/functions/<name>`.
+- Applies the redirects and headers in `netlify.toml` so SPA routes like `/admin`, `/login`, `/invite`, `/vip/<id>`, `/flyer-builder` resolve correctly.
+
+For the full env-var list — what each one is for, where it must be set, and how to obtain its value — see Environment Variables. Set them in the Netlify site dashboard (`Site configuration` → `Environment variables`) so `netlify env:list` and `netlify dev` see them. For the GitHub Actions secrets that the scheduled workflows need, set them under your fork's `Settings` → `Secrets and variables` → `Actions`.
+
+If you want to run a Netlify Function in isolation without booting the SPA, the CLI supports:
+
+```bash
+netlify functions:invoke <function-name> --payload '{"key":"value"}'
+```
+
+There is no Vitest / Jest test suite checked in — verification is done by hitting the functions through `netlify dev` and the live admin UI.
+
+### Domain and DNS
+
+Production is served at `https://screvents.com` (referenced throughout the codebase in Open Graph URLs in `dist/<zone>/index.html` and in the GitHub-stored flyer fetch logic in `netlify/functions/telegram-webhook.js`).
+
+For a fork on a custom domain, the Netlify-side setup is the standard Netlify custom-domain flow:
+
+1. In the Netlify dashboard, go to your site → `Domain management` → `Add a domain` → enter your apex domain (e.g. `example.com`).
+2. Netlify shows you one of two options:
+   - **Netlify DNS** (recommended): change the apex domain's nameservers at your registrar to the four Netlify nameservers Netlify lists. Netlify then manages every DNS record for the domain.
+   - **External DNS**: keep your existing DNS provider and point the apex `A` record at Netlify's load balancer IP (`75.2.60.5` at time of writing, but always verify in the Netlify UI) and the `www` `CNAME` at `<your-site>.netlify.app`.
+3. Netlify provisions a Let's Encrypt certificate automatically once DNS resolves.
+4. In the same `Domain management` panel, set the canonical primary domain (apex or `www`) and enable `Force HTTPS`.
+
+Internal absolute URLs in the codebase reference `screvents.com` directly — search-and-replace those before you serve a fork on your own domain. Specifically check:
+
+- Every `dist/<zone>/index.html` and `dist/np/<zone>/index.html` — `og:image`, `og:url`, `twitter:image`, and the inline `<img src="https://screvents.com/...">` flyer references.
+- `dist/index.html` — the marketing root.
+- `scripts/automate.js` — the URL template used when rebuilding pages (`https://screvents.com/<zone>/flyer.jpg` etc.).
+- `netlify/functions/telegram-webhook.js` — `/getflyer` re-broadcasts flyers from `https://screvents.com/<zone>/flyer.jpg`.
+- `netlify/functions/review-flyer.js` — the rejection URL it bakes into `event_data.rejectUrl` points back at `https://screvents.com/flyer-builder/...`.
+
+### Cache control and custom headers
+
+`netlify.toml` defines exactly three header blocks, all of them permissive CORS for the Flyer Builder's runtime assets:
+
+```toml
+[[headers]]
+  for = "/flyer-builder/templates/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/preview-templates/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/flyer-builder/fonts/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+```
+
+These rules exist because the Flyer Builder canvas (`public/flyer-builder/index.html`) draws the zone template PNGs and renders custom-font text into a canvas using `html2canvas`. Without `Access-Control-Allow-Origin: *` on the template images and the `@font-face` files, the browser would taint the canvas and refuse to call `toDataURL()` — breaking the "Send for Review" capture. The three header blocks are tightly coupled to the three corresponding `cp` lines in `build.sh`: the build copies the assets in, the headers make them safe to read from canvas.
+
+There are no `Cache-Control` overrides in `netlify.toml`. Netlify's defaults apply:
+
+- HTML responses → short-lived (so a `dist/` push goes live immediately).
+- Images, fonts, and other static assets → fingerprinted by Netlify's edge automatically.
+
+Per-event Open Graph images are cache-busted at the URL level by the generator: `og:image` includes a `?v=<ogSha1>` query parameter so updating `dist/<zone>/og.jpg` and pushing causes Telegram/iMessage/WhatsApp to re-fetch the preview rather than serving a stale unfurl.
+
+For the SPA redirects (`/admin/*`, `/invite/*`, `/vip/*`, `/flyer-builder/*`, etc.) and the static asset CORS headers, see Routing & Redirects.
+
+### From-scratch deployment runbook
+
+This is the checklist for deploying a fork of SCREvents to your own Netlify site and domain. Follow it in order; each step assumes the previous one is complete.
+
+#### 1. Create the infrastructure
+
+- [ ] **Supabase project**: create a new project at `supabase.com`. Note `Project URL`, `anon public` key, and `service_role secret` key from `Settings → API`. You will set these as `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`.
+- [ ] **Supabase schema**: the schema is NOT checked in. You must create every table from Supabase Schema by hand in the Supabase Dashboard SQL editor (or recreate them from a snapshot of an existing SCREvents project). At minimum: `rsvps`, `rsvps_archive`, `rsvp_settings`, `managers`, `manager_sessions`, `events`, `vip_passes`, `flyer_reviews`, `builder_sessions`, `zone_events`, `telegram_upload_sessions`, `invite_lookup_attempts`, `invite_ip_whitelist`. Add the implied indexes (`manager_sessions(token)` unique, `invite_lookup_attempts(ip, attempted_at)`, `vip_passes(phone_normalized)`, `rsvps(sheet_row_id)`).
+- [ ] **Supabase Storage**: create a bucket named `flyer-reviews` (private). The Flyer Builder pipeline writes pending flyer images here.
+- [ ] **Telegram bot**: talk to `@BotFather`, create a bot, save the token as `TELEGRAM_BOT_TOKEN`. Create one Telegram group per zone (Scranton, Mountain Top, Moosic, Bloomsburg, Mandir, plus the admin group), add the bot to each, and capture every chat ID into the matching `TELEGRAM_CHAT_ID*` env var.
+- [ ] **GitHub PAT**: generate a fine-grained PAT scoped to your fork with `Contents: Read and write`, `Actions: Read and write`, `Metadata: Read`. Save as `GITHUB_PAT`.
+- [ ] **Google Sheet + service account**: create a Sheets project with a `responses` tab (columns A–E: zone, name, guests, timestamp, sheet_row_id). Create a Google Cloud service account, give it Sheets API access, generate a JSON key, share the sheet with the service-account email. Save the sheet ID as `GOOGLE_SHEET_ID` and the JSON key contents (one-line) as `GOOG_SA_JSON`.
+- [ ] **Anthropic API key**: from `console.anthropic.com`. Save as `ANTHROPIC_API_KEY`.
+- [ ] **Admin password**: pick a long random string (`openssl rand -hex 32`). Save as `ADMIN_PASSWORD`.
+- [ ] **Telegram webhook secret**: pick another random string. Save as `TELEGRAM_WEBHOOK_SECRET`.
+
+#### 2. Fork and pre-deploy edits
+
+- [ ] Fork `pritpnp/SCREvents` on GitHub and clone locally.
+- [ ] Search-and-replace every `screvents.com` reference with your production domain (see the list under "Domain and DNS" above).
+- [ ] Search-and-replace every `pritpnp/rsvp-automation` repo path in `netlify/functions/manage-flyers.js`, `netlify/functions/refresh-flyers.js`, `netlify/functions/review-flyer.js`, `netlify/functions/telegram-webhook.js`, `netlify/functions/trigger-redeploy.js`, and `scripts/automate.js` with your fork's `<owner>/<repo>` (this repo's own slug if you are running it as a single-repo setup).
+- [ ] Optionally update branding assets: `dist/index.html` (marketing root), the favicon, the BAPS logo data URI, the Mandir-Telegram chat routing for any zones you don't have.
+- [ ] Commit and push.
+
+#### 3. Wire up Netlify
+
+- [ ] On `app.netlify.com`, click `Add new site → Import an existing project`, select GitHub, pick your fork.
+- [ ] Confirm build settings (Netlify auto-detects from `netlify.toml`):
+  - Build command: `bash build.sh`
+  - Publish directory: `dist`
+  - Functions directory: `netlify/functions`
+- [ ] Under `Site configuration → Environment variables`, paste every value from Environment Variables that is tagged "netlify-dashboard" or "both". At minimum: `ADMIN_PASSWORD`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `GITHUB_PAT`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, all five zone `TELEGRAM_CHAT_ID_*`, `TELEGRAM_WEBHOOK_SECRET`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`.
+- [ ] Trigger a first deploy from `main`. Confirm it succeeds and the site loads at `<your-site>.netlify.app`.
+- [ ] Hit `/.netlify/functions/rsvp-status` in your browser — it should return JSON. This confirms Supabase + service key are wired correctly.
+
+#### 4. Configure GitHub Actions
+
+- [ ] In your fork, go to `Settings → Secrets and variables → Actions` and add every secret tagged "github-secrets" or "both" in Environment Variables.
+- [ ] Confirm the workflows under `.github/workflows/` are enabled on the fork (Actions tab → enable workflows).
+- [ ] The cron-based workflows will start firing on their schedules automatically. See Scripts & Automation Pipeline for what each one does. The first cron tick of `supabase-keepalive.yml` is a good smoke test — it just curls Supabase and should turn green.
+
+#### 5. Register the Telegram webhook
+
+Telegram needs to know where to deliver bot updates and what secret to include. From any shell, with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` set:
+
+```bash
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -d "url=https://<your-domain>/.netlify/functions/telegram-webhook" \
+  -d "secret_token=${TELEGRAM_WEBHOOK_SECRET}"
+```
+
+The response should be `{"ok":true,"result":true,"description":"Webhook was set"}`. Verify with `getWebhookInfo` and then send a `/getflyer` to a zone group as a smoke test.
+
+#### 6. Custom domain
+
+- [ ] In Netlify → `Domain management` → `Add a domain`, enter your apex domain.
+- [ ] Either switch your registrar's nameservers to Netlify DNS, or set an `A` record at apex + `CNAME` at `www` per the in-dashboard instructions.
+- [ ] Wait for DNS to propagate (minutes to hours). Netlify auto-provisions a Let's Encrypt certificate.
+- [ ] Set the primary domain (apex vs `www`) and enable `Force HTTPS`.
+
+#### 7. First superadmin login and content seeding
+
+- [ ] Visit `https://<your-domain>/login`. Sign in as username `admin` with the `ADMIN_PASSWORD` value.
+- [ ] In `/admin`, create an `events` row for each upcoming event, add managers under the Managers tab, and verify the Flyer Builder opens.
+- [ ] Place initial flyer images under `dist/<zone>/flyer.jpg` (or upload via the Flyer Builder pipeline once Telegram approvals are working), commit, and push to `main` with the message `deploy: update dist`. Netlify will rebuild, the marketing root will pick up the new event cards via `deadlines.json` (auto-updated by `.github/workflows/rsvp-automation.yml` — see Scripts & Automation Pipeline), and the per-zone pages will go live at `/<zone>`.
+
+At this point the fork is fully self-hosted: Netlify serves the SPA + functions, Supabase backs every table, Telegram delivers approvals and reminders, GitHub Actions runs the scheduled maintenance.
+
+---
+
+## 15. Environment Variables Reference
+This section enumerates every environment variable the SCREvents stack consumes. Variables live in three places:
+
+1. **Netlify Dashboard** — `Site configuration → Environment variables`. These are injected into every Netlify Function invocation (anything under `netlify/functions/*.js`) and into `build.sh` at deploy time.
+2. **GitHub Actions secrets** — `Settings → Secrets and variables → Actions → Repository secrets`. These are injected into workflow steps as `${{ secrets.NAME }}` in `.github/workflows/*.yml` and passed to `scripts/*.js` via the `env:` block on each step.
+3. **Workflow dispatch inputs** — runtime-only values provided when a workflow is manually triggered (via `gh workflow run`, the Actions UI, or the Telegram bot). These are not stored as secrets; they are passed through the `env:` block of the corresponding workflow.
+
+The Netlify Functions runtime and the GitHub Actions scripts are entirely separate execution environments. A secret set in one place is **not** visible in the other — most secrets must be duplicated in both. The "Where set" column below tells you which.
+
+### Master table (alphabetical)
+
+| Name | Required | Where set | Consumers | Purpose | How to obtain |
+|---|---|---|---|---|---|
+| `ADMIN_PASSWORD` | Yes (for admin login) | Netlify | `netlify/functions/admin-passes.js`, `netlify/functions/admin-rate-limit.js`, `netlify/functions/backfill-rsvps.js`, `netlify/functions/get-archived-rsvps.js`, `netlify/functions/get-rsvps.js`, `netlify/functions/manage-rsvp.js`, `netlify/functions/manager-auth.js`, `netlify/functions/restore-rsvps.js`, `netlify/functions/superadmin-events.js`, `netlify/functions/superadmin-managers.js` | The plaintext password that, when sent as `username=admin` to `/.netlify/functions/manager-auth/login`, mints a superadmin session (a `manager_sessions` row with `manager_id IS NULL`). Also accepted as the `x-admin-password` header on a handful of superadmin-only endpoints. Never sent to the browser. | Generate a long random string: `openssl rand -hex 32`. Paste it into the Netlify env var UI. Share with trusted admins out-of-band only. |
+| `ANTHROPIC_API_KEY` | Yes (for flyer OCR) | GitHub Actions | `scripts/automate.js`, `.github/workflows/rsvp-automation.yml` | Authenticates calls to the Anthropic Messages API (`claude-sonnet-4-20250514`, vision) that OCR each flyer image into structured event metadata. | Anthropic Console → https://console.anthropic.com → `Settings → API Keys → Create Key`. Add billing credit to the workspace first; OCR will hard-fail on an unfunded key. |
+| `FLYER_PATH` | No (legacy fallback) | Workflow runtime | `scripts/automate.js` | Single-flyer path input read when `FLYER_PATHS` is empty. Effectively dead in the current `rsvp-automation.yml` which always populates `FLYER_PATHS`. | Not a stored secret. Pass at workflow dispatch time if invoking `automate.js` standalone. |
+| `FLYER_PATHS` | No (auto-populated) | Workflow runtime | `scripts/automate.js`, `.github/workflows/rsvp-automation.yml` | Newline-separated list of `flyers/<zone>/*.{jpg,jpeg,png}` paths that changed since the last `deploy: update dist` commit. The workflow computes this with `git log` + `git diff` and feeds it into `node automate.js`. | Not a stored secret. Computed automatically by the `Process all new flyers` step in `rsvp-automation.yml`. |
+| `FORCE_ALL` | No | Workflow dispatch input | `scripts/automate.js`, `.github/workflows/rsvp-automation.yml` | When `true`, `automate.js` re-OCRs every zone and rebuilds the entire `dist/` tree regardless of what changed. Set automatically when `/refreshall` is sent in the admin Telegram chat or when `refresh-flyers` is called with no zone override. | Pass as a workflow dispatch input (`gh workflow run rsvp-automation.yml -f force_all=true`) or trigger via the Telegram `/refreshall` command. |
+| `GITHUB_PAT` | Yes (for flyer publishing) | Netlify | `netlify/functions/manage-flyers.js`, `netlify/functions/refresh-flyers.js`, `netlify/functions/telegram-webhook.js`, `netlify/functions/trigger-redeploy.js` | Bearer token used to (a) PUT/DELETE `flyers/<zone>/flyer.jpg` and `flyers/<zone>/og.jpg` on `pritpnp/rsvp-automation` via the GitHub Contents API, and (b) dispatch the `rsvp-automation.yml` and `rsvp-summary.yml` workflows. | GitHub → `Settings → Developer settings → Personal access tokens`. Either a classic token with `repo` + `workflow` scopes, or a fine-grained token scoped to `pritpnp/rsvp-automation` with permissions `Contents: Read and write`, `Actions: Read and write`, `Metadata: Read`. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | No (alias) | GitHub Actions | `scripts/cleanup-past-rsvps.js`, `scripts/sync-check.js`, `.github/workflows/cleanup-past-rsvps.yml`, `.github/workflows/rsvp-automation.yml`, `.github/workflows/sync-check.yml` | Alternate variable name for the Google service-account JSON. The two scripts that read it fall back to this if `GOOG_SA_JSON` is unset. Workflows pass both to keep the scripts portable. | Same as `GOOG_SA_JSON` below — populate one of the two; both is fine. |
+| `GOOGLE_SHEET_ID` | Yes (for legacy Sheet sync) | Both | `netlify/functions/backfill-rsvps.js`, `netlify/functions/get-rsvps.js`, `netlify/functions/restore-rsvps.js`, `netlify/functions/submit-rsvp.js`, `scripts/cleanup-past-rsvps.js`, `scripts/final-summary.js`, `scripts/sync-check.js`, `.github/workflows/cleanup-past-rsvps.yml`, `.github/workflows/final-summary.yml`, `.github/workflows/sync-check.yml` | The Google Sheet ID of the legacy `responses` tab that mirrors `rsvps`. Used for dual-write on submission, drift checks, the final-summary CSV pull, and event-night cleanup. | Open the sheet in Google Drive; copy the segment between `/d/` and `/edit` in the URL: `docs.google.com/spreadsheets/d/<SHEET_ID>/edit`. |
+| `GOOG_SA_JSON` | Yes (for legacy Sheet sync) | Both | `netlify/functions/backfill-rsvps.js`, `netlify/functions/get-rsvps.js`, `netlify/functions/restore-rsvps.js`, `netlify/functions/submit-rsvp.js`, `scripts/cleanup-past-rsvps.js`, `scripts/sync-check.js`, `.github/workflows/cleanup-past-rsvps.yml`, `.github/workflows/sync-check.yml` | Full JSON payload of a Google Cloud service account with access to `GOOGLE_SHEET_ID`. Authenticates Sheets API v4 reads/appends/`batchUpdate` deleteDimension calls. | Google Cloud Console → `IAM & Admin → Service Accounts → Create` → grant no IAM roles (Sheets is share-based) → `Keys → Add key → Create new key → JSON`. Paste the entire JSON (as a single line, including curly braces) as the env var value. Then open the sheet and `Share` it with the service account's `client_email` as Editor. Enable the Google Sheets API on the project. |
+| `NETLIFY_AUTH_TOKEN` | No (unused) | GitHub Actions | `.github/workflows/rsvp-automation.yml` | Passed into the automation workflow step `env:` block but no longer consumed — `automate.js` deploys via `git push` to `main` and lets Netlify CI rebuild. Safe to leave unset; the workflow does not error. | Netlify → `User settings → Applications → Personal access tokens → New access token`. Only needed if you reintroduce direct Netlify CLI deploys. |
+| `NETLIFY_SITE_ID` | No (unused) | GitHub Actions | `.github/workflows/rsvp-automation.yml` | Same status as `NETLIFY_AUTH_TOKEN` — passed in but unread by `automate.js`. | Netlify → `Site → Site configuration → Site details → API ID`. |
+| `SUPABASE_ANON_KEY` | No (defensive fallback) | Netlify | `netlify/functions/admin-passes.js`, `netlify/functions/get-archived-rsvps.js`, `netlify/functions/manager-auth.js`, `netlify/functions/superadmin-events.js`, `netlify/functions/superadmin-managers.js` | Five functions use `process.env.SUPABASE_SERVICE_KEY \|\| process.env.SUPABASE_ANON_KEY` as a defensive fallback. In practice the queries these functions run (writing `manager_sessions`, reading `managers.password_hash`, etc.) require service-role unless you've added permissive RLS policies — so the anon key path is effectively dead. Setting it costs nothing. | Supabase → `Project Settings → API → Project API keys → anon public`. |
+| `SUPABASE_SERVICE_KEY` | Yes | Both | `netlify/functions/admin-passes.js`, `netlify/functions/admin-rate-limit.js`, `netlify/functions/backfill-rsvps.js`, `netlify/functions/create-builder-session.js`, `netlify/functions/get-archived-rsvps.js`, `netlify/functions/get-pass.js`, `netlify/functions/get-rsvps.js`, `netlify/functions/lookup-pass.js`, `netlify/functions/manage-flyers.js`, `netlify/functions/manage-rsvp.js`, `netlify/functions/manager-auth.js`, `netlify/functions/refresh-flyers.js`, `netlify/functions/restore-rsvps.js`, `netlify/functions/review-flyer.js`, `netlify/functions/rsvp-status.js`, `netlify/functions/submit-rsvp.js`, `netlify/functions/superadmin-events.js`, `netlify/functions/superadmin-managers.js`, `netlify/functions/telegram-webhook.js`, `netlify/functions/trigger-redeploy.js`, `netlify/functions/update-event-name.js`, `netlify/functions/verify-builder-session.js`, `scripts/automate.js`, `scripts/cleanup-past-rsvps.js`, `scripts/summary.js`, `scripts/sync-check.js`, `.github/workflows/cleanup-past-rsvps.yml`, `.github/workflows/rsvp-automation.yml`, `.github/workflows/rsvp-summary.yml`, `.github/workflows/supabase-keepalive.yml`, `.github/workflows/sync-check.yml` | Service-role key that bypasses RLS. The entire backend assumes this — see Supabase Schema for why every table is service-role-only. Treat as a root credential; leakage = total compromise. | Supabase → `Project Settings → API → Project API keys → service_role secret`. Set in BOTH Netlify and GitHub Actions. Never paste into client code or commit. |
+| `SUPABASE_URL` | Yes | Both | Same set as `SUPABASE_SERVICE_KEY` above, plus `.github/workflows/supabase-keepalive.yml` | REST base URL of the Supabase project (e.g. `https://abcd1234.supabase.co`). Used by every `createClient()` call and by the daily curl-based keep-alive ping in `supabase-keepalive.yml`. | Supabase → `Project Settings → API → Project URL`. |
+| `TARGET_ZONE` | No | Workflow dispatch input | `scripts/summary.js`, `.github/workflows/rsvp-summary.yml` | Restricts `summary.js` to one zone. Values: `scranton`, `mountain-top`, `moosic`, `bloomsburg`, `mandir` (expands to `satsang-sabha` + `mandir-1..5`), or `all`. Default `all`. Set by the Telegram `/summary <suffix>` command via `telegram-webhook.js`. | Workflow dispatch input. Not a stored secret. |
+| `TELEGRAM_BOT_TOKEN` | Yes (for notifications) | Both | `netlify/functions/late-rsvp.js`, `netlify/functions/review-flyer.js`, `netlify/functions/telegram-webhook.js`, `scripts/cleanup-past-rsvps.js`, `scripts/final-summary.js`, `scripts/summary.js`, `scripts/sync-check.js`, `.github/workflows/cleanup-past-rsvps.yml`, `.github/workflows/final-summary.yml`, `.github/workflows/rsvp-automation.yml`, `.github/workflows/rsvp-summary.yml`, `.github/workflows/sync-check.yml` | Used in the URL of every Telegram Bot API call: `https://api.telegram.org/bot<TOKEN>/sendMessage` etc. One bot for the whole stack. | Open Telegram, chat with `@BotFather`, send `/newbot`, follow prompts. Copy the HTTP API token. To re-issue, send `/token` and pick the bot. |
+| `TELEGRAM_CHAT_ID` | Yes (for admin notifications) | Both | `netlify/functions/late-rsvp.js`, `netlify/functions/review-flyer.js`, `netlify/functions/telegram-webhook.js`, `scripts/cleanup-past-rsvps.js`, `scripts/final-summary.js`, `scripts/summary.js`, `scripts/sync-check.js`, plus all workflows that pass it through | The admin/notifications group chat ID. This is also the gate for admin-only Telegram commands: `telegram-webhook.js` checks `chat.id === TELEGRAM_CHAT_ID` before honoring `/uploadflyer`, `/removeflyer`, `/refreshall`, or any `review:approve`/`review:reject` callback button. | Add the bot to the admin Telegram group as an administrator (so it can read messages in groups; turn off privacy mode via `@BotFather → /setprivacy → Disable` if needed). Then call `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser after sending any message in the group. Copy `chat.id` (negative integer for groups). Alternatively add `@userinfobot` to the group temporarily. |
+| `TELEGRAM_CHAT_ID_BLOOMSBURG` | Optional (per-zone routing) | Both | `netlify/functions/late-rsvp.js`, `netlify/functions/telegram-webhook.js`, `scripts/summary.js`, `.github/workflows/rsvp-summary.yml` | Bloomsburg zone group chat ID. Used by `late-rsvp.js` to ping zone organizers when someone tries to RSVP past the deadline, by `summary.js` to send the scheduled per-zone digest, and by `telegram-webhook.js`'s `ZONE_CHAT_MAP` so a bare `/getflyer` or `/summary` in that group is auto-routed to the Bloomsburg zone. | Add the bot to the Bloomsburg group, then `getUpdates` or `@userinfobot`. |
+| `TELEGRAM_CHAT_ID_MANDIR` | Optional (per-zone routing) | Both | Same set as `TELEGRAM_CHAT_ID_BLOOMSBURG` | Single chat ID shared by `satsang-sabha` and `mandir-1..5`. `late-rsvp.js` routes all six mandir zones to this one chat. | Add the bot to the Mandir group, then `getUpdates` or `@userinfobot`. |
+| `TELEGRAM_CHAT_ID_MOOSIC` | Optional (per-zone routing) | Both | Same set as `TELEGRAM_CHAT_ID_BLOOMSBURG` | Moosic zone group chat ID. | Add the bot to the Moosic group, then `getUpdates` or `@userinfobot`. |
+| `TELEGRAM_CHAT_ID_MOUNTAIN_TOP` | Optional (per-zone routing) | Both | Same set as `TELEGRAM_CHAT_ID_BLOOMSBURG` | Mountain Top zone group chat ID. | Add the bot to the Mountain Top group, then `getUpdates` or `@userinfobot`. |
+| `TELEGRAM_CHAT_ID_SCRANTON` | Optional (per-zone routing) | Both | Same set as `TELEGRAM_CHAT_ID_BLOOMSBURG` | Scranton zone group chat ID. | Add the bot to the Scranton group, then `getUpdates` or `@userinfobot`. |
+| `TELEGRAM_WEBHOOK_SECRET` | Yes (for the bot webhook) | Netlify | `netlify/functions/telegram-webhook.js` | Constant-time-compared (`crypto.timingSafeEqual`) against the `X-Telegram-Bot-Api-Secret-Token` header on every webhook POST. Unset or mismatched → the function silently returns 200 with empty body (no error signal to attackers). | Generate: `openssl rand -hex 32`. Set in Netlify, then register the webhook with Telegram using the same value as the `secret_token` parameter: `curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<your-site>/.netlify/functions/telegram-webhook&secret_token=<SECRET>"`. |
+| `TEST_MODE` | No | Workflow dispatch input | `scripts/final-summary.js`, `scripts/summary.js`, `.github/workflows/rsvp-summary.yml` | When the literal string `'true'`, both summary scripts skip their "is this zone's event today / upcoming?" gating and emit a digest for every zone unconditionally. Used for dry-runs. `final-summary.yml` pins it to `false` at the workflow level. | Workflow dispatch input. Not a stored secret. |
+| `TRIGGER_CHAT_ID` | No | Workflow dispatch input | `scripts/summary.js`, `.github/workflows/rsvp-summary.yml` | When set, `summary.js` posts its digests to this single chat ID instead of the per-zone chats. `telegram-webhook.js` sets it to the requesting chat's ID when an admin types `/summary` so the reply comes back to that conversation. | Workflow dispatch input. Set automatically by the bot; only set manually if you're invoking `rsvp-summary.yml` from `gh workflow run` and want the output in a specific chat. |
+| `ZONE_OVERRIDE` | No | Workflow dispatch input | `scripts/automate.js`, `.github/workflows/rsvp-automation.yml` | Forces `automate.js` to re-OCR a single specific zone slug regardless of what flyer paths changed. Used by `refresh-flyers.js` when a manager refreshes one zone from the admin portal. Empty string = no override. | Workflow dispatch input. Set automatically by `refresh-flyers.js` to the chosen zone slug. |
+
+### Where each secret class lives
+
+**Netlify Dashboard only** (never read by GitHub Actions):
+`ADMIN_PASSWORD`, `GITHUB_PAT`, `SUPABASE_ANON_KEY`, `TELEGRAM_WEBHOOK_SECRET`.
+
+**GitHub Actions only** (never read by Netlify Functions):
+`ANTHROPIC_API_KEY`, `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`.
+
+**Both** (must be duplicated in Netlify AND GitHub):
+`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CHAT_ID_SCRANTON`, `TELEGRAM_CHAT_ID_MOUNTAIN_TOP`, `TELEGRAM_CHAT_ID_MOOSIC`, `TELEGRAM_CHAT_ID_BLOOMSBURG`, `TELEGRAM_CHAT_ID_MANDIR`.
+
+**Workflow dispatch inputs only** (never stored, set per-invocation):
+`FLYER_PATHS`, `FLYER_PATH`, `FORCE_ALL`, `ZONE_OVERRIDE`, `TEST_MODE`, `TARGET_ZONE`, `TRIGGER_CHAT_ID`.
+
+### Setting variables
+
+**Netlify Dashboard.** Go to your site → `Site configuration → Environment variables → Add a variable`. Pick `Same value for all deploy contexts` unless you want a separate staging value. Functions pick up new values on the next deploy or on the next cold-start of an existing build; redeploy after changing a hot secret to be sure.
+
+**GitHub Actions secrets.** In the `pritpnp/rsvp-automation` repo: `Settings → Secrets and variables → Actions → New repository secret`. The exact `secrets.NAME` references in each workflow file under `.github/workflows/` show which secrets must exist for that workflow to succeed.
+
+**For multi-line JSON values like `GOOG_SA_JSON`**: paste the entire file contents as the value. Both the Netlify env var UI and GitHub Actions secrets handle multi-line strings; no escaping needed.
+
+### Minimal viable env set
+
+To get a fresh clone serving the static site and accepting RSVPs end-to-end, the absolute floor is:
+
+```
+SUPABASE_URL              # Netlify + GitHub
+SUPABASE_SERVICE_KEY      # Netlify + GitHub
+ADMIN_PASSWORD            # Netlify
+```
+
+With just these three:
+
+- The static pages under `dist/` serve from Netlify (no env needed for plain HTML).
+- `/.netlify/functions/submit-rsvp` writes to Supabase `rsvps`. The Google Sheet dual-write step silently fails (logged warning, swallowed) — Supabase remains source of truth.
+- `/.netlify/functions/rsvp-status` returns the on/off toggle map.
+- `/login` → `/admin` works: superadmin can log in with username `admin` + `ADMIN_PASSWORD`, manage events, RSVPs, passes, and managers.
+- `/invite` and `/vip/<id>` work for VIP passes.
+- The daily `supabase-keepalive.yml` workflow keeps the Supabase project warm (needs both Supabase secrets in GitHub).
+
+What you give up at the minimum floor:
+
+- No flyer OCR / `dist/` rebuild pipeline — add `ANTHROPIC_API_KEY` + `GITHUB_PAT` (and the Google Sheet pair if you want legacy mirroring).
+- No Telegram notifications, no `/getflyer` / `/summary` / flyer review buttons — add `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`, and any zone chat IDs you care to route to.
+- No Sheet-side reads/writes (`backfill-rsvps`, `restore-rsvps`, `sync-check`, `final-summary`, `cleanup-past-rsvps` Sheet-delete step) — add `GOOGLE_SHEET_ID` + `GOOG_SA_JSON`.
+
+Production parity adds (in priority order): `GITHUB_PAT`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`, then the five `TELEGRAM_CHAT_ID_*` per-zone variables.
+
+---
+
+## 16. Recreate From Scratch
+This is a complete, zero-prior-knowledge runbook for standing up a working clone of SCREvents on your own infrastructure. Every external account, every secret, every table, every webhook. Work through it in order — later steps depend on artifacts produced earlier (the Supabase URL, the bot token, the Netlify site URL, etc.). When you need more depth on any moving part, jump to the cross-referenced section.
+
+Total time budget for a first-time setup: ~2 hours, most of it waiting on Netlify deploys and Telegram chat-id discovery.
+
+### 0. Prerequisites
+
+Install on your workstation:
+
+```bash
+# Node 22 (matches the GitHub Actions runner pinned in every workflow)
+node --version   # should print v22.x
+
+# Git
+git --version
+
+# Optional but recommended
+npm install -g netlify-cli   # for local function testing + manual deploys
+```
+
+Accounts you will need (all free tiers are sufficient):
+
+- GitHub (host the repo + run GitHub Actions)
+- Supabase (Postgres + storage)
+- Netlify (static hosting + serverless functions)
+- Telegram (admin notifications + flyer review bot)
+- Anthropic Console (Claude API key — used by `scripts/automate.js` to OCR flyers)
+- Google Cloud (service account JSON for the legacy Sheets dual-write — required even if you do not plan to actively use the Sheet, because several functions and scripts reference it; you can plug in any valid service account and an empty sheet)
+- A domain registrar (optional, only if you want a custom domain instead of `*.netlify.app`)
+
+### 1. GitHub repository
+
+1. Create a new GitHub repository (private is fine). Name it whatever you like — call it `screvents` for the walkthrough.
+2. Clone this codebase locally and push it to your new repo:
+
+```bash
+git clone <this-repo-url> screvents
+cd screvents
+git remote remove origin
+git remote add origin git@github.com:YOUR-USER/screvents.git
+git push -u origin main
+```
+
+3. Confirm that `dist/` is committed (it is — `dist/` is the published artifact and the build step only refreshes the flyer-builder assets on top of it; see `build.sh` and the `[build]` block in `netlify.toml`).
+
+> The workflows in `.github/workflows/` reference the repository as `pritpnp/rsvp-automation` in a few places (`netlify/functions/manage-flyers.js`, `netlify/functions/refresh-flyers.js`, `netlify/functions/trigger-redeploy.js`, `netlify/functions/telegram-webhook.js`, `scripts/automate.js`). Search and replace `pritpnp/rsvp-automation` with `YOUR-USER/YOUR-REPO` in those files before pushing, otherwise GitHub Contents API calls will target the original repo.
+
+```bash
+grep -rl 'pritpnp/rsvp-automation' netlify/ scripts/ | \
+  xargs sed -i.bak 's|pritpnp/rsvp-automation|YOUR-USER/YOUR-REPO|g'
+find . -name '*.bak' -delete
+git commit -am 'chore: point automation at new repo' && git push
+```
+
+### 2. Supabase project
+
+1. Go to [supabase.com](https://supabase.com), create a new project. Pick a region close to your users.
+2. Wait for provisioning. Copy from Project Settings -> API:
+   - `Project URL` -> save as `SUPABASE_URL`
+   - `service_role` secret key -> save as `SUPABASE_SERVICE_KEY` (NEVER expose to the browser)
+   - `anon public` key -> save as `SUPABASE_ANON_KEY` (used as a defensive fallback in a few functions)
+
+3. Open SQL Editor and paste the schema bootstrap. The repo has no `.sql` files (see Supabase Schema for the rationale), so you create the tables now. Here is a single transactional script that reproduces every table the code expects:
+
+```sql
+-- Enable UUID helpers
+create extension if not exists "uuid-ossp";
+create extension if not exists "pgcrypto";
+
+-- =========================
+-- RSVPs (live + archive)
+-- =========================
+create table public.rsvps (
+  id              uuid primary key default gen_random_uuid(),
+  zone            text not null,
+  name            text not null,
+  guests          int  not null default 1,
+  event_name      text,
+  submitted_at    timestamptz not null default now(),
+  sheet_row_id    text
+);
+create index rsvps_zone_idx          on public.rsvps (zone);
+create index rsvps_submitted_at_idx  on public.rsvps (submitted_at desc);
+create index rsvps_sheet_row_id_idx  on public.rsvps (sheet_row_id);
+
+create table public.rsvps_archive (
+  id              uuid primary key,
+  zone            text not null,
+  name            text not null,
+  guests          int  not null default 1,
+  event_name      text,
+  submitted_at    timestamptz,
+  sheet_row_id    text,
+  event_date      text,
+  archived_at     timestamptz not null default now()
+);
+create index rsvps_archive_zone_idx       on public.rsvps_archive (zone);
+create index rsvps_archive_event_date_idx on public.rsvps_archive (event_date);
+create index rsvps_archive_archived_idx   on public.rsvps_archive (archived_at desc);
+
+-- =========================
+-- RSVP on/off toggle
+-- =========================
+create table public.rsvp_settings (
+  zone     text primary key,
+  enabled  boolean not null default true
+);
+
+-- =========================
+-- Managers + sessions
+-- =========================
+create table public.managers (
+  id             uuid primary key default gen_random_uuid(),
+  username       text not null unique,
+  password_hash  text not null,
+  permissions    jsonb not null default '{}'::jsonb,
+  created_at     timestamptz not null default now()
+);
+
+create table public.manager_sessions (
+  token        text primary key,
+  manager_id   uuid references public.managers(id) on delete cascade,
+  expires_at   timestamptz not null
+);
+create index manager_sessions_expires_idx on public.manager_sessions (expires_at);
+
+-- =========================
+-- Events + VIP passes
+-- =========================
+create table public.events (
+  id           uuid primary key default gen_random_uuid(),
+  event_name   text not null,
+  start_date   date not null,
+  end_date     date not null,
+  start_time   text default '',
+  end_time     text default '',
+  max_passes   int  not null default 50,
+  notes        text
+);
+
+create table public.vip_passes (
+  id                uuid primary key default gen_random_uuid(),
+  guest_name        text not null,
+  phone             text not null,
+  phone_normalized  text not null,
+  event_id          uuid references public.events(id) on delete cascade,
+  event_name        text,
+  event_date        text,
+  created_at        timestamptz not null default now()
+);
+create index vip_passes_event_idx       on public.vip_passes (event_id);
+create index vip_passes_phone_norm_idx  on public.vip_passes (phone_normalized);
+create unique index vip_passes_event_phone_uniq
+  on public.vip_passes (event_id, phone_normalized);
+
+-- =========================
+-- Flyer builder + reviews
+-- =========================
+create table public.builder_sessions (
+  id              uuid primary key default gen_random_uuid(),
+  manager_id      uuid references public.managers(id) on delete cascade,
+  is_superadmin   boolean not null default false,
+  allowed_zones   text[]  not null default '{}',
+  allow_advanced  boolean not null default false,
+  expires_at      timestamptz not null,
+  used            boolean not null default false
+);
+
+create table public.flyer_reviews (
+  id               uuid primary key,
+  zone             text not null,
+  storage_path     text not null,
+  og_storage_path  text,
+  event_data       jsonb,
+  status           text not null default 'pending',
+  created_by       text,
+  created_at       timestamptz not null default now()
+);
+create index flyer_reviews_status_idx on public.flyer_reviews (status);
+
+-- =========================
+-- Per-zone display event name
+-- =========================
+create table public.zone_events (
+  zone        text primary key,
+  event_name  text,
+  updated_at  timestamptz not null default now()
+);
+
+-- =========================
+-- Telegram upload wizard state
+-- =========================
+create table public.telegram_upload_sessions (
+  chat_id         text primary key,
+  step            text,
+  photo_file_id   text,
+  zone            text,
+  updated_at      timestamptz not null default now()
+);
+
+-- =========================
+-- Invite rate limit
+-- =========================
+create table public.invite_lookup_attempts (
+  id               uuid primary key default gen_random_uuid(),
+  ip               text,
+  success          boolean not null,
+  name_attempted   text,
+  phone_attempted  text,
+  attempted_at     timestamptz not null default now()
+);
+create index invite_lookup_ip_time_idx
+  on public.invite_lookup_attempts (ip, attempted_at desc);
+create index invite_lookup_time_idx
+  on public.invite_lookup_attempts (attempted_at desc);
+
+create table public.invite_ip_whitelist (
+  ip          text primary key,
+  note        text,
+  added_by    text,
+  added_at    timestamptz not null default now()
+);
+```
+
+4. About Row Level Security: every server-side caller (Netlify Functions + GitHub Actions scripts) authenticates with `SUPABASE_SERVICE_KEY`, which bypasses RLS. You can leave RLS in its default state. If you want to be defensive, enable RLS on every table without adding any policies — service-role still bypasses it, and you eliminate any chance of accidental anon access.
+
+5. Create the Storage bucket used by the flyer-builder review pipeline:
+   - Storage -> New bucket -> name: `flyer-reviews`
+   - Set to Private (the function uses `createSignedUrl` for short-lived access)
+
+### 3. Telegram bot + chat IDs
+
+1. In Telegram, open a chat with `@BotFather`.
+2. Send `/newbot`, follow the prompts to pick a name and handle. BotFather returns an HTTP API token — save as `TELEGRAM_BOT_TOKEN`.
+3. Generate a random webhook secret:
+
+```bash
+openssl rand -hex 32
+```
+
+Save as `TELEGRAM_WEBHOOK_SECRET`. You will hand it to Telegram in step 5.7.
+
+4. Create one Telegram group per zone (the bot needs to be a member of each). The code expects these five zone groups plus one admin group (see Telegram Bot Integration for the full zone routing model):
+
+| Group | Env var |
+| --- | --- |
+| Admin / broadcast group | `TELEGRAM_CHAT_ID` |
+| Scranton zone | `TELEGRAM_CHAT_ID_SCRANTON` |
+| Mountain Top zone | `TELEGRAM_CHAT_ID_MOUNTAIN_TOP` |
+| Moosic zone | `TELEGRAM_CHAT_ID_MOOSIC` |
+| Bloomsburg zone | `TELEGRAM_CHAT_ID_BLOOMSBURG` |
+| Mandir / Satsang Sabha umbrella | `TELEGRAM_CHAT_ID_MANDIR` |
+
+5. For each group: add your bot, send any message in the group, then fetch updates and copy the negative integer chat id:
+
+```bash
+curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates" | jq '.result[].message.chat'
+```
+
+Or use `@RawDataBot` / `@userinfobot` (add it to the group, it prints the chat id, then remove it).
+
+6. Disable group privacy on the bot so it can read commands like `/summary` and `/getflyer` in the zone groups: `@BotFather` -> `/mybots` -> select bot -> `Bot Settings` -> `Group Privacy` -> `Turn off`.
+
+### 4. GitHub Personal Access Token
+
+1. GitHub -> Settings -> Developer settings -> Personal access tokens -> Tokens (classic) -> Generate new token (classic).
+2. Scopes: `repo` (full) and `workflow`.
+3. Expiry: pick the longest the org policy allows.
+4. Save as `GITHUB_PAT`.
+
+This token is used by `netlify/functions/manage-flyers.js`, `netlify/functions/refresh-flyers.js`, `netlify/functions/trigger-redeploy.js`, and `netlify/functions/telegram-webhook.js` to commit flyers and dispatch workflows against your repo over the GitHub Contents API.
+
+### 5. Anthropic + Google service account
+
+1. Anthropic Console -> Settings -> API Keys -> Create Key. Save as `ANTHROPIC_API_KEY`. Used by `scripts/automate.js` for flyer OCR.
+2. Google Cloud Console -> create a project -> enable the Google Sheets API -> IAM & Admin -> Service Accounts -> Create -> Keys -> Add key -> JSON. Download the JSON.
+3. Create a Google Sheet (any blank sheet works for first boot). Copy the ID from the URL `docs.google.com/spreadsheets/d/<SHEET_ID>/edit` and save as `GOOGLE_SHEET_ID`. Share the sheet with the service account email (`client_email` in the JSON) with Editor access.
+4. The contents of the JSON file go into two env-var aliases — `GOOG_SA_JSON` (used by Netlify Functions) and `GOOGLE_SERVICE_ACCOUNT_JSON` (used by some GitHub Actions workflows). They are the same value; set both. Paste as a single-line string when filling the dashboards.
+
+### 6. Netlify site
+
+1. Netlify -> Add new site -> Import from Git -> select your GitHub repo.
+2. Build settings:
+   - Build command: `bash build.sh`
+   - Publish directory: `dist`
+   - Functions directory: `netlify/functions` (auto-detected from `netlify.toml`)
+3. Do NOT deploy yet — first set environment variables.
+4. Site settings -> Environment variables. Set every variable whose `setWhere` is `netlify-dashboard` or `both` in the Environment Variables Reference. At minimum:
+
+```
+ADMIN_PASSWORD
+SUPABASE_URL
+SUPABASE_SERVICE_KEY
+SUPABASE_ANON_KEY
+GOOGLE_SHEET_ID
+GOOG_SA_JSON
+GITHUB_PAT
+TELEGRAM_BOT_TOKEN
+TELEGRAM_WEBHOOK_SECRET
+TELEGRAM_CHAT_ID
+TELEGRAM_CHAT_ID_SCRANTON
+TELEGRAM_CHAT_ID_MOUNTAIN_TOP
+TELEGRAM_CHAT_ID_MOOSIC
+TELEGRAM_CHAT_ID_BLOOMSBURG
+TELEGRAM_CHAT_ID_MANDIR
+```
+
+Pick a strong random value for `ADMIN_PASSWORD`:
+
+```bash
+openssl rand -hex 32
+```
+
+5. Trigger the first deploy: Deploys -> Trigger deploy -> Deploy site. Wait for green. Note the URL Netlify assigns (e.g. `https://radiant-tiramisu-123.netlify.app`).
+
+6. Smoke-test a function before wiring Telegram:
+
+```bash
+curl https://YOUR-SITE.netlify.app/.netlify/functions/rsvp-status
+# expect: {"global":true,"scranton":true,...}
+```
+
+7. Register the Telegram webhook so updates start flowing to `netlify/functions/telegram-webhook.js`:
+
+```bash
+curl -X POST \
+  -F "url=https://YOUR-SITE.netlify.app/.netlify/functions/telegram-webhook" \
+  -F "secret_token=YOUR_WEBHOOK_SECRET" \
+  "https://api.telegram.org/botYOUR_BOT_TOKEN/setWebhook"
+```
+
+Verify with:
+
+```bash
+curl "https://api.telegram.org/botYOUR_BOT_TOKEN/getWebhookInfo"
+```
+
+The response should show your Netlify URL and `"has_custom_certificate": false`. Pending update count should be 0.
+
+### 7. GitHub Actions secrets
+
+1. In your repo: Settings -> Secrets and variables -> Actions -> New repository secret. Add every variable whose `setWhere` is `github-secrets` or `both` in the Environment Variables Reference:
+
+```
+ANTHROPIC_API_KEY
+SUPABASE_URL
+SUPABASE_SERVICE_KEY
+GOOGLE_SHEET_ID
+GOOG_SA_JSON
+GOOGLE_SERVICE_ACCOUNT_JSON
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+TELEGRAM_CHAT_ID_SCRANTON
+TELEGRAM_CHAT_ID_MOUNTAIN_TOP
+TELEGRAM_CHAT_ID_MOOSIC
+TELEGRAM_CHAT_ID_BLOOMSBURG
+TELEGRAM_CHAT_ID_MANDIR
+NETLIFY_AUTH_TOKEN   # only if you wire a deploy step; current workflows do not require it
+NETLIFY_SITE_ID      # same
+```
+
+2. Enable Actions: Actions tab -> "I understand my workflows, go ahead and enable them".
+
+3. Verify each workflow boots by manually dispatching it once (Actions -> select workflow -> Run workflow):
+   - `supabase-keepalive.yml` -> green run = Supabase REST reachable
+   - `sync-check.yml` -> green = Sheet + Supabase both readable
+   - `rsvp-summary.yml` -> with default inputs, green even on an empty DB
+   - `cleanup-past-rsvps.yml` -> green, will silently no-op
+   - `final-summary.yml` -> green, will silently no-op
+   - `rsvp-automation.yml` -> green; this one rebuilds `dist/` from `flyers/` and re-commits `deadlines.json`. On a freshly-cloned repo there are no new flyers to OCR, so it will exit fast.
+
+If a workflow fails, the run log identifies the missing secret or misconfigured env. See Scheduled Scripts and GitHub Actions Workflows for what each one does.
+
+### 8. Custom domain (optional)
+
+1. Netlify -> Site -> Domain management -> Add custom domain (e.g. `screvents.com`).
+2. Follow Netlify's DNS instructions (either delegate the entire domain to Netlify DNS, or add the `CNAME`/`ALIAS` records they provide).
+3. Wait for DNS to propagate, then provision Let's Encrypt cert from the same screen.
+4. After the domain resolves, update the Telegram webhook URL to the custom domain so `setWebhook` matches the public origin and any hard-coded absolute URLs in `scripts/automate.js` (`https://screvents.com/...`) resolve correctly. If you are not using `screvents.com`, search and replace it in `scripts/automate.js`:
+
+```bash
+grep -rln 'screvents.com' scripts/ netlify/ public/ dist/
+# replace as needed, then re-deploy
+```
+
+### 9. Seed the first manager (superadmin login path)
+
+The `managers` table is empty. You log in initially as superadmin via username `admin` and `ADMIN_PASSWORD` (see Auth and Security). To also have a non-superadmin manager account for testing, insert one directly into Supabase.
+
+1. Generate a bcrypt hash for the new manager's password (cost 10, matching `superadmin-managers.js`):
+
+```bash
+node -e "console.log(require('bcryptjs').hashSync(process.argv[1], 10))" 'mypassword123'
+# prints: $2a$10$........
+```
+
+You will need `bcryptjs` available locally. From the repo root:
+
+```bash
+npm install bcryptjs
+```
+
+2. Supabase -> SQL Editor:
+
+```sql
+insert into public.managers (username, password_hash, permissions) values (
+  'testmanager',
+  '$2a$10$REPLACE_WITH_HASH_FROM_STEP_1',
+  '{
+    "view_rsvps": true,
+    "edit_rsvps": true,
+    "delete_rsvps": false,
+    "view_passes": true,
+    "create_delete_passes": true,
+    "edit_passes": true,
+    "upload_flyers": true,
+    "remove_flyers": true,
+    "refresh_flyers": true,
+    "flyer_builder": true,
+    "flyer_builder_advanced": false,
+    "flyer_zones": ["scranton","mountain-top","moosic","bloomsburg","satsang-sabha"]
+  }'::jsonb
+);
+```
+
+3. Smoke-test:
+   - Open `https://YOUR-SITE.netlify.app/login`
+   - Sign in as `admin` / `ADMIN_PASSWORD` -> should land on `/admin` with every tab visible
+   - Sign out, sign in as `testmanager` / `mypassword123` -> should land on `/admin` with the limited tab set defined by the permissions JSON above
+
+If login fails, check Netlify Function logs for `manager-auth` — most failures are bcrypt-hash mismatches (wrong password, or `$2b$` vs `$2a$` confusion; `bcryptjs` accepts both).
+
+### 10. Add your first event
+
+Use the flow documented in Per-Event Configuration to add a real event. In summary:
+
+1. Sign in to `/admin` as superadmin, open the Events tab, create an event row (`superadmin-events.js`).
+2. Drop a flyer image into `flyers/<zone>/flyer.jpg` in the repo and push to `main`. Example for the Scranton zone:
+
+```bash
+mkdir -p flyers/scranton
+cp ~/Downloads/scranton-event.jpg flyers/scranton/flyer.jpg
+git add flyers/scranton/flyer.jpg
+git commit -m 'feat: add scranton zone flyer'
+git push
+```
+
+3. The push triggers `.github/workflows/rsvp-automation.yml`, which runs `scripts/automate.js`. The script OCRs the flyer with Claude, writes the OCR'd event name into `zone_events`, regenerates `dist/scranton/index.html` plus `dist/np/scranton/index.html` plus `og.jpg`, updates `deadlines.json`, and pushes `dist/` back to `main`. Netlify picks up the push and redeploys.
+4. Watch the run in Actions. On success, `https://YOUR-SITE.netlify.app/scranton` shows the event page; `deadlines.json` in the repo root now contains the `scranton` key (see Deadlines JSON).
+
+Alternatively, build the flyer interactively (no manual repo commit needed):
+
+- `/admin` -> Flyer Builder tab -> opens `/flyer-builder/?session=<uuid>` (see Flyer Builder Flow).
+- Pick the zone, fill the form, drag overlays, click Send for Review.
+- An admin taps Approve in the Telegram admin group; the bot commits `flyers/<zone>/flyer.jpg` and `og.jpg` to your repo, which re-triggers `rsvp-automation.yml`.
+
+### 11. End-to-end verification checklist
+
+Tick these off in order. If any step fails, the cross-referenced section has the troubleshooting context.
+
+1. Public RSVP submit
+   - Open `https://YOUR-SITE.netlify.app/scranton` (or any zone you set up)
+   - Submit a test RSVP with name + guests count
+   - Supabase -> Table Editor -> `rsvps` should contain the row within ~2 seconds
+   - See `netlify/functions/submit-rsvp.js` (Netlify Functions Reference)
+
+2. RSVP toggle
+   - `/admin` -> Settings -> turn off RSVPs for `scranton`
+   - Reload the public Scranton page -> form should be hidden / show closed state
+   - Re-enable, refresh, confirm form returns
+   - See `netlify/functions/manage-rsvp.js` + `netlify/functions/rsvp-status.js`
+
+3. Flyer-builder full loop
+   - `/admin` -> Flyer Builder -> compose a flyer for a zone you have permission for
+   - Send for Review -> see new row in `flyer_reviews` table with `status = 'pending'`
+   - Telegram admin group receives a sendPhoto with Approve / Reject buttons
+   - Tap Approve -> `flyer_reviews.status` flips `pending` -> `processing` -> `approved`
+   - GitHub repo: a new commit lands on `main` touching `flyers/<zone>/flyer.jpg` and `og.jpg`
+   - Actions: `rsvp-automation.yml` kicks off automatically
+   - Netlify: site redeploys (watch Deploys tab)
+   - `https://YOUR-SITE.netlify.app/<zone>/flyer.jpg` shows the new image
+   - See Flyer Builder Flow + Telegram Bot Integration
+
+4. Invite lookup + VIP pass
+   - `/admin` -> VIP Passes tab -> create a pass for the event (`admin-passes.js`)
+   - Open `/invite`, enter the name and phone for that pass
+   - On success, browser redirects to `/vip/<id>` showing the pass card
+   - Hit `/invite` with wrong details 5 times from the same IP -> 6th lookup returns 429
+   - `/admin` -> Invite Lookup Security -> see the blocked IP in the list (`admin-rate-limit.js`)
+
+5. Scheduled workflows
+   - `Actions` -> `RSVP Sync Check` should run every 10 minutes and stay green
+   - `Actions` -> `Supabase Keep-Alive` runs daily at 13:00 UTC and pings `vip_passes`
+   - Manually dispatch `RSVP Summary` -> Telegram zone chats receive the digest
+
+6. Telegram bot commands (from the admin Telegram group)
+   - `/refreshall` -> Actions tab shows a fresh `rsvp-automation.yml` run with `force_all=true`
+   - `/uploadflyer` -> wizard prompts for a photo -> after upload + zone confirm, repo gets a new commit
+   - `/removeflyer` -> wizard removes the flyer from repo
+   - `/getflyer scranton` -> bot replies with the current Scranton flyer
+   - `/summary` -> Actions tab shows a fresh `rsvp-summary.yml` run, results land in the chat that invoked it
+
+Once every box is ticked you have a clone that is functionally identical to production. From here, day-two operations live in the relevant section: add managers in Auth and Security, add events in Per-Event Configuration, customize flyer templates in Flyer Builder Flow, edit cron cadence in Scheduled Scripts and GitHub Actions Workflows.
+
+---
+
+## 17. Operations & Troubleshooting
+This section is the runbook for the SCREvents stack: routine ops tasks (rotating secrets, adding managers, refreshing flyers) and the diagnostic playbook for the failure modes that actually happen in production. Every command is copy-pasteable; every troubleshooting entry follows the **symptom → cause → fix** format.
+
+---
+
+### Operations
+
+#### Running a scheduled GitHub Actions workflow manually
+
+All seven workflows in `.github/workflows/` declare `workflow_dispatch:` alongside their `schedule:` block, so any of them can be kicked off on demand without waiting for the cron to fire. Use this whenever you need to force a flyer rebuild, send a one-off RSVP digest, or smoke-test a pipeline after editing a secret.
+
+1. Open the repo on GitHub and click the **Actions** tab.
+2. Pick the workflow in the left sidebar (e.g. **RSVP Automation**, **RSVP Summary**, **Event-Night RSVP Cleanup**, **RSVP Sync Check**, **Final RSVP Summary**, **Supabase Keep-Alive**).
+3. Click the **Run workflow** dropdown on the right.
+4. For workflows with inputs (only `RSVP Automation` and `RSVP Summary` expose them), fill them in:
+   - `RSVP Automation`: `force_all` (`true`/`false`) and `zone_override` (one of `scranton`, `mountain-top`, `moosic`, `bloomsburg`, `satsang-sabha`, `mandir-1`..`mandir-5`). Leaving `zone_override` blank with `force_all=true` re-OCRs every zone.
+   - `RSVP Summary`: `target_zone` (`scranton` / `mountain-top` / `moosic` / `bloomsburg` / `mandir` / `all`), `trigger_chat_id` (Telegram chat ID to reply into — leave empty for scheduled zone-routed sends), `test_mode` (`true` ignores deadline gating).
+5. Click the green **Run workflow** button. Refresh the page to see the run appear; click into it to stream logs.
+
+You can also dispatch from the CLI if you have `gh` installed:
+
+```bash
+gh workflow run "RSVP Automation" -f force_all=true -f zone_override=
+gh workflow run "RSVP Summary" -f target_zone=scranton -f trigger_chat_id= -f test_mode=false
+```
+
+Note that `RSVP Automation` uses `concurrency: rsvp-automation-deploy` with `cancel-in-progress: false`, so if you dispatch while a previous run is still active, the new run will queue rather than cancel — this is intentional to prevent racing `dist/` commits.
+
+#### Adding or removing a manager
+
+Managers live in the Supabase `managers` table (see **Supabase Schema**). The supported path is the admin UI at `/admin` → **Managers** tab (superadmin-only), which calls `netlify/functions/superadmin-managers.js` and bcrypt-hashes the password server-side at cost 10. Use this whenever possible.
+
+**Add via the UI:**
+1. Sign in to `/login` as `admin` (the superadmin account, password = `ADMIN_PASSWORD`).
+2. Go to `/admin` and click the **Managers** tab.
+3. Click **Add Manager**, fill in `username` (forced lowercase + trimmed server-side) and `password`, check the permission boxes you want granted (e.g. `view_rsvps`, `edit_rsvps`, `view_passes`, `create_delete_passes`, `flyer_builder`, `flyer_zones[]`, `upload_flyers`, `refresh_flyers`).
+4. Click save. The row is inserted with a bcrypt hash and a `permissions` JSONB blob.
+
+**Remove via the UI:** click the delete icon next to the manager. `superadmin-managers.js` pre-deletes any rows in `manager_sessions` for that `manager_id` before deleting the manager, so live sessions are immediately invalidated — there is no FK CASCADE in the schema, this is enforced in JS.
+
+**Add directly via SQL (break-glass only — for example, if `ADMIN_PASSWORD` is lost and you need to seed a new superadmin via Supabase SQL editor):** generate a bcrypt hash with a one-liner, then insert.
+
+```bash
+# Generate a bcrypt hash (cost 10, matches the app's setting)
+node -e "console.log(require('bcryptjs').hashSync(process.argv[1], 10))" 'the-new-password'
+```
+
+Then in the Supabase SQL editor:
+
+```sql
+INSERT INTO managers (username, password_hash, permissions)
+VALUES (
+  'jane.doe',
+  '$2a$10$....paste.hash.here....',
+  '{"view_rsvps":true,"view_passes":true,"create_delete_passes":true,"flyer_builder":true,"flyer_zones":["scranton","moosic"],"upload_flyers":true,"refresh_flyers":true}'::jsonb
+);
+```
+
+To remove via SQL (also clean up sessions to avoid orphans):
+
+```sql
+DELETE FROM manager_sessions WHERE manager_id = (SELECT id FROM managers WHERE username = 'jane.doe');
+DELETE FROM managers WHERE username = 'jane.doe';
+```
+
+The `bcryptjs` package is already a dependency of `netlify/functions/package.json`, so running the Node one-liner from inside `netlify/functions/` (or after `npm install bcryptjs` locally) Just Works.
+
+#### Changing `ADMIN_PASSWORD`
+
+`ADMIN_PASSWORD` is the plaintext superadmin password compared in `netlify/functions/manager-auth.js` when `username === 'admin'`, and it doubles as the bearer for the `x-admin-password` header used by a handful of admin functions (see **Auth & Security**). It is server-side only — the browser never sees it.
+
+1. Generate a new strong random secret: `openssl rand -hex 32`.
+2. Netlify dashboard → **Site configuration** → **Environment variables** → find `ADMIN_PASSWORD` → **Edit** → paste the new value → **Save**.
+3. Trigger a redeploy so the functions pick up the new env: Netlify → **Deploys** → **Trigger deploy** → **Deploy site**. (Editing an env var alone does NOT update already-warm function instances.)
+4. Invalidate any live superadmin sessions tied to the old password by running this in Supabase SQL editor:
+   ```sql
+   DELETE FROM manager_sessions WHERE manager_id IS NULL;
+   ```
+   This forces a fresh `/login` for anyone using the `admin` account.
+5. Sign in at `/login` with username `admin` and the new password to verify.
+
+#### Adding a new event
+
+Adding a new event is **NOT** done by editing `deadlines.json` directly — that file is auto-rewritten by `scripts/automate.js` on every `RSVP Automation` run and any manual edits will be overwritten. See **Per-Event Configuration** for the full procedure (commit a flyer image to `flyers/<zone>/flyer.jpg` in the `pritpnp/rsvp-automation` repo, which triggers OCR, page generation, and `dist/` deploy).
+
+Quick checklist when standing up a brand-new zone slug:
+- Add a route entry to `netlify.toml` if it needs SPA-style rewriting (existing per-event pages do not — they are static `dist/<zone>/index.html`).
+- Add the zone to the relevant `ZONE_CHAT_IDS` map and `VALID_ZONES`/`UPLOAD_ZONES` constants in `netlify/functions/late-rsvp.js`, `netlify/functions/manage-flyers.js`, `netlify/functions/manage-rsvp.js`, `netlify/functions/refresh-flyers.js`, `netlify/functions/review-flyer.js`, `netlify/functions/telegram-webhook.js`, and `netlify/functions/update-event-name.js`.
+- Add the zone to `PARASABHA_ZONES` or `MANDIR_ZONES` / `MANDIR_SLOTS` in `scripts/automate.js`.
+- Provision the zone's Telegram chat and add `TELEGRAM_CHAT_ID_<ZONE>` in **both** Netlify env and GitHub Actions secrets (see **Environment Variables Reference**).
+- If the zone needs builder templates, drop the `.png` files into `public/flyer-builder/templates/` and `public/flyer-builder/preview-templates/`.
+
+#### Updating the flyer for an existing event
+
+There are three supported paths, in increasing order of "operator privilege":
+
+**Path A — Flyer Builder (preferred for managers).**
+1. Sign in at `/login`.
+2. In `/admin`, click **Open Flyer Builder**. This calls `netlify/functions/create-builder-session.js` and opens `/flyer-builder/?session=<uuid>`.
+3. Pick the zone, fill in event details, click **Send for Review**.
+4. The flyer is uploaded to Supabase Storage bucket `flyer-reviews`, a row is inserted into `flyer_reviews` (status `pending`), and the admin Telegram chat receives a `sendPhoto` with **Approve** / **Reject** inline buttons.
+5. An admin (only `TELEGRAM_CHAT_ID` honors the callback) taps **Approve**. `netlify/functions/telegram-webhook.js` atomically claims the row (`pending → processing`), deletes any existing `flyers/<zone>/*.jpg|jpeg|png` files in the `pritpnp/rsvp-automation` repo, commits `flyers/<zone>/flyer.jpg` and `flyers/<zone>/og.jpg`, then marks the row `approved`.
+6. The repo push triggers `.github/workflows/rsvp-automation.yml`, which re-OCRs, regenerates `dist/<zone>/index.html`, and commits the rebuilt `dist/` back to `main`. Netlify auto-deploys on that commit.
+
+End-to-end this takes ~2 minutes from approval. See **Flyer Builder Flow** for the complete state machine.
+
+**Path B — Direct upload from admin portal.** Managers with `permissions.upload_flyers` can use the **Flyers** tab in `/admin`, which calls `netlify/functions/manage-flyers.js`. This skips the review queue and commits straight to `pritpnp/rsvp-automation` with message `Upload flyer for <zone> via admin portal`, then deletes the stale `og.jpg` so `scripts/automate.js` regenerates it on the next workflow run.
+
+**Path C — Manual commit (last resort).** If both functions are down or you need to push a one-off edit, commit `flyer.jpg` directly to the `pritpnp/rsvp-automation` repo at `flyers/<zone>/flyer.jpg` (and delete `flyers/<zone>/og.jpg` so it regenerates). The `RSVP Automation` workflow on push to `main` (paths-ignore: `dist/**`) will pick it up. Do **not** hand-edit files under `dist/<zone>/` in this repo — `scripts/automate.js` SHA1-diffs every file and will overwrite your changes on the next run.
+
+#### Viewing RSVPs
+
+Two supported paths, both backed by the `rsvps` table (live) and `rsvps_archive` (post-event, moved by `scripts/cleanup-past-rsvps.js` at 4 AM America/New_York the morning after an event):
+
+**Via the admin portal.** Sign in at `/login`, go to `/admin`, click the **RSVPs** tab. The page calls `netlify/functions/get-rsvps.js` for live RSVPs and `netlify/functions/get-archived-rsvps.js` for past events. The list supports per-zone filter, search, edit guest count (`PATCH /get-rsvps`), and delete (`DELETE /get-rsvps`). Managers need `permissions.view_rsvps` (+ `edit_rsvps` / `delete_rsvps` for mutations); superadmins see everything.
+
+**Via Supabase SQL editor.** Open the project at supabase.com → **SQL Editor** → run:
+
+```sql
+-- Live RSVPs for upcoming events
+SELECT zone, name, guests, event_name, submitted_at
+FROM rsvps
+ORDER BY zone, submitted_at DESC;
+
+-- Per-zone totals
+SELECT zone, COUNT(*) AS rsvps, SUM(guests) AS total_guests
+FROM rsvps
+GROUP BY zone
+ORDER BY zone;
+
+-- Recently archived (past events)
+SELECT zone, event_date, name, guests, archived_at
+FROM rsvps_archive
+WHERE archived_at >= now() - interval '30 days'
+ORDER BY archived_at DESC, submitted_at DESC;
+```
+
+You can also trigger an ad-hoc Telegram digest at any time by dispatching the **RSVP Summary** workflow (see "Running a scheduled GitHub Actions workflow manually" above) — set `target_zone=all` and `test_mode=true` to bypass deadline gating and post to every zone group.
+
+#### Rotating the Telegram webhook secret
+
+`TELEGRAM_WEBHOOK_SECRET` is the value Telegram echoes back in the `X-Telegram-Bot-Api-Secret-Token` header on every webhook delivery; `netlify/functions/telegram-webhook.js` constant-time-compares it via `crypto.timingSafeEqual`. Rotate whenever you suspect leak or on a quarterly schedule.
+
+1. Generate a new secret: `openssl rand -hex 32`.
+2. Netlify dashboard → **Environment variables** → update `TELEGRAM_WEBHOOK_SECRET` → **Save**.
+3. Trigger a Netlify redeploy so the function picks it up.
+4. Re-register the webhook with Telegram, passing the new secret as `secret_token`:
+   ```bash
+   curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "url": "https://screvents.com/.netlify/functions/telegram-webhook",
+       "secret_token": "PASTE_NEW_SECRET_HERE",
+       "allowed_updates": ["message", "callback_query"]
+     }'
+   ```
+5. Verify:
+   ```bash
+   curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
+   ```
+   The response should show `url` matching your webhook and `has_custom_certificate: false`. Telegram does not echo the secret back.
+6. Smoke-test by sending `/getflyer` from a zone group — if you don't get a reply within a few seconds, the secret rotation broke the auth check and you'll see silent 200s in the Netlify function logs (see "Telegram messages not arriving" below).
+
+#### Rotating `GITHUB_PAT`
+
+`GITHUB_PAT` is used by `netlify/functions/manage-flyers.js`, `netlify/functions/refresh-flyers.js`, `netlify/functions/telegram-webhook.js`, and `netlify/functions/trigger-redeploy.js` to write to the `pritpnp/rsvp-automation` repo and dispatch its workflows. Classic PATs expire on a fixed date; rotate at least 30 days before expiry to avoid silent flyer-upload failures.
+
+1. GitHub → top-right avatar → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)** → **Generate new token (classic)**.
+2. Scopes required:
+   - `repo` (full — write access to private contents)
+   - `workflow` (dispatch `rsvp-automation.yml` and `rsvp-summary.yml`)
+3. Set an expiry (90 days is a reasonable cadence) and click **Generate**.
+4. Copy the new token immediately (it's shown once).
+5. Netlify dashboard → **Environment variables** → update `GITHUB_PAT` → **Save**.
+6. Trigger a Netlify redeploy so warm functions pick up the new token.
+7. Smoke-test by clicking **Refresh Flyers** in `/admin` (calls `refresh-flyers.js`) — a 200 means the new PAT works against the workflow dispatch endpoint.
+8. Revoke the old token at GitHub → **Tokens (classic)** → click the old token → **Delete**.
+
+If you prefer fine-grained tokens, scope them to repo `pritpnp/rsvp-automation` with `Contents: Read and write`, `Actions: Read and write`, and `Metadata: Read`. Fine-grained tokens cannot exceed 1 year expiry.
+
+---
+
+### Troubleshooting
+
+#### Site shows "Function not found" or 500 immediately on every API call
+
+- **Symptom:** Every fetch to `/.netlify/functions/*` returns `404 Function not found` or a 500 with `Error: Missing SUPABASE_URL` / similar in the Netlify function log.
+- **Cause:** Required Netlify environment variables are unset (typical after restoring a site from backup, after creating a new Netlify site without re-adding env, or after someone accidentally deleted a var). `get-rsvps.js` for example explicitly throws when `SUPABASE_SERVICE_KEY` is missing rather than silently falling back.
+- **Fix:**
+  1. Netlify dashboard → **Environment variables** → diff the current list against **Environment Variables Reference** (the master table in this README).
+  2. The minimum production set for the Netlify function layer is: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`, `GITHUB_PAT`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CHAT_ID_SCRANTON`, `TELEGRAM_CHAT_ID_MOUNTAIN_TOP`, `TELEGRAM_CHAT_ID_MOOSIC`, `TELEGRAM_CHAT_ID_BLOOMSBURG`, `TELEGRAM_CHAT_ID_MANDIR`, `TELEGRAM_WEBHOOK_SECRET`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON`.
+  3. After fixing, trigger a redeploy (Netlify only injects env into new function builds).
+  4. If `/.netlify/functions/<name>` returns 404 on a function that definitely exists in `netlify/functions/`, check the deploy log — a syntax error in any function file aborts that single function's build but the deploy still succeeds. Search the build log for `Bundling function` / `Failed to bundle`.
+
+#### Flyer approval clicked but nothing was committed
+
+- **Symptom:** Admin tapped **Approve** in the Telegram review card. The caption may or may not have changed; nothing landed in `pritpnp/rsvp-automation` and the live `https://screvents.com/<zone>/flyer.jpg` is still the old image.
+- **Cause:** Several candidates, in order of likelihood:
+  1. `GITHUB_PAT` is expired or has insufficient scope (`repo` + `workflow` for classic; `Contents`+`Actions`+`Metadata` write for fine-grained).
+  2. The `flyer_reviews` row was claimed by an earlier delivery (atomic `pending → processing` succeeded once, then GitHub call threw, leaving the row stuck in `processing`). New approve clicks no-op because the CAS `.eq('status','pending')` no longer matches.
+  3. `telegram-webhook.js` is rejecting the callback because `TELEGRAM_WEBHOOK_SECRET` mismatch (silent 200) — but in that case the caption wouldn't have changed either, which distinguishes this case.
+- **Fix:**
+  1. Netlify dashboard → **Functions** → `telegram-webhook` → **Function log** → look for the most recent invocation. Search for `GitHub error`, `401`, `403`, or `Bad credentials`.
+  2. If you see GitHub auth errors, rotate `GITHUB_PAT` (procedure above).
+  3. If the row is stuck in `processing`, run this in the Supabase SQL editor to unstick it:
+     ```sql
+     UPDATE flyer_reviews
+        SET status = 'pending'
+      WHERE status = 'processing'
+        AND id = '<paste-review-id-from-telegram-card>';
+     ```
+     Then tap **Approve** again. If you don't know the review id, list recent rows: `SELECT id, zone, status, created_by FROM flyer_reviews ORDER BY id DESC LIMIT 20;`
+  4. If the approval succeeded but the live page didn't update, check that the `RSVP Automation` workflow run actually fired (Actions tab) — a push to `flyers/**` paths should trigger it. If it didn't, dispatch it manually with `force_all=true`.
+
+#### RSVP submit fails silently from a zone page
+
+- **Symptom:** User clicks **Submit RSVP** on `/scranton`, `/moosic`, etc. and the button spinner disappears with no thank-you message and no error toast.
+- **Cause:** `netlify/functions/submit-rsvp.js` returned non-200 to the browser. Most common causes:
+  1. `SUPABASE_SERVICE_KEY` is invalid or rotated without a redeploy → 500 `Could not save your RSVP.`
+  2. The `rsvps` table doesn't exist (fresh project, schema never bootstrapped) → 500.
+  3. `rsvp_settings` returns `enabled=false` for `global` or the zone → 403 `RSVPs are currently closed for this event.` The UI does render this, but if the zone page's `RSVP_ZONE` constant doesn't match what's in `rsvp_settings`, the user sees the silent failure.
+  4. `guests` > 100 → 400 `too high`.
+- **Fix:**
+  1. Open the browser DevTools → **Network** tab → click submit → inspect the response body for the actual error message. Every error path in `submit-rsvp.js` returns a JSON `{ error: "..." }`.
+  2. For `500 Could not save your RSVP.`: verify `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` in Netlify env match the current Supabase project (Project Settings → API). Rotate if needed and redeploy.
+  3. For schema issues, run a `SELECT count(*) FROM rsvps;` in the Supabase SQL editor. If it errors with `relation "rsvps" does not exist`, the table needs to be created — see **Supabase Schema** for the columns. There is no migrations file in the repo; the schema was created manually in the Supabase dashboard.
+  4. For closed-RSVP errors, verify the toggle: `SELECT * FROM rsvp_settings;` — the row for `global` AND the row for the zone must both have `enabled=true` (or be absent — absent defaults to true).
+
+#### Telegram messages not arriving
+
+- **Symptom:** A late RSVP submitted via the zone page doesn't fire a Telegram notification; or `/getflyer` in a zone group gets no reply; or flyer review cards don't appear after **Send for Review**.
+- **Cause:**
+  1. The bot was removed from the group, or was never added.
+  2. `TELEGRAM_BOT_TOKEN` is wrong (revoked from BotFather, or pasted with whitespace).
+  3. `TELEGRAM_CHAT_ID_*` env vars are unset or point to a stale chat ID (e.g. supergroup migration changes the chat ID format from positive to `-100`-prefixed negative).
+  4. For the webhook specifically (callbacks, slash commands): the webhook URL is wrong, or `TELEGRAM_WEBHOOK_SECRET` doesn't match the value passed to `setWebhook` — `telegram-webhook.js` will return a silent 200 with no body for any mismatched delivery so attackers can't probe.
+- **Fix:**
+  1. Verify the webhook is registered correctly:
+     ```bash
+     curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
+     ```
+     `url` should equal `https://screvents.com/.netlify/functions/telegram-webhook`. `last_error_message` and `last_error_date` reveal the most recent delivery failure if any. `pending_update_count` should be `0` or close to it.
+  2. Verify the bot is in the target group:
+     ```bash
+     curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChat?chat_id=${TELEGRAM_CHAT_ID_SCRANTON}"
+     ```
+     A 400 `chat not found` means the chat ID is stale or the bot was removed.
+  3. Re-fetch a chat's current ID: add @userinfobot to the group temporarily, or call `/getUpdates` after sending any message in the group.
+  4. If `getWebhookInfo` shows a recent `last_error_message: Wrong response from the webhook`, the secret rotation procedure is the recovery path — re-run `setWebhook` with the value currently set in Netlify env.
+  5. Netlify → **Functions** → `telegram-webhook` log will show silent 200 returns when the secret check fails (no log line at all, since we early-return before logging). If you see zero log lines for a webhook you know was delivered, suspect the secret.
+
+#### GitHub Actions workflow failing
+
+- **Symptom:** Red X on a workflow run in the **Actions** tab.
+- **Cause:** Almost always a missing or mistyped GitHub Actions secret. The workflow YAML references the secret name; the script reads `process.env.<NAME>`; if the secret isn't set, the env var is the empty string and the script errors out with `Missing SUPABASE_URL`, `Auth error`, or `401 Unauthorized` depending on which dependency tries to use it first.
+- **Fix:**
+  1. Click into the failing run → expand the failing step → look at the first non-INFO log line.
+  2. Cross-reference the secret name in the error against **Environment Variables Reference**. Secrets live in **GitHub → Settings → Secrets and variables → Actions** (NOT in Netlify env — these are separate stores).
+  3. The full set required by GitHub Actions secrets: `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_SHEET_ID`, `GOOG_SA_JSON` (and/or `GOOGLE_SERVICE_ACCOUNT_JSON` as fallback), `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CHAT_ID_SCRANTON`, `TELEGRAM_CHAT_ID_MOUNTAIN_TOP`, `TELEGRAM_CHAT_ID_MOOSIC`, `TELEGRAM_CHAT_ID_BLOOMSBURG`, `TELEGRAM_CHAT_ID_MANDIR`.
+  4. After adding a missing secret, re-run the failed job: **Actions** → click the run → **Re-run failed jobs**.
+  5. If the failure is in `RSVP Sync Check`, note that infra failures intentionally do NOT send Telegram alerts (`scripts/sync-check.js` exits non-zero but stays silent). The red workflow run IS the alert.
+
+#### `dist` out of sync with `public/flyer-builder/`
+
+- **Symptom:** The flyer-builder page at `/flyer-builder/` looks stale (old fonts, old templates, missing UI controls) compared to the source in `public/flyer-builder/`. Or `git status` shows `M dist/flyer-builder/index.html` even though no one intentionally edited it.
+- **Cause:** Someone edited `dist/flyer-builder/index.html` (or files under `dist/flyer-builder/templates|preview-templates|fonts/`) directly instead of editing the source-of-truth at `public/flyer-builder/`. `build.sh` runs on every Netlify deploy and overwrites `dist/flyer-builder/` from `public/flyer-builder/`, so direct edits to `dist/` will be silently clobbered on the next deploy.
+- **Fix:**
+  1. Move any intended edits back to `public/flyer-builder/`. The Netlify build script `build.sh` copies the four paths `templates/`, `preview-templates/`, `fonts/`, and `index.html` from `public/flyer-builder/` into `dist/flyer-builder/` on every deploy.
+  2. Re-run `bash build.sh` locally to re-sync `dist/flyer-builder/`, then commit the result. (The `dist/` directory is committed to git on purpose so static files Netlify serves are reviewable in PRs.)
+  3. If you're seeing the stale UI in production specifically, trigger a Netlify deploy to re-run `build.sh`.
+  4. To prevent recurrence: when adding a new flyer-builder asset, drop it in `public/flyer-builder/<subdir>/` and add the corresponding `cp` line to `build.sh` if it's a new top-level subdir. Asset paths the SPA fetches at runtime (`/flyer-builder/templates/*`, `/flyer-builder/preview-templates/*`, `/flyer-builder/fonts/*`) are CORS-enabled via the `[[headers]]` blocks in `netlify.toml` — new subdirs would also need a CORS header entry.
+
+#### `/admin` redirects to `/login` immediately after signing in
+
+- **Symptom:** Login appears to succeed (no error message), but the next page load redirects right back to `/login`.
+- **Cause:** `public/admin/index.html` calls `manager-auth/verify` on every boot. If the verify call fails (network error, function 500, or the just-issued session row isn't actually in `manager_sessions`), it clears `localStorage` and bounces to `/login`. Most common root cause is `SUPABASE_SERVICE_KEY` being stale at the function layer but still valid for the login INSERT — verify will SELECT and return 401 if it can't read its own write.
+- **Fix:**
+  1. Open DevTools → **Network** tab on `/admin` → look for the `manager-auth/verify` request.
+  2. If 401 `Session expired`: the row's `expires_at` is in the past, or the token is missing. Re-login.
+  3. If 401 `No token` despite the URL clearly passing one: check that the client sent `?token=<value>` in the query (the function ignores `Authorization: Bearer`).
+  4. If 500: check the function log for `Supabase` errors and re-verify the env.
+
+#### Supabase project paused / 503s across the stack
+
+- **Symptom:** Sudden wave of 500/503s across functions; admin portal won't load; RSVPs fail.
+- **Cause:** Supabase free tier pauses projects after ~7 days of inactivity. The `Supabase Keep-Alive` workflow (`.github/workflows/supabase-keepalive.yml`, daily at 13:00 UTC) prevents this — if it's been failing silently, the project paused.
+- **Fix:**
+  1. Supabase dashboard → the paused project shows a **Restore project** button → click and wait ~30 seconds.
+  2. Once restored, verify the keep-alive workflow runs cleanly: **Actions** → **Supabase Keep-Alive** → **Run workflow**. The step is a single `curl` against `vip_passes?select=id&limit=1` expecting HTTP 200/206.
+  3. If the keep-alive workflow has been red for days, the upstream cause is usually a rotated `SUPABASE_SERVICE_KEY` that wasn't propagated to GitHub Actions secrets — update the secret and re-run.
