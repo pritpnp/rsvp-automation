@@ -225,13 +225,13 @@
     "photoFeatherPct": 0.22,
     "header": {
       "widthPct": 0.072,
-      "cxPct": 0.72,
+      "cxPct": 0.68,
       "topPct": 0.035
     },
     "text": [
       {
         "key": "invitation",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.096,
         "font": "AddingtonCF",
         "sizePx": 30,
@@ -244,7 +244,7 @@
       },
       {
         "key": "zoneLine",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.146,
         "font": "AddingtonCF",
         "sizePx": 32,
@@ -257,7 +257,7 @@
       },
       {
         "key": "cordially",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.208,
         "font": "GothamRegular",
         "sizePx": 15,
@@ -270,7 +270,7 @@
       },
       {
         "key": "title",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.242,
         "font": "AddingtonCF",
         "sizePx": 93,
@@ -284,7 +284,7 @@
       },
       {
         "key": "santos",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.54,
         "font": "GothamRegular",
         "sizePx": 18,
@@ -296,7 +296,7 @@
       },
       {
         "key": "datetime",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.506,
         "font": "AddingtonCF",
         "sizePx": 48,
@@ -309,7 +309,7 @@
       },
       {
         "key": "rsvp",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.6,
         "font": "AppleSDGothicNeoH",
         "sizePx": 29,
@@ -322,7 +322,7 @@
       },
       {
         "key": "locationLabel",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.662,
         "font": "AddingtonCF",
         "sizePx": 20,
@@ -335,7 +335,7 @@
       },
       {
         "key": "host",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.712,
         "font": "GothamRegular",
         "sizePx": 24,
@@ -348,7 +348,7 @@
       },
       {
         "key": "address",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.766,
         "font": "AddingtonCF",
         "sizePx": 30,
@@ -361,7 +361,7 @@
       },
       {
         "key": "mahaprasad",
-        "cxPct": 0.72,
+        "cxPct": 0.68,
         "yPct": 0.886,
         "font": "AddingtonCF",
         "sizePx": 20,
