@@ -711,10 +711,18 @@ async function buildAnnouncementImage(srcPath) {
   const meta = await sharp(srcPath).metadata();
   const ar = (meta.width || 1) / (meta.height || 1);
   if (ar >= 1.4) {
-    // Landscape (OG cards ≈1.9:1): fill the frame, crop the side overflow.
+    // Landscape (OG cards ≈1.9:1): crop to 16:9 at the source's NATIVE
+    // resolution — never upscale, so it's always crisp. A small 1200×630 OG
+    // yields a smaller-but-sharp image; a hi-res OG (once the builder renders
+    // at higher res) yields a true, crisp 1920×1080.
+    const TR = W / H; // 16:9
+    let cw, ch;
+    if (ar > TR) { ch = meta.height; cw = Math.round(ch * TR); }
+    else { cw = meta.width; ch = Math.round(cw / TR); }
+    if (cw > W) { cw = W; ch = H; } // clamp/downscale to 1080p max
     return sharp(srcPath)
-      .resize(W, H, { fit: 'cover', position: 'centre' })
-      .jpeg({ quality: 90 })
+      .resize(cw, ch, { fit: 'cover', position: 'centre' })
+      .jpeg({ quality: 92 })
       .toBuffer();
   }
   // Portrait fallback: contain on a solid dominant-color panel (no blur).
