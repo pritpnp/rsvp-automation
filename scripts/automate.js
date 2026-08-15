@@ -244,6 +244,9 @@ function buildHtmlPage(eventInfo, zone, flyerPath, noPreview = false, ogSha1 = '
       </div>
     </div>
   </div>
+  <div style="text-align:center;padding:4px 16px 32px;">
+    <a href="${pageUrl}/announcement" style="display:inline-block;padding:12px 22px;border-radius:12px;background:linear-gradient(135deg,#C8860A,#E6A817);color:#fff;font-weight:600;font-size:14px;text-decoration:none;font-family:'DM Sans',sans-serif;">📢 Announcement Version</a>
+  </div>
   <div class="footer"><span class="footer-logo">SC Parasabha</span>scparasabha.com</div>
   <script>
     if (history.scrollRestoration) history.scrollRestoration = 'manual';
@@ -520,6 +523,9 @@ function buildMandirPage(eventInfo, slot, flyerPath, noPreview = false, override
       <div id="rsvp-error" style="display:none;margin-top:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;font-size:13px;color:#991b1b;text-align:center;"></div>
     </div>
   </div>` : ''}
+  <div style="text-align:center;padding:4px 16px 32px;">
+    <a href="${pageUrl}/announcement" style="display:inline-block;padding:12px 22px;border-radius:12px;background:linear-gradient(135deg,#7A1F2E,#A0304A);color:#fff;font-weight:600;font-size:14px;text-decoration:none;font-family:'DM Sans',sans-serif;">📢 Announcement Version</a>
+  </div>
   <div class="footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
   <script>
     const FLYER_URL = '${flyerUrl}';
@@ -692,6 +698,71 @@ async function buildOgImage(flyerPath) {
     ])
     .jpeg({ quality: 90 })
     .toBuffer();
+}
+
+// 1920×1080 (16:9) "announcement" image, reframed from an existing raster
+// (prefer the near-16:9 og.jpg, else the portrait flyer). No blur: a
+// landscape/near-16:9 source is scaled UP to FILL the frame top-to-bottom
+// (cover), trimming only a thin sliver off the sides. A portrait source (which
+// can't fill 16:9 without destroying it) is contained on a solid panel colored
+// from the image's own dominant tone — clean, no blur.
+async function buildAnnouncementImage(srcPath) {
+  const W = 1920, H = 1080;
+  const meta = await sharp(srcPath).metadata();
+  const ar = (meta.width || 1) / (meta.height || 1);
+  if (ar >= 1.4) {
+    // Landscape (OG cards ≈1.9:1): fill the frame, crop the side overflow.
+    return sharp(srcPath)
+      .resize(W, H, { fit: 'cover', position: 'centre' })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+  }
+  // Portrait fallback: contain on a solid dominant-color panel (no blur).
+  const { dominant } = await sharp(srcPath).stats();
+  return sharp(srcPath)
+    .resize(W, H, { fit: 'contain', background: dominant })
+    .flatten({ background: dominant })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+}
+
+// Tiny standalone viewer page served at <basePath>/announcement — shows the
+// 16:9 image full-width with a Download button + a link back to the event page.
+// Same-origin static page, so the plain <a download> works. Absolute image URL
+// so it resolves whether or not Netlify serves the path with a trailing slash.
+function buildAnnouncementViewerPage(eventInfo, zone, basePath, annSha1) {
+  const v = annSha1 ? '?v=' + annSha1.slice(0, 8) : '';
+  const imgSrc = `${basePath}/announcement.jpg${v}`;
+  const name = (eventInfo && eventInfo.eventName) ? eventInfo.eventName : 'Announcement';
+  const dlName = `${zone}-announcement.jpg`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${name} — Announcement</title>
+<meta name="robots" content="noindex" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', -apple-system, system-ui, sans-serif; background: #2a2320; color: #f5e6cc; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 18px; }
+  h1 { font-size: 15px; font-weight: 500; letter-spacing: .04em; opacity: .85; text-align: center; }
+  .frame { width: 100%; max-width: 1100px; }
+  .frame img { width: 100%; height: auto; display: block; border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,.5); background: #000; }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  a.btn { display: inline-block; padding: 12px 22px; border-radius: 12px; font-weight: 600; font-size: 14px; text-decoration: none; font-family: inherit; }
+  a.download { background: linear-gradient(135deg,#C8860A,#E6A817); color: #fff; }
+  a.back { background: rgba(255,255,255,.1); color: #f5e6cc; border: 1px solid rgba(255,255,255,.2); }
+</style>
+</head>
+<body>
+  <h1>${name} — Announcement Version (1920×1080)</h1>
+  <div class="frame"><img src="${imgSrc}" alt="${name} announcement" /></div>
+  <div class="actions">
+    <a class="btn download" href="${imgSrc}" download="${dlName}">⬇ Download image</a>
+    <a class="btn back" href="${basePath}">← Back to event</a>
+  </div>
+</body>
+</html>`;
 }
 
 function buildHubPage(allFlyers, deadlines) {
@@ -962,6 +1033,24 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     const imgSha1 = crypto.createHash('sha1').update(imgContent).digest('hex');
     files[imgFilePath] = imgSha1;
     fileContents[imgSha1] = { filePath: imgFilePath, content: imgContent };
+
+    // Announcement (1920×1080, 16:9) image + viewer page. Reframed from the
+    // near-16:9 og.jpg when present, else the portrait flyer. dist-only (never
+    // committed to flyers/) so the flyer picker + CI flyer-diff ignore it.
+    const annSrc     = fs.existsSync(manualOgPath) ? manualOgPath : flyerPath;
+    const annContent = await buildAnnouncementImage(annSrc);
+    const annSha1    = crypto.createHash('sha1').update(annContent).digest('hex');
+    const annFilePath = `${basePath}/announcement.jpg`;
+    files[annFilePath] = annSha1;
+    fileContents[annSha1] = { filePath: annFilePath, content: annContent };
+    console.log(`📢 Announcement image: ${Math.round(annContent.length / 1024)}KB (from ${annSrc === manualOgPath ? 'og.jpg' : 'flyer.jpg'})`);
+
+    const annViewerHtml    = buildAnnouncementViewerPage(eventInfoMap[zone], zone, basePath, annSha1);
+    const annViewerPath    = `${basePath}/announcement/index.html`;
+    const annViewerContent = Buffer.from(annViewerHtml);
+    const annViewerSha1    = crypto.createHash('sha1').update(annViewerContent).digest('hex');
+    files[annViewerPath] = annViewerSha1;
+    fileContents[annViewerSha1] = { filePath: annViewerPath, content: annViewerContent };
   }
 
   // Write all files to dist/ for Netlify CI build
