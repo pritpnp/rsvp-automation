@@ -521,7 +521,7 @@ async function sendForReview() {
     // ── OG card: landscape canvas composite (matches the flyer) ──────────
     btn.textContent = '⏳ Capturing preview...';
     const ogCanvas = document.createElement('canvas');
-    renderOG(1200, ogCanvas);
+    renderOG(2400, ogCanvas); // hi-res so the 1920×1080 announcement downsamples crisp (not upscaled)
     const ogBase64 = ogCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 
     const santosChecked = document.getElementById('santos-cb').checked;
