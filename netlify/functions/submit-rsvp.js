@@ -1,37 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
-const { google } = require('googleapis');
 const crypto = require('crypto');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
   'Content-Type': 'application/json'
 };
-
-const SHEET_ID  = process.env.GOOGLE_SHEET_ID;
-const SHEET_TAB = 'responses';
-
-// Best-effort mirror to the legacy Google Sheet so the existing
-// get-rsvps Sheet-merge keeps working until the Sheet is fully retired.
-// Supabase is the source of truth (above). Columns:
-//   A=zone, B=name, C=guests, D=submitted_at, E=sheet_row_id
-async function appendToSheet(row) {
-  const credsRaw = process.env.GOOG_SA_JSON;
-  if (!credsRaw || !SHEET_ID) {
-    throw new Error('Google Sheets env vars missing (GOOG_SA_JSON / GOOGLE_SHEET_ID)');
-  }
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(credsRaw),
-    scopes: ['https://www.googleapis.com/auth/spreadsheets']
-  });
-  const sheets = google.sheets({ version: 'v4', auth });
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A:E`,
-    valueInputOption: 'USER_ENTERED',
-    insertDataOption: 'INSERT_ROWS',
-    requestBody: { values: [row] }
-  });
-}
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
@@ -105,18 +78,6 @@ exports.handler = async (event) => {
   if (dbError) {
     console.error('Supabase RSVP insert failed:', dbError);
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Could not save your RSVP. Please try again.' }) };
-  }
-
-  // Best-effort: keep the legacy Google Sheet in sync so the existing
-  // admin view (get-rsvps.js) shows new RSVPs alongside historical ones
-  // until Phase 3 cuts admin reads over to Supabase. We don't fail the
-  // user if Sheets is unreachable — they'd just see the RSVP missing
-  // from the admin Sheet view, while Supabase still has it.
-  const sheetTimestamp = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
-  try {
-    await appendToSheet([zone, name, String(guests), sheetTimestamp, id]);
-  } catch (e) {
-    console.error('Sheet append failed (Supabase write succeeded):', e.message);
   }
 
   return { statusCode: 200, headers, body: JSON.stringify({ ok: true, id }) };
