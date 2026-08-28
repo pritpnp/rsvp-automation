@@ -1771,14 +1771,22 @@
       status.style.display = 'none';
 
       try {
-        const base64 = await fileToBase64(flyerFile);
+        // Downscale + JPEG-compress client-side. A raw phone photo base64s to
+        // well over Netlify's ~6MB function limit; the request then dies before
+        // returning JSON, which surfaced as "Unexpected end of JSON input". A
+        // flyer only needs ~2200px for web display + OCR, so this is lossless
+        // in practice and keeps the payload ~1MB.
+        const base64 = await compressFlyer(flyerFile);
         const res = await fetch(MANAGE_FLYERS_API, {
           method: 'POST',
           headers: authHeaders(),
           body: JSON.stringify({ zone, imageBase64: base64 })
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        // Guard against an empty / non-JSON body (a 502 from an oversized
+        // payload or a timeout) so the user gets a real message instead of a
+        // raw JSON-parse crash.
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Upload failed (server ${res.status}). Try a smaller image.`);
         showFlyerStatus('upload', `✅ Flyer uploaded to ${zone}! GitHub Actions will process it now.`, true);
         clearFlyerUpload();
         document.getElementById('flyer-upload-zone').value = '';
@@ -1832,12 +1840,39 @@
       el.style.display    = 'block';
     }
 
-    function fileToBase64(file) {
+    // Downscale a flyer to <= maxDim on its longest edge and JPEG-encode it,
+    // dropping quality until the base64 payload is safely under Netlify's ~6MB
+    // function limit. Returns raw base64 (no data: prefix). Replaces the old
+    // raw fileToBase64, which sent full-res files and blew the limit.
+    function compressFlyer(file, maxDim = 2200) {
       return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload  = (e) => resolve(e.target.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (!w || !h) { reject(new Error('Could not read that image file.')); return; }
+          if (Math.max(w, h) > maxDim) {
+            const s = maxDim / Math.max(w, h);
+            w = Math.round(w * s); h = Math.round(h * s);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';          // flatten any PNG transparency (saved as .jpg)
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          let quality = 0.92;
+          let base64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+          // ~4.5M base64 chars ≈ 3.3MB on the wire — comfortably under the limit.
+          while (base64.length > 4500000 && quality > 0.5) {
+            quality -= 0.12;
+            base64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+          }
+          resolve(base64);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image file.')); };
+        img.src = url;
       });
     }
 
