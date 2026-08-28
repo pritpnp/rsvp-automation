@@ -24,12 +24,12 @@
     "location": "Test Test, Test Test Test Test Test Test Test Test Test Test"
   },
   "mandir-2": {
-    "deadline": "2026-07-01",
+    "deadline": "",
     "eventName": "Scranton July 4th Picnic",
-    "date": "Saturday, July 4th",
-    "eventDate": "2026-07-04",
-    "time": "10:00 am",
-    "location": "1 Bald Mountain Rd, Scranton, PA 18507"
+    "date": "Saturday, September 26",
+    "eventDate": "2026-09-26",
+    "time": "9:00 am",
+    "location": "311 Oak St, Scranton, PA 18508"
   },
   "bloomsburg": {
     "deadline": "2026-06-10",
