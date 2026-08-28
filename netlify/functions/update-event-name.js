@@ -78,9 +78,14 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'eventName too long (max 200 chars)' }) };
     }
 
+    // Set flyer_hash = null so the next deploy RE-ANCHORS this rename to the
+    // flyer currently deployed (resolveEventName's null branch preserves the
+    // admin's name and re-anchors it). Without this, a rename done right after a
+    // flyer upload keeps the OLD hash, and the deploy reads the hash mismatch as
+    // a flyer change and silently overwrites the rename with the OCR name.
     const { error } = await supabase
       .from('zone_events')
-      .upsert({ zone, event_name: eventName.trim(), updated_at: new Date().toISOString() });
+      .upsert({ zone, event_name: eventName.trim(), flyer_hash: null, updated_at: new Date().toISOString() });
 
     if (error) {
       console.error('Supabase upsert error:', error.message);

@@ -115,5 +115,5 @@ jobs:
             echo "⚠️  push attempt $attempt rejected — rebasing on origin/main and retrying"
             git pull --rebase --autostash -X theirs origin main
           done
-          echo "❌ deadlines.json push failed after 3 attempts"
+          echo "❌ deadlines.json push failed after 5 attempts"
           exit 1
