@@ -23,31 +23,68 @@ const MANDIR_ZONES = ['satsang-sabha', 'mandir-1', 'mandir-2', 'mandir-3', 'mand
 const MANDIR_SLOTS = ['mandir-1', 'mandir-2', 'mandir-3', 'mandir-4', 'mandir-5'];
 
 // ── Supabase: resolve canonical event name ────────────────────────────────
-// If a name has been set in zone_events, use it.
-// Otherwise, save the OCR-extracted name as the initial value and return it.
-async function resolveEventName(supabase, zone, ocrName) {
+// The stored name in zone_events is an admin override that must apply ONLY to
+// the flyer it was set for. We anchor each stored name to a SHA-1 of the flyer
+// bytes (flyer_hash): when the current flyer's hash differs from the stored one,
+// the flyer — and therefore the event — has changed, so the stale override is
+// discarded and reseeded from the current flyer's OCR name. This stops a rename
+// (e.g. "Janmashtami") from lingering onto the next event uploaded to the zone.
+async function resolveEventName(supabase, zone, ocrName, flyerHash) {
   try {
-    const { data, error } = await supabase
+    const nowIso = new Date().toISOString();
+    let { data, error } = await supabase
       .from('zone_events')
-      .select('event_name')
+      .select('event_name, flyer_hash')
       .eq('zone', zone)
       .single();
 
-    if (error || !data) {
-      // Row missing — upsert OCR name as initial value
+    // Backwards-compat: if the flyer_hash column hasn't been added yet, degrade
+    // to the pre-hash behavior instead of erroring — never wipe a name just
+    // because the migration hasn't run. (A missing ROW is a different error
+    // — PGRST116 — and is handled by the `error || !data` branch below.)
+    if (error && /flyer_hash|column|42703/i.test(error.message || '')) {
+      const { data: d2 } = await supabase.from('zone_events').select('event_name').eq('zone', zone).single();
+      const s = (d2?.event_name || '').trim();
+      if (s) { console.log(`  ✏️  Using DB name for ${zone}: "${s}" (add the flyer_hash column to enable per-flyer reset)`); return s; }
       console.log(`  📝 No DB name for ${zone} — saving OCR name: "${ocrName}"`);
-      await supabase.from('zone_events').upsert({ zone, event_name: ocrName, updated_at: new Date().toISOString() });
+      await supabase.from('zone_events').upsert({ zone, event_name: ocrName, updated_at: nowIso });
       return ocrName;
     }
 
-    const stored = (data.event_name || '').trim();
+    if (error || !data) {
+      // Row missing — seed OCR name and anchor it to the current flyer
+      console.log(`  📝 No DB name for ${zone} — saving OCR name: "${ocrName}"`);
+      await supabase.from('zone_events').upsert({ zone, event_name: ocrName, flyer_hash: flyerHash, updated_at: nowIso });
+      return ocrName;
+    }
+
+    const stored     = (data.event_name || '').trim();
+    const storedHash  = data.flyer_hash || null;
+
     if (!stored) {
-      // Row exists but empty — save OCR name
+      // Row exists but empty — seed OCR name + hash
       console.log(`  📝 Empty DB name for ${zone} — saving OCR name: "${ocrName}"`);
-      await supabase.from('zone_events').update({ event_name: ocrName, updated_at: new Date().toISOString() }).eq('zone', zone);
+      await supabase.from('zone_events').update({ event_name: ocrName, flyer_hash: flyerHash, updated_at: nowIso }).eq('zone', zone);
       return ocrName;
     }
 
+    if (storedHash === null) {
+      // Legacy row: name set before hashing existed. Keep it, but anchor it to
+      // the CURRENT flyer so a future flyer change invalidates it. Preserves
+      // existing intentional overrides on the first hash-aware deploy.
+      console.log(`  🔗 Anchoring existing name for ${zone} to current flyer: "${stored}"`);
+      await supabase.from('zone_events').update({ flyer_hash: flyerHash, updated_at: nowIso }).eq('zone', zone);
+      return stored;
+    }
+
+    if (storedHash !== flyerHash) {
+      // The flyer changed → the override belonged to the previous event → reset.
+      console.log(`  🔄 Flyer changed for ${zone} — resetting name to OCR: "${ocrName}" (was "${stored}")`);
+      await supabase.from('zone_events').update({ event_name: ocrName, flyer_hash: flyerHash, updated_at: nowIso }).eq('zone', zone);
+      return ocrName;
+    }
+
+    // Hash matches → the override still belongs to this flyer.
     if (stored !== ocrName) {
       console.log(`  ✏️  Using DB name for ${zone}: "${stored}" (OCR said: "${ocrName}")`);
     } else {
@@ -1186,7 +1223,11 @@ async function main() {
       zonesWithFlyer.add(zone);
       // Only use the first flyer file per zone — prevents duplicate cards
       const file = files[0];
-      allFlyers.push({ zone, flyerRelPath: `flyers/${zone}/${file}`, flyerPath: path.join(zoneDir, file) });
+      const flyerFullPath = path.join(zoneDir, file);
+      // SHA-1 of the flyer bytes — anchors the admin's name override to THIS
+      // specific flyer so a replacement auto-resets the name (resolveEventName).
+      const flyerHash = crypto.createHash('sha1').update(fs.readFileSync(flyerFullPath)).digest('hex');
+      allFlyers.push({ zone, flyerRelPath: `flyers/${zone}/${file}`, flyerPath: flyerFullPath, flyerHash });
     }
   }
 
@@ -1227,12 +1268,26 @@ async function main() {
     try { cachedDeadlines = JSON.parse(fs.readFileSync(deadlinesPath, 'utf8')); } catch(e) {}
   }
 
-  for (const { zone, flyerRelPath, flyerPath } of allFlyers) {
-    const isChanged = changedFlyers.includes(flyerRelPath);
-    const hasCached = !!cachedDeadlines[zone]?.date && !!cachedDeadlines[zone]?.eventName;
-    const skipOcr   = !forceAll && !isChanged && hasCached && zone !== zoneOverride;
+  // Pre-load stored flyer hashes so we can force a fresh OCR when a flyer's
+  // bytes changed but the git diff didn't flag it (e.g. a collapsed deploy run).
+  // Without this the stale cached OCR name would be reseeded on a hash reset.
+  const storedFlyerHashes = {};
+  try {
+    const { data: zeRows } = await supabase.from('zone_events').select('zone, flyer_hash');
+    for (const r of (zeRows || [])) storedFlyerHashes[r.zone] = r.flyer_hash || null;
+  } catch (e) { /* flyer_hash column may not exist yet — leave empty (no forced OCR) */ }
 
-    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : skipOcr ? '⏭️ skipping OCR (cached)' : '♻️ existing'}`);
+  for (const { zone, flyerRelPath, flyerPath, flyerHash } of allFlyers) {
+    const isChanged    = changedFlyers.includes(flyerRelPath);
+    const hasCached    = !!cachedDeadlines[zone]?.date && !!cachedDeadlines[zone]?.eventName;
+    // If the on-disk flyer differs from the one the stored name was tied to,
+    // force a fresh OCR so resolveEventName reseeds from the new flyer, not the
+    // stale cache. (storedHash null → nothing to reset → no forced OCR.)
+    const storedHash   = storedFlyerHashes[zone] || null;
+    const flyerChanged = storedHash !== null && storedHash !== flyerHash;
+    const skipOcr      = !forceAll && !isChanged && hasCached && zone !== zoneOverride && !flyerChanged;
+
+    console.log(`\n❓ Zone: ${zone} — ${isChanged ? '🆕 NEW' : flyerChanged ? '🔄 flyer changed' : skipOcr ? '⏭️ skipping OCR (cached)' : '♻️ existing'}`);
 
     let eventInfo;
     if (skipOcr) {
@@ -1251,9 +1306,10 @@ async function main() {
       eventInfo = await extractEventInfo(flyerPath);
     }
 
-    // 2. Resolve canonical event name from Supabase
-    //    If a name has been set by admin, use it. Otherwise save OCR name as initial value.
-    eventInfo.eventName = await resolveEventName(supabase, zone, eventInfo.eventName);
+    // 2. Resolve canonical event name from Supabase. An admin override is kept
+    //    only while it stays tied to this exact flyer (flyer_hash); a new flyer
+    //    resets the name to the fresh OCR value.
+    eventInfo.eventName = await resolveEventName(supabase, zone, eventInfo.eventName, flyerHash);
 
     eventInfoMap[zone] = eventInfo;
 
