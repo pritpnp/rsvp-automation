@@ -1822,8 +1822,10 @@
           headers: authHeaders(),
           body: JSON.stringify({ zones })   // array → single-commit bulk delete
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Remove failed');
+        // Guard against an empty / non-JSON body (502/timeout) so the user gets a
+        // real message instead of a raw "Unexpected end of JSON input" crash.
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Remove failed (server ${res.status}).`);
         const removed = (data.removed || zones).join(', ');
         showFlyerStatus('remove', `✅ Removed: ${removed}. One rebuild is running now.`, true);
         toggleAllRemoveZones(false);
