@@ -160,34 +160,47 @@ exports.handler = async (event) => {
     if (!imageBase64) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing imageBase64' }) };
     }
-
-    // Get existing SHA if file exists (required for overwrite)
-    let sha;
-    const getRes = await fetch(apiUrl, { headers: ghHeaders });
-    if (getRes.ok) {
-      const existing = await getRes.json();
-      sha = existing.sha;
+    // Reject an oversized payload with a clear JSON error instead of letting the
+    // function 502 with an empty body (the client can't JSON-parse that, which
+    // surfaced as "Unexpected end of JSON input"). The admin UI now compresses
+    // client-side, so this only fires on a pathological payload.
+    if (imageBase64.length > 5500000) {
+      return { statusCode: 413, headers, body: JSON.stringify({ error: 'Image too large — please use a smaller flyer image (under ~4MB).' }) };
     }
 
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: ghHeaders,
-      body: JSON.stringify({
-        message: `Upload flyer for ${zone} via admin portal`,
-        content: imageBase64,
-        ...(sha ? { sha } : {}),
-      }),
-    });
+    // Wrap the GitHub calls so a network/parse throw returns JSON, not an empty
+    // 502 body that the client can't parse.
+    try {
+      // Get existing SHA if file exists (required for overwrite)
+      let sha;
+      const getRes = await fetch(apiUrl, { headers: ghHeaders });
+      if (getRes.ok) {
+        const existing = await getRes.json();
+        sha = existing.sha;
+      }
 
-    if (!putRes.ok) {
-      const err = await putRes.text();
-      return { statusCode: 500, headers, body: JSON.stringify({ error: `GitHub error: ${err}` }) };
+      const putRes = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: ghHeaders,
+        body: JSON.stringify({
+          message: `Upload flyer for ${zone} via admin portal`,
+          content: imageBase64,
+          ...(sha ? { sha } : {}),
+        }),
+      });
+
+      if (!putRes.ok) {
+        const err = await putRes.text();
+        return { statusCode: 500, headers, body: JSON.stringify({ error: `GitHub error: ${err}` }) };
+      }
+
+      // Remove stale og.jpg so automate.js regenerates it from the new flyer
+      await deleteOgIfExists(`Remove stale og.jpg for ${zone} after flyer upload`);
+
+      return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+    } catch (e) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: `Upload failed: ${e.message}` }) };
     }
-
-    // Remove stale og.jpg so automate.js regenerates it from the new flyer
-    await deleteOgIfExists(`Remove stale og.jpg for ${zone} after flyer upload`);
-
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
   }
 
   // ── DELETE: Remove flyer ──────────────────────────────────────────────────
@@ -196,31 +209,35 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'No permission to remove flyers' }) };
     }
 
-    const getRes = await fetch(apiUrl, { headers: ghHeaders });
-    if (!getRes.ok) {
-      return { statusCode: 404, headers, body: JSON.stringify({ error: `No flyer found for ${zone}` }) };
+    try {
+      const getRes = await fetch(apiUrl, { headers: ghHeaders });
+      if (!getRes.ok) {
+        return { statusCode: 404, headers, body: JSON.stringify({ error: `No flyer found for ${zone}` }) };
+      }
+
+      const existing = await getRes.json();
+      const sha      = existing.sha;
+
+      const delRes = await fetch(apiUrl, {
+        method: 'DELETE',
+        headers: ghHeaders,
+        body: JSON.stringify({
+          message: `Remove flyer for ${zone} via admin portal`,
+          sha,
+        }),
+      });
+
+      if (!delRes.ok) {
+        const err = await delRes.text();
+        return { statusCode: 500, headers, body: JSON.stringify({ error: `GitHub error: ${err}` }) };
+      }
+
+      // Also remove og.jpg so no orphan OG image remains
+      await deleteOgIfExists(`Remove og.jpg for ${zone} via admin portal`);
+
+      return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+    } catch (e) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: `Remove failed: ${e.message}` }) };
     }
-
-    const existing = await getRes.json();
-    const sha      = existing.sha;
-
-    const delRes = await fetch(apiUrl, {
-      method: 'DELETE',
-      headers: ghHeaders,
-      body: JSON.stringify({
-        message: `Remove flyer for ${zone} via admin portal`,
-        sha,
-      }),
-    });
-
-    if (!delRes.ok) {
-      const err = await delRes.text();
-      return { statusCode: 500, headers, body: JSON.stringify({ error: `GitHub error: ${err}` }) };
-    }
-
-    // Also remove og.jpg so no orphan OG image remains
-    await deleteOgIfExists(`Remove og.jpg for ${zone} via admin portal`);
-
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
   }
 };
