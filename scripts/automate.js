@@ -1121,22 +1121,34 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     // the workflow's GITHUB_TOKEN (granted write access via the workflow's
     // `permissions: contents: write`). No PAT in this script is needed.
     let pushed = false;
-    for (let attempt = 1; attempt <= 3 && !pushed; attempt++) {
+    for (let attempt = 1; attempt <= 5 && !pushed; attempt++) {
       try {
         run('git push origin HEAD:main');
         pushed = true;
         console.log(`✅ dist/ pushed (attempt ${attempt}) — Netlify CI deploying...`);
       } catch (e) {
         console.warn(`⚠️  dist push attempt ${attempt} rejected; rebasing on origin/main and retrying`);
+        // Two deploy runs racing (e.g. two flyers uploaded back-to-back)
+        // both regenerate the SAME generated dist/ files with different
+        // content, so a plain rebase hits an unresolvable merge conflict
+        // and the whole run dies — that's how a second flyer silently
+        // fails to deploy. dist/ is 100% generated and this run rebuilds
+        // EVERY zone from the current repo state, so our just-built dist/
+        // is the authoritative version: auto-resolve any dist/ conflict in
+        // our favor with `-X theirs` (during a rebase, "theirs" is the
+        // commit being replayed — our own deploy commit). Any transient
+        // staleness self-heals: each flyer push triggers its own run and
+        // the daily cron redeploys all zones.
+        //
         // --autostash so the rebase doesn't fail on the deadlines.json
         // write that happens earlier in main() and is still unstaged at
         // this point (the workflow's "Commit deadlines.json" step is what
         // eventually picks it up).
-        run('git pull --rebase --autostash origin main');
+        run('git pull --rebase --autostash -X theirs origin main');
       }
     }
     if (!pushed) {
-      throw new Error('dist/ push failed after 3 attempts — workflow concurrency may be misconfigured');
+      throw new Error('dist/ push failed after 5 attempts — workflow concurrency may be misconfigured');
     }
   }
 
