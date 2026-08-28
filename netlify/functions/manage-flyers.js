@@ -2,7 +2,19 @@ const { createClient } = require('@supabase/supabase-js');
 
 exports.handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+  // Top-level safety net: any uncaught throw (a bad env var making createClient
+  // throw, a transient GitHub fetch rejection before an inner try, a bodyless
+  // request, etc.) returns JSON instead of a bodiless 502 that the client parses
+  // as "Unexpected end of JSON input".
+  try {
+    return await handleRequest(event, headers);
+  } catch (e) {
+    console.error('manage-flyers unhandled error:', e);
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Server error — please try again in a moment.' }) };
+  }
+};
 
+async function handleRequest(event, headers) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (!['POST', 'DELETE'].includes(event.httpMethod)) {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
@@ -38,7 +50,10 @@ exports.handler = async (event) => {
 
   // ── Parse body ────────────────────────────────────────────────────────────
   let body;
-  try { body = JSON.parse(event.body); } catch {
+  // Default to '{}' so a bodyless request (event.body === null, which
+  // JSON.parse(null) coerces to null WITHOUT throwing) parses to {} and hits the
+  // field validators below instead of throwing on destructuring.
+  try { body = JSON.parse(event.body || '{}'); } catch {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
 
@@ -138,18 +153,25 @@ exports.handler = async (event) => {
   const ogApiUrl   = `https://api.github.com/repos/${REPO}/contents/${ogPath}`;
 
   // Delete og.jpg if it exists; ignored if missing. Lets automate.js regenerate it from the new flyer.
+  // Best-effort: never let a stale-og cleanup failure bubble up and fail an
+  // upload/delete that already succeeded (that would report success as failure
+  // and prompt a redundant re-upload).
   const deleteOgIfExists = async (commitMessage) => {
-    const ogGetRes = await fetch(ogApiUrl, { headers: ghHeaders });
-    if (!ogGetRes.ok) return;
-    const ogExisting = await ogGetRes.json();
-    await fetch(ogApiUrl, {
-      method: 'DELETE',
-      headers: ghHeaders,
-      body: JSON.stringify({
-        message: commitMessage,
-        sha: ogExisting.sha,
-      }),
-    });
+    try {
+      const ogGetRes = await fetch(ogApiUrl, { headers: ghHeaders });
+      if (!ogGetRes.ok) return;
+      const ogExisting = await ogGetRes.json();
+      await fetch(ogApiUrl, {
+        method: 'DELETE',
+        headers: ghHeaders,
+        body: JSON.stringify({
+          message: commitMessage,
+          sha: ogExisting.sha,
+        }),
+      });
+    } catch (e) {
+      console.warn('og.jpg cleanup failed (non-fatal):', e.message);
+    }
   };
 
   // ── POST: Upload flyer ────────────────────────────────────────────────────
@@ -240,4 +262,6 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers, body: JSON.stringify({ error: `Remove failed: ${e.message}` }) };
     }
   }
-};
+
+  return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unhandled request' }) };
+}
