@@ -1788,9 +1788,12 @@
         // raw JSON-parse crash.
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `Upload failed (server ${res.status}). Try a smaller image.`);
-        showFlyerStatus('upload', `✅ Flyer uploaded to ${zone}! GitHub Actions will process it now.`, true);
+        // Reset the form FIRST — clearFlyerUpload() hides the status bar, so it
+        // must run before we show the success message or the message is hidden
+        // in the same tick and never paints (that's why feedback disappeared).
         clearFlyerUpload();
         document.getElementById('flyer-upload-zone').value = '';
+        showFlyerStatus('upload', `✅ Flyer uploaded to ${zone}! The site will rebuild & refresh in ~2 min.`, true);
       } catch (err) {
         showFlyerStatus('upload', '❌ ' + err.message, false);
       } finally {
