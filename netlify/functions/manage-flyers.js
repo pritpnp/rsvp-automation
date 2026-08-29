@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 exports.handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
@@ -137,6 +138,7 @@ async function handleRequest(event, headers) {
       });
       if (!updRes.ok) throw new Error(`update ref ${await updRes.text()}`);
 
+      logAudit(supabase, event, { action: 'flyer.remove_bulk', target: valid.join(', ') });
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true, removed: valid }) };
     } catch (e) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: `Bulk remove failed: ${e.message}` }) };
@@ -219,6 +221,7 @@ async function handleRequest(event, headers) {
       // Remove stale og.jpg so automate.js regenerates it from the new flyer
       await deleteOgIfExists(`Remove stale og.jpg for ${zone} after flyer upload`);
 
+      logAudit(supabase, event, { action: 'flyer.upload', target: zone });
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
     } catch (e) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: `Upload failed: ${e.message}` }) };
@@ -257,6 +260,7 @@ async function handleRequest(event, headers) {
       // Also remove og.jpg so no orphan OG image remains
       await deleteOgIfExists(`Remove og.jpg for ${zone} via admin portal`);
 
+      logAudit(supabase, event, { action: 'flyer.remove', target: zone });
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
     } catch (e) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: `Remove failed: ${e.message}` }) };

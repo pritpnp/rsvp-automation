@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
+const { logAudit } = require('./_audit');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -58,6 +59,7 @@ exports.handler = async (event) => {
       const msg = error.code === '23505' ? 'Username already exists' : error.message;
       return { statusCode: 400, headers, body: JSON.stringify({ error: msg }) };
     }
+    logAudit(supabase, event, { action: 'manager.create', target: data.username });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
@@ -79,6 +81,7 @@ exports.handler = async (event) => {
       const msg = error.code === '23505' ? 'Username already exists' : error.message;
       return { statusCode: 400, headers, body: JSON.stringify({ error: msg }) };
     }
+    logAudit(supabase, event, { action: 'manager.update', target: id });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
@@ -89,6 +92,7 @@ exports.handler = async (event) => {
     await supabase.from('manager_sessions').delete().eq('manager_id', id);
     const { error } = await supabase.from('managers').delete().eq('id', id);
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'manager.delete', target: id });
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 

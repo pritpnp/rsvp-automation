@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -102,6 +103,7 @@ exports.handler = async (event) => {
       .select()
       .single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'ip.whitelist', target: ip });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
@@ -115,6 +117,7 @@ exports.handler = async (event) => {
 
     const { error } = await supabase.from('invite_ip_whitelist').delete().eq('ip', ip);
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'ip.unwhitelist', target: ip });
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 

@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { logAudit } = require('./_audit');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -38,10 +39,12 @@ exports.handler = async (event) => {
           expires_at
         }]);
         if (insertErr) console.error('Session insert error:', insertErr.message);
+        logAudit(supabase, event, { isSuperadmin: true, actorName: 'admin', action: 'login', details: { role: 'superadmin' } });
         return { statusCode: 200, headers, body: JSON.stringify({
           token, username: 'admin', role: 'superadmin', permissions: SUPERADMIN_PERMISSIONS
         })};
       }
+      logAudit(supabase, event, { isSuperadmin: true, actorName: 'admin', action: 'login', success: false, details: { reason: 'bad_password' } });
       return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid username or password' }) };
     }
 
@@ -53,17 +56,20 @@ exports.handler = async (event) => {
       .single();
 
     if (error || !manager) {
+      logAudit(supabase, event, { actorName: username.toLowerCase().trim(), action: 'login', success: false, details: { reason: 'unknown_user' } });
       return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid username or password' }) };
     }
 
     const valid = await bcrypt.compare(password, manager.password_hash);
     if (!valid) {
+      logAudit(supabase, event, { actorId: manager.id, actorName: manager.username, action: 'login', success: false, details: { reason: 'bad_password' } });
       return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid username or password' }) };
     }
 
     const token = crypto.randomBytes(32).toString('hex');
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await supabase.from('manager_sessions').insert([{ manager_id: manager.id, token, expires_at }]);
+    logAudit(supabase, event, { actorId: manager.id, actorName: manager.username, action: 'login' });
 
     return { statusCode: 200, headers, body: JSON.stringify({
       token, username: manager.username, role: 'manager', permissions: manager.permissions
@@ -73,7 +79,12 @@ exports.handler = async (event) => {
   // POST /logout
   if (event.httpMethod === 'POST' && path === '/logout') {
     const { token } = JSON.parse(event.body);
-    if (token) await supabase.from('manager_sessions').delete().eq('token', token);
+    if (token) {
+      // Resolve who is logging out (for the audit log) before deleting the session.
+      const { data: s } = await supabase.from('manager_sessions').select('manager_id').eq('token', token).single();
+      await supabase.from('manager_sessions').delete().eq('token', token);
+      if (s) logAudit(supabase, event, { actorId: s.manager_id, isSuperadmin: s.manager_id === null, action: 'logout' });
+    }
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 

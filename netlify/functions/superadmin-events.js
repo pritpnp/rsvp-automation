@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -54,6 +55,7 @@ exports.handler = async (event) => {
       .select()
       .single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'event.create', target: data.event_name || data.id });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
@@ -67,6 +69,7 @@ exports.handler = async (event) => {
       .select()
       .single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'event.update', target: id });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
@@ -75,6 +78,7 @@ exports.handler = async (event) => {
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
     const { error } = await supabase.from('events').delete().eq('id', id);
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'event.delete', target: id });
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 

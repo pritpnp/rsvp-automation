@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 exports.handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
@@ -58,6 +59,8 @@ exports.handler = async (event) => {
 
   if (error)
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to create session' }) };
+
+  logAudit(supabase, event, { action: 'builder.open', target: isSuperadmin ? 'all' : allowedZones.join(',') });
 
   return { statusCode: 200, headers, body: JSON.stringify({ sessionId: builderSession.id }) };
 };
