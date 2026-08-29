@@ -1194,6 +1194,27 @@
       }
     }
 
+    // Turn a raw user-agent into a readable device label, e.g. "iPhone · Safari".
+    // Browsers don't expose the OS device name ("Prit's MacBook Pro"), so this is
+    // the closest automatic option. The exact IP + full UA stay on hover.
+    function deviceLabel(ua) {
+      if (!ua) return '—';
+      let os = 'Unknown device';
+      if (/iPhone/i.test(ua)) os = 'iPhone';
+      else if (/iPad/i.test(ua)) os = 'iPad';
+      else if (/Android/i.test(ua)) os = /Mobile/i.test(ua) ? 'Android phone' : 'Android tablet';
+      else if (/Macintosh|Mac OS X/i.test(ua)) os = 'Mac';
+      else if (/Windows/i.test(ua)) os = 'Windows PC';
+      else if (/Linux/i.test(ua)) os = 'Linux';
+      let br = '';
+      if (/Edg\//i.test(ua)) br = 'Edge';
+      else if (/OPR\/|Opera/i.test(ua)) br = 'Opera';
+      else if (/CriOS/i.test(ua) || (/Chrome\//i.test(ua))) br = 'Chrome';
+      else if (/FxiOS/i.test(ua) || /Firefox\//i.test(ua)) br = 'Firefox';
+      else if (/Version\/.*Safari/i.test(ua) || /Safari/i.test(ua)) br = 'Safari';
+      return br ? os + ' · ' + br : os;
+    }
+
     async function loadAuditLog() {
       if (sessionRole !== 'superadmin') return;   // UI gate; server also enforces superadmin
       const c = document.getElementById('audit-container');
@@ -1210,7 +1231,7 @@
       const c = document.getElementById('audit-container');
       if (!Array.isArray(rows) || !rows.length) { c.innerHTML = '<div class="empty-state">No activity logged yet.</div>'; return; }
       c.innerHTML = '<div style="overflow-x:auto"><table class="rsvp-table">' +
-        '<thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Result</th><th>IP</th></tr></thead><tbody>' +
+        '<thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Result</th><th>Device</th></tr></thead><tbody>' +
         rows.map(r => {
           const when = r.created_at ? new Date(r.created_at).toLocaleString() : '';
           const ago  = r.created_at ? timeAgo(r.created_at) : '—';
@@ -1222,7 +1243,7 @@
             '<td><code>' + escapeHtml(r.action || '') + '</code></td>' +
             '<td>' + escapeHtml(r.target || '') + (det ? ' <span style="color:var(--text-muted);font-size:11px">' + det + '</span>' : '') + '</td>' +
             '<td>' + (r.success === false ? '❌' : '✅') + '</td>' +
-            '<td style="font-family:monospace;font-size:11px">' + escapeHtml(r.ip || '') + '</td>' +
+            '<td title="' + escapeHtml((r.ip || '') + (r.user_agent ? ' · ' + r.user_agent : '')) + '">' + escapeHtml(deviceLabel(r.user_agent)) + '</td>' +
           '</tr>';
         }).join('') +
         '</tbody></table></div>';
