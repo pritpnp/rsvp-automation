@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 exports.handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
@@ -68,5 +69,6 @@ exports.handler = async (event) => {
     return { statusCode: 500, headers, body: JSON.stringify({ error: `GitHub dispatch failed: ${err}` }) };
   }
 
+  logAudit(supabase, event, { action: 'flyer.refresh', target: zoneOverride || 'all' });
   return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
 };

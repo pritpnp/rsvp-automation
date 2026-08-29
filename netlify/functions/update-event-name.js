@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 const SUPABASE_URL         = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -93,6 +94,7 @@ exports.handler = async (event) => {
     }
 
     console.log(`✅ Zone event name updated: ${zone} → "${eventName.trim()}"`);
+    logAudit(supabase, event, { action: 'event.rename', target: zone, details: { eventName: eventName.trim() } });
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true, zone, eventName: eventName.trim() }) };
   }
 

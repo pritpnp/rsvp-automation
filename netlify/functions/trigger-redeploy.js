@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 const SUPABASE_URL         = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -51,5 +52,6 @@ exports.handler = async (event) => {
   }
 
   console.log('✅ Redeploy triggered via admin');
+  logAudit(supabase, event, { action: 'site.redeploy' });
   return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
 };

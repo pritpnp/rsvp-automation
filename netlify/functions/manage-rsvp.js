@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 const headers = {
   'Content-Type': 'application/json',
@@ -46,6 +47,8 @@ exports.handler = async (event) => {
     .upsert({ zone, enabled }, { onConflict: 'zone' });
 
   if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+
+  logAudit(supabase, event, { action: 'rsvp.toggle', target: zone, details: { enabled } });
 
   return { statusCode: 200, headers, body: JSON.stringify({ ok: true, zone, enabled }) };
 };

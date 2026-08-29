@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -172,6 +173,7 @@ exports.handler = async (event) => {
         .select();
 
       if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+      logAudit(supabase, event, { action: 'pass.create', target: String(event_id || ''), details: { count: data.length } });
       return { statusCode: 200, headers, body: JSON.stringify({ created: data.length, passes: data }) };
     }
 
@@ -213,6 +215,7 @@ exports.handler = async (event) => {
       .select()
       .single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'pass.create', target: String(event_id || ''), details: { count: 1 } });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
@@ -231,6 +234,7 @@ exports.handler = async (event) => {
       if (!body.ids.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'No ids provided' }) };
       const { error } = await supabase.from('vip_passes').delete().in('id', body.ids);
       if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+      logAudit(supabase, event, { action: 'pass.delete', target: body.ids.join(','), details: { count: body.ids.length } });
       return { statusCode: 200, headers, body: JSON.stringify({ deleted: body.ids.length }) };
     }
 
@@ -239,6 +243,7 @@ exports.handler = async (event) => {
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
     const { error } = await supabase.from('vip_passes').delete().eq('id', id);
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'pass.delete', target: id });
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 
@@ -288,6 +293,7 @@ exports.handler = async (event) => {
 
     const { data, error } = await supabase.from('vip_passes').update(update).eq('id', id).select().single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    logAudit(supabase, event, { action: 'pass.edit', target: id });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 

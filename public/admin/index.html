@@ -410,6 +410,15 @@
         </div>
       </div>
 
+      <!-- ── Audit Log ── -->
+      <div class="tab-panel" id="tab-audit">
+        <div class="card">
+          <h2>Audit Log</h2>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Manager logins and every state-changing action — who · what · when. Superadmin only.</p>
+          <div id="audit-container"><div class="spinner"></div></div>
+        </div>
+      </div>
+
       <!-- ── Flyers ── -->
       <div class="tab-panel" id="tab-flyers">
         <div class="card" id="flyer-upload-card">
@@ -533,6 +542,7 @@
     const TRIGGER_REDEPLOY_API  = '/.netlify/functions/trigger-redeploy';
     const REFRESH_FLYERS_API    = '/.netlify/functions/refresh-flyers';
     const RATE_LIMIT_API        = '/.netlify/functions/admin-rate-limit';
+    const AUDIT_API             = '/.netlify/functions/superadmin-audit-log';
 
     document.addEventListener('DOMContentLoaded', function() {
       if (!sessionToken) {
@@ -578,6 +588,7 @@
         tabsHtml += _tab('managers', '👤 Managers');
         tabsHtml += _tab('events', '📅 Events');
         tabsHtml += _tab('flyers', '🖼 Flyers');
+        tabsHtml += _tab('audit', '📜 Audit Log');
       } else if (permissions.upload_flyers || permissions.remove_flyers || permissions.refresh_flyers) {
         tabsHtml += _tab('flyers', '🖼 Flyers');
       }
@@ -641,6 +652,7 @@
       btn.classList.add('active');
       if (tab === 'rsvps')   loadRsvps();
       if (tab === 'archive') loadArchive();
+      if (tab === 'audit')   loadAuditLog();
     }
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
@@ -1180,6 +1192,40 @@
       } catch (e) {
         c.innerHTML = '<div class="empty-state">Could not load RSVPs. Try refreshing or signing out and back in.</div>';
       }
+    }
+
+    async function loadAuditLog() {
+      if (sessionRole !== 'superadmin') return;   // UI gate; server also enforces superadmin
+      const c = document.getElementById('audit-container');
+      try {
+        const res = await fetch(AUDIT_API, { headers: authHeaders() });
+        if (!res.ok) { c.innerHTML = '<div class="empty-state">Could not load the audit log.</div>'; return; }
+        renderAuditLog(await res.json());
+      } catch (e) {
+        c.innerHTML = '<div class="empty-state">Could not load the audit log.</div>';
+      }
+    }
+
+    function renderAuditLog(rows) {
+      const c = document.getElementById('audit-container');
+      if (!Array.isArray(rows) || !rows.length) { c.innerHTML = '<div class="empty-state">No activity logged yet.</div>'; return; }
+      c.innerHTML = '<div style="overflow-x:auto"><table class="rsvp-table">' +
+        '<thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Result</th><th>IP</th></tr></thead><tbody>' +
+        rows.map(r => {
+          const when = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+          const ago  = r.created_at ? timeAgo(r.created_at) : '—';
+          const who  = escapeHtml(r.actor_name || 'unknown') + (r.is_superadmin ? ' <span class="zone-pill">super</span>' : '');
+          const det  = r.details ? escapeHtml(JSON.stringify(r.details)) : '';
+          return '<tr>' +
+            '<td title="' + escapeHtml(when) + '">' + escapeHtml(ago) + '</td>' +
+            '<td>' + who + '</td>' +
+            '<td><code>' + escapeHtml(r.action || '') + '</code></td>' +
+            '<td>' + escapeHtml(r.target || '') + (det ? ' <span style="color:var(--text-muted);font-size:11px">' + det + '</span>' : '') + '</td>' +
+            '<td>' + (r.success === false ? '❌' : '✅') + '</td>' +
+            '<td style="font-family:monospace;font-size:11px">' + escapeHtml(r.ip || '') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
     }
 
     function filterRsvps() {

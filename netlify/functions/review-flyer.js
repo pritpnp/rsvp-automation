@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 exports.handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
@@ -198,5 +199,6 @@ exports.handler = async (event) => {
     return { statusCode: 500, headers, body: JSON.stringify({ error: `Telegram send failed: ${JSON.stringify(tgData)}` }) };
   }
 
+  logAudit(supabase, event, { action: 'flyer.submit_for_review', target: zone, details: { reviewId } });
   return { statusCode: 200, headers, body: JSON.stringify({ ok: true, reviewId }) };
 };

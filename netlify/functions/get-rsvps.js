@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { logAudit } = require('./_audit');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -102,6 +103,7 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to update RSVP: ' + dbErr.message }) };
     }
 
+    logAudit(supabase, event, { action: 'rsvp.edit', target: powerapps_id, details: { guests: newGuests } });
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 
@@ -122,6 +124,7 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to delete RSVP: ' + dbErr.message }) };
     }
 
+    logAudit(supabase, event, { action: 'rsvp.delete', target: powerapps_id });
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 
