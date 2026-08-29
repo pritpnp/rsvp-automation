@@ -1,6 +1,16 @@
 [build]
   command = "bash build.sh"
   publish = "dist"
+  # Skip a Netlify build only when a commit changes NOTHING that affects the
+  # deploy — i.e. its changes are confined to flyers/ (source images processed
+  # by the GitHub Action, not served directly), scripts/ (the automation that
+  # runs on GitHub Actions, not on Netlify), .github/ (workflows), or *.md docs.
+  # Any change to dist/, netlify/ (functions), public/, build.sh, netlify.toml,
+  # etc. still builds. Fails SAFE: exit 0 skips, any other exit builds, and an
+  # empty/invalid $CACHED_COMMIT_REF errors (exit 128) → builds. This halves
+  # builds from the double-commit pattern (a flyer upload commit is skipped; the
+  # follow-up "deploy: update dist" commit it triggers still builds).
+  ignore = "git diff --quiet \"$CACHED_COMMIT_REF\" \"$COMMIT_REF\" -- ':(exclude)flyers' ':(exclude)scripts' ':(exclude).github' ':(exclude)*.md'"
 
 [functions]
   directory = "netlify/functions"
