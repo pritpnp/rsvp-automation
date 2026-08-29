@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
+const { logAudit } = require('./_audit');
 
 // Constant-time string equality to prevent timing attacks on the webhook secret.
 const constantTimeEqual = (a, b) => {
@@ -340,6 +341,10 @@ exports.handler = async (event) => {
     const cbChatId = String(callbackQuery.message.chat.id);
     const cbData   = callbackQuery.data;
     const msgId    = callbackQuery.message.message_id;
+    // Actor for audit logging — the Telegram user who tapped the button (the bot
+    // path carries no portal auth, so the actor is passed to logAudit explicitly).
+    const cbFrom   = callbackQuery.from || {};
+    const cbActor  = cbFrom.username ? '@' + cbFrom.username : (cbFrom.first_name || 'telegram-user');
 
     if (cbChatId !== ADMIN_CHAT_ID) {
       await answerCallbackQuery(callbackQuery.id);
@@ -547,6 +552,7 @@ exports.handler = async (event) => {
 
         // Mark review as approved
         await supabase.from('flyer_reviews').update({ status: 'approved' }).eq('id', reviewId);
+        logAudit(supabase, event, { actorName: cbActor, actorId: cbFrom.id ? 'tg:' + cbFrom.id : null, action: 'flyer.approve', target: review.zone, details: { via: 'telegram', reviewId } });
 
         // Clean up storage (both flyer and og)
         const pathsToRemove = [review.storage_path, review.og_storage_path].filter(Boolean);
@@ -600,6 +606,7 @@ exports.handler = async (event) => {
 
         // Mark as rejected
         await supabase.from('flyer_reviews').update({ status: 'rejected' }).eq('id', reviewId);
+        logAudit(supabase, event, { actorName: cbActor, actorId: cbFrom.id ? 'tg:' + cbFrom.id : null, action: 'flyer.reject', target: review.zone, details: { via: 'telegram', reviewId } });
 
         // Clean up storage (both flyer and og)
         const rejectPathsToRemove = [review.storage_path, review.og_storage_path].filter(Boolean);
