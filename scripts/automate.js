@@ -961,7 +961,7 @@ function buildHubPage(allFlyers, deadlines) {
   </main>
   <footer>
     <span style="font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:600;color:#8B4513;display:block;margin-bottom:4px;">BAPS Swaminarayan Sanstha</span>
-    <a href="https://www.baps.org/Scranton" target="_blank" style="color:rgba(122,69,32,0.6);text-decoration:none;font-size:12px;letter-spacing:0.04em;">www.baps.org/Scranton</a>
+    <a href="https://www.baps.org/scranton" target="_blank" style="color:rgba(122,69,32,0.6);text-decoration:none;font-size:12px;letter-spacing:0.04em;">www.baps.org/scranton</a>
     <div style="margin-top:16px;"><a href="/admin" style="font-size:11px;color:rgba(122,69,32,0.35);text-decoration:none;letter-spacing:0.06em;border:1px solid rgba(122,69,32,0.15);padding:4px 12px;border-radius:20px;">Admin Portal</a></div>
   </footer>
 </body>
