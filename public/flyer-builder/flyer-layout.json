@@ -160,7 +160,7 @@
     },
     {
       "key": "locationLabel",
-      "yPct": 0.8202,
+      "yPct": 0.8469,
       "font": "AddingtonCF",
       "sizePx": 33,
       "weight": 400,
@@ -173,7 +173,7 @@
     },
     {
       "key": "host",
-      "yPct": 0.84,
+      "yPct": 0.8206,
       "font": "GothamRegular",
       "sizePx": 52,
       "weight": 400,
@@ -224,9 +224,14 @@
     },
     "photoFeatherPct": 0.22,
     "header": {
-      "widthPct": 0.072,
+      "widthPct": 0.06,
       "cxPct": 0.68,
-      "topPct": 0.035
+      "topPct": 0.01,
+      "shadow": {
+        "color": "#000000",
+        "size": 0,
+        "opacity": 0.6
+      }
     },
     "text": [
       {
@@ -323,7 +328,7 @@
       {
         "key": "locationLabel",
         "cxPct": 0.68,
-        "yPct": 0.662,
+        "yPct": 0.717,
         "font": "AddingtonCF",
         "sizePx": 20,
         "weight": 400,
@@ -336,7 +341,7 @@
       {
         "key": "host",
         "cxPct": 0.68,
-        "yPct": 0.712,
+        "yPct": 0.662,
         "font": "GothamRegular",
         "sizePx": 24,
         "weight": 400,
@@ -397,6 +402,11 @@
         "sizePx": 117,
         "yPct": 0.228
       }
+    },
+    "footer": {
+      "widthPct": 0.18,
+      "cxPct": 0.68,
+      "bottomPct": 0.008
     }
   }
 }

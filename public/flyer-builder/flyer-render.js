@@ -14,8 +14,11 @@
  *   2. Mahant Swami Maharaj photo, placed + bottom-feathered into the background
  *   3. header (baps-logo two-sadhu illustration), top-centre
  *   4. footer (BAPS branding, black or white variant), bottom
- *   5. text (Invitation block, title, date/time, RSVP, location, host, address,
+ *   5. text (Invitation block, title, date/time, RSVP, host, location, address,
  *      mahaprasad)
+ *
+ * The landscape OG / social card (compositeOG) carries the SAME header emblem and
+ * footer bar, anchored to its right-hand text column instead of the card centre.
  * ==========================================================================*/
 (function (global) {
   'use strict';
@@ -75,8 +78,12 @@
       { key: 'santos',     yPct: 0.7300, font: 'GothamRegular',     sizePx: 42,  weight: 400, color: '#4a4882', align: 'center', maxWidthPct: 0.92, lineHeight: 1.3,   tracking: -40 },
       { key: 'datetime',   yPct: 0.7545, font: 'AddingtonCF',       sizePx: 86,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 1.4,   tracking: -25, tint: true },
       { key: 'rsvp',       yPct: 0.7964, font: 'AppleSDGothicNeoH', sizePx: 52,  weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint2: true },
-      { key: 'locationLabel', yPct: 0.8202, font: 'AddingtonCF',    sizePx: 33, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.3,   tracking: -25, tint2: true },
-      { key: 'host',       yPct: 0.840,  font: 'GothamRegular',     sizePx: 52,  weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint2: true },
+      // Order is host → locationLabel → address: the host name(s) are their own
+      // line, and "Location:" introduces the ADDRESS beneath it. (Previously
+      // "Location:" sat above the host names, which read as if the family name
+      // were the venue.)
+      { key: 'host',       yPct: 0.8206, font: 'GothamRegular',     sizePx: 52,  weight: 400, color: '#4c4c4b', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint2: true },
+      { key: 'locationLabel', yPct: 0.8469, font: 'AddingtonCF',    sizePx: 33, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.3,   tracking: -25, tint2: true },
       { key: 'address',    yPct: 0.8654, font: 'AddingtonCF',       sizePx: 63,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.06,  tracking: -25, tint: true },
       { key: 'mahaprasad', yPct: 0.9216, font: 'AddingtonCF',       sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -25, tint2: true },
     ],
@@ -105,7 +112,13 @@
       canvas: { width: 1200, height: 630 },
       photoPanel: { leftPct: 0, widthPct: 0.44, topPct: 0, bottomPct: 1.0 },
       photoFeatherPct: 0.22, // right-edge fade of the photo panel into the bg
-      header: { widthPct: 0.072, cxPct: 0.68, topPct: 0.035 },
+      // Header emblem + BAPS footer bar, both centred on the TEXT column (cxPct)
+      // rather than the card, because the left ~44% is the photo panel. Sized to
+      // fit the clear bands above the first text line and below the last one —
+      // the calibrated text geometry is not disturbed to make room. shadow.size 0
+      // matches the flyer's live (shadow-less) header treatment.
+      header: { widthPct: 0.060, cxPct: 0.68, topPct: 0.010, shadow: { color: '#000000', size: 0, opacity: 0.6 } },
+      footer: { widthPct: 0.180, cxPct: 0.68, bottomPct: 0.008 },
       text: [
         { key: 'invitation',    cxPct: 0.68, yPct: 0.115, font: 'AddingtonCF',   sizePx: 30, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.1, tracking: -25, tint: true },
         { key: 'zoneLine',      cxPct: 0.68, yPct: 0.180, font: 'AddingtonCF',   sizePx: 23, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.1, tracking: -40, tint: true },
@@ -114,8 +127,9 @@
         { key: 'santos',        cxPct: 0.68, yPct: 0.540, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4a4882', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -40 },
         { key: 'datetime',      cxPct: 0.68, yPct: 0.585, font: 'AddingtonCF',       sizePx: 36, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -25, tint: true },
         { key: 'rsvp',          cxPct: 0.68, yPct: 0.655, font: 'AppleSDGothicNeoH', sizePx: 18, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
-        { key: 'locationLabel', cxPct: 0.68, yPct: 0.700, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
-        { key: 'host',          cxPct: 0.68, yPct: 0.735, font: 'GothamRegular',     sizePx: 22, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
+        // host → locationLabel → address (same reorder as the portrait flyer).
+        { key: 'host',          cxPct: 0.68, yPct: 0.699, font: 'GothamRegular',     sizePx: 22, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
+        { key: 'locationLabel', cxPct: 0.68, yPct: 0.744, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
         { key: 'address',       cxPct: 0.68, yPct: 0.778, font: 'AddingtonCF',       sizePx: 20, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.12, tracking: -25, tint: true },
         { key: 'mahaprasad',    cxPct: 0.68, yPct: 0.880, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
       ],
@@ -410,9 +424,37 @@
       drawPhotoPanelOG(ctx, opts.photoImg, L.photoPanel, L.photoFeatherPct, opts.photo || LAYOUT.photo, W, H);
     }
 
-    // (no header emblem on the OG card — flyer only)
+    // 3. header emblem — top of the text column (cxPct-anchored, not card-centred,
+    //    so it never lands on the photo panel). Optional soft drop-shadow, same
+    //    treatment as the flyer.
+    if (opts.headerImg && opts.headerImg.naturalWidth && L.header) {
+      const hw = L.header.widthPct * W;
+      const hh = hw * (opts.headerImg.naturalHeight / opts.headerImg.naturalWidth);
+      const hx = (L.header.cxPct != null ? L.header.cxPct : 0.5) * W - hw / 2;
+      const hy = (L.header.topPct || 0) * H;
+      const sh = L.header.shadow;
+      ctx.save();
+      if (sh && sh.opacity > 0 && sh.size > 0) {
+        const c = hexToRgb(sh.color || '#000000');
+        ctx.shadowColor = 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + sh.opacity + ')';
+        ctx.shadowBlur = sh.size * W;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = sh.size * 0.35 * W;
+      }
+      drawContain(ctx, opts.headerImg, hx, hy, hw, hh);
+      ctx.restore();
+    }
 
-    // 3. text column (right)
+    // 4. footer (BAPS brand bar) — bottom of the text column, same anchoring.
+    if (opts.footerImg && opts.footerImg.naturalWidth && L.footer) {
+      const fw = L.footer.widthPct * W;
+      const fh = fw * (opts.footerImg.naturalHeight / opts.footerImg.naturalWidth);
+      const fx = (L.footer.cxPct != null ? L.footer.cxPct : 0.5) * W - fw / 2;
+      const fy = H - fh - (L.footer.bottomPct || 0) * H;
+      drawContain(ctx, opts.footerImg, fx, fy, fw, fh);
+    }
+
+    // 5. text column (right)
     const fields = opts.fields || {};
     const ov = opts.variant === 'satsang' ? L.satsang : null;
     for (const baseEl of L.text) {
@@ -446,6 +488,8 @@
       const G = o.og;
       if (G.photoPanel) Object.assign(LAYOUT.og.photoPanel, G.photoPanel);
       if (G.photoFeatherPct != null) LAYOUT.og.photoFeatherPct = G.photoFeatherPct;
+      if (G.header) Object.assign(LAYOUT.og.header, G.header);
+      if (G.footer) Object.assign(LAYOUT.og.footer, G.footer);
       if (Array.isArray(G.text)) for (const t of G.text) { const e = LAYOUT.og.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
       if (G.satsang) for (const k in G.satsang) LAYOUT.og.satsang[k] = Object.assign(LAYOUT.og.satsang[k] || {}, G.satsang[k]);
     }

@@ -54,10 +54,18 @@ body { font-family: 'DM Sans', sans-serif; background: #2a2320; color: #eee; dis
   <div class="row"><label>Width</label><input type="range" id="pp-w" min="0.20" max="0.60" step="0.005" oninput="setPanel('widthPct',this.value)"><span class="val" id="pp-w-v"></span></div>
   <div class="row"><label>Feather</label><input type="range" id="pp-f" min="0" max="0.50" step="0.01" oninput="setFeather(this.value)"><span class="val" id="pp-f-v"></span></div>
 
+  <div class="section">Photo crop — this photo (landscape only)</div>
+  <div class="row"><label>Focus X</label><input type="range" id="pc-x" min="0" max="1" step="0.01" oninput="setCrop('focusX',this.value)"><span class="val" id="pc-x-v"></span></div>
+  <div class="row"><label>Focus Y</label><input type="range" id="pc-y" min="0" max="1" step="0.01" oninput="setCrop('focusY',this.value)"><span class="val" id="pc-y-v"></span></div>
+  <div class="row"><label>Zoom</label><input type="range" id="pc-z" min="0.6" max="2.2" step="0.01" oninput="setCrop('zoom',this.value)"><span class="val" id="pc-z-v"></span></div>
+  <button class="btn btn-ghost" style="margin-top:6px" onclick="applyCropToAll()">⇊ Apply this crop to ALL photos</button>
+  <button class="btn btn-ghost" onclick="resetCrop()">↺ Reset this photo to the flyer crop</button>
+
   <div class="section">Text lines — size / X / Y / leading</div>
   <div id="line-rows"></div>
 
   <button class="btn btn-primary" onclick="exportLayout()">⬇ Export layout (flyer-layout.json)</button>
+  <button class="btn btn-primary" onclick="exportManifest()">⬇ Export photo crops (swami-photos.json)</button>
   <button class="btn btn-ghost" onclick="resetLayout()">↺ Reset to defaults</button>
   <div id="err"></div>
   <div class="hint">Open <code>localhost:8000/flyer-builder/og-vetter.html</code>. Each line: <b>Size</b>, <b>X</b> (left↔right), <b>Y</b> (up↕down), <b>Lead</b> (line spacing). Satsang edits are kept separate per line. Export overwrites <code>flyer-layout.json</code> (flyer + preview), or just send me the file.</div>
@@ -65,7 +73,7 @@ body { font-family: 'DM Sans', sans-serif; background: #2a2320; color: #eee; dis
 
 <div class="stage"><canvas id="preview"></canvas></div>
 
-<script src="/flyer-builder/flyer-render.js?v=28"></script>
+<script src="/flyer-builder/flyer-render.js?v=29"></script>
 <script>
 const PREVIEW_W = 1200;
 const SAMPLE = {
@@ -108,6 +116,11 @@ async function boot() {
     try { const r = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now()); if (r.ok) FlyerRender.applyLayout(await r.json()); } catch (e) {}
     try { const og = JSON.parse(localStorage.getItem('scr_og_layout') || 'null'); if (og) FlyerRender.applyLayout({ og }); } catch (e) {}
     assets.watercolor = await FlyerRender.loadImage('/flyer-builder/base/watercolor.png');
+    // header emblem + footer bar so the vetter previews the same card the builder ships
+    assets.header = await FlyerRender.loadImage('/flyer-builder/base/header.png');
+    assets.footerBlack = await FlyerRender.loadImage('/flyer-builder/base/footer-black.png');
+    assets.footerWhite = await FlyerRender.loadImage('/flyer-builder/base/footer-white.png');
+    restoreCrops();
     $('photo-select').innerHTML = manifest.photos.map((p, i) => `<option>${i + 1}. ${p.id}</option>`).join('');
     syncPanelControls();
     buildRows();
@@ -125,6 +138,7 @@ async function selectPhoto(i) {
   const entry = manifest.photos[Math.max(0, Math.min(manifest.photos.length - 1, i))];
   $('photo-select').selectedIndex = manifest.photos.indexOf(entry);
   try { curPhoto = { entry, img: await loadPhoto(entry) }; } catch (e) { err('photo load failed: ' + entry.id); return; }
+  syncCropControls();
   render();
 }
 
@@ -175,6 +189,61 @@ function syncPanelControls() {
 
 function persist() { localStorage.setItem('scr_og_layout', JSON.stringify(FlyerRender.LAYOUT.og)); }
 
+// ── Per-photo LANDSCAPE crop (entry.ogPhoto) ────────────────────────────────
+// The flyer's `photo` crop is tuned for the tall portrait box. The OG panel is a
+// different shape AND its right edge is feathered away, so a subject centred for
+// the flyer sits right of the landscape card's visible centre. `ogPhoto` is an
+// optional per-photo override; when absent the flyer crop is used unchanged.
+function ogCropOf(entry) { return entry.ogPhoto || entry.photo || {}; }
+function ensureOgCrop(entry) {
+  if (!entry.ogPhoto) entry.ogPhoto = { ...(entry.photo || { focusX: 0.5, focusY: 0.5, zoom: 1 }) };
+  return entry.ogPhoto;
+}
+function setCrop(prop, val) {
+  if (!curPhoto) return;
+  ensureOgCrop(curPhoto.entry)[prop] = parseFloat(val);
+  syncCropControls(); persistCrops(); render();
+}
+function applyCropToAll() {
+  if (!curPhoto) return;
+  const src = ensureOgCrop(curPhoto.entry);
+  if (!confirm('Apply this crop (Focus X/Y + Zoom) to all ' + manifest.photos.length + ' photos?\n\nLandscape card only — the flyer crops are untouched.')) return;
+  for (const p of manifest.photos) p.ogPhoto = { ...(p.ogPhoto || p.photo || {}), focusX: src.focusX, focusY: src.focusY, zoom: src.zoom };
+  persistCrops(); render();
+  err('Applied to all ' + manifest.photos.length + ' photos — Export photo crops to save.');
+}
+function resetCrop() {
+  if (!curPhoto) return;
+  delete curPhoto.entry.ogPhoto;
+  syncCropControls(); persistCrops(); render();
+}
+function syncCropControls() {
+  if (!curPhoto) return;
+  const c = ogCropOf(curPhoto.entry);
+  const set = (id, v, dp) => { const el = $(id); if (el) el.value = v; const s = $(id + '-v'); if (s) s.textContent = (+v).toFixed(dp); };
+  set('pc-x', c.focusX != null ? c.focusX : 0.5, 2);
+  set('pc-y', c.focusY != null ? c.focusY : 0.5, 2);
+  set('pc-z', c.zoom != null ? c.zoom : 1, 2);
+}
+// Keep crop edits across reloads; keyed by photo id so it survives manifest order changes.
+function persistCrops() {
+  const map = {};
+  for (const p of manifest.photos) if (p.ogPhoto) map[p.id] = p.ogPhoto;
+  localStorage.setItem('scr_og_crops', JSON.stringify(map));
+}
+function restoreCrops() {
+  try {
+    const map = JSON.parse(localStorage.getItem('scr_og_crops') || 'null');
+    if (!map) return;
+    for (const p of manifest.photos) if (map[p.id]) p.ogPhoto = map[p.id];
+  } catch (e) {}
+}
+function exportManifest() {
+  const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'swami-photos.json'; a.click();
+}
+
 function render() {
   if (!curPhoto) return;
   const ctx = $('preview').getContext('2d');
@@ -185,7 +254,9 @@ function render() {
     textColor: curPhoto.entry.textColor,
     textColor2: curPhoto.entry.textColor2 || '#4c4c4b',
     photoImg: curPhoto.img,
-    photo: curPhoto.entry.photo,
+    photo: ogCropOf(curPhoto.entry),
+    headerImg: assets.header,
+    footerImg: curPhoto.entry.footer === 'white' ? assets.footerWhite : assets.footerBlack,
     fields: SAMPLE[zone],
   });
   err('');
