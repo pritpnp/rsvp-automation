@@ -6,15 +6,23 @@
 # index.html instead of a 404. Without -e a failed cp printed to stderr, the
 # script still exited 0, and the deploy went green with a missing page that
 # looked like a working one. Fail loudly instead.
+#
+# The `src/.` form on the directory copies is load-bearing, NOT cosmetic. With a
+# plain `src/ dst/`, GNU coreutils (Netlify's Linux image) copies the DIRECTORY
+# into dst whenever dst already exists, producing dist/flyer-builder/base/base/.
+# dist/flyer-builder/base/ does exist in a clean checkout, because header.png is
+# force-tracked there. BSD cp (macOS) strips the trailing slash and merges, so
+# this misbehaves ONLY on the deploy host. cp still exits 0, so `set -e` cannot
+# catch it. `src/.` copies contents on both platforms.
 set -euo pipefail
 
 mkdir -p dist/flyer-builder
 
-cp -r public/flyer-builder/templates/ dist/flyer-builder/templates/
-cp -r public/flyer-builder/preview-templates/ dist/flyer-builder/preview-templates/
-cp -r public/flyer-builder/fonts/ dist/flyer-builder/fonts/
-cp -r public/flyer-builder/base/ dist/flyer-builder/base/
-cp -r public/flyer-builder/swami-photos/ dist/flyer-builder/swami-photos/
+cp -r public/flyer-builder/templates/. dist/flyer-builder/templates/
+cp -r public/flyer-builder/preview-templates/. dist/flyer-builder/preview-templates/
+cp -r public/flyer-builder/fonts/. dist/flyer-builder/fonts/
+cp -r public/flyer-builder/base/. dist/flyer-builder/base/
+cp -r public/flyer-builder/swami-photos/. dist/flyer-builder/swami-photos/
 cp public/flyer-builder/swami-photos.json dist/flyer-builder/swami-photos.json
 cp public/flyer-builder/flyer-layout.json dist/flyer-builder/flyer-layout.json 2>/dev/null || true
 cp public/flyer-builder/flyer-render.js dist/flyer-builder/flyer-render.js

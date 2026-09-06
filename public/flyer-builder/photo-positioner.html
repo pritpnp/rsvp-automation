@@ -137,13 +137,17 @@ function gate(title, msg, icon) {
   $('gate-title').textContent = title; $('gate-msg').textContent = msg || '';
   $('gate-icon').textContent = icon || '🔒';
 }
+let statusTimer = null;
 function status(msg, ok) {
   const el = $('status');
+  // Clear any pending auto-hide first: a success message's timer would
+  // otherwise dismiss an error raised a second later, mid-read.
+  if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
   el.textContent = msg;
   el.style.background = ok ? '#f0fdf4' : '#fef2f2';
   el.style.color = ok ? '#166534' : '#991b1b';
   el.style.display = 'block';
-  if (ok) setTimeout(() => { el.style.display = 'none'; }, 2600);
+  if (ok) statusTimer = setTimeout(() => { el.style.display = 'none'; statusTimer = null; }, 2600);
 }
 
 // ── crop helpers ────────────────────────────────────────────────────────────
@@ -291,12 +295,20 @@ async function loadPhoto(entry) {
   photoCache[entry.id] = img;
   return img;
 }
+let pickToken = 0;
 async function pickPhoto(i) {
-  const n = manifest.photos.length;
-  curIdx = Math.max(0, Math.min(n - 1, i));
-  const entry = manifest.photos[curIdx];
-  try { cur = { entry, img: await loadPhoto(entry) }; }
-  catch (e) { status('Could not load ' + entry.id, false); return; }
+  const idx = Math.max(0, Math.min(manifest.photos.length - 1, i));
+  const entry = manifest.photos[idx];
+  // Two quick clicks start two loads; whichever image resolves LAST would
+  // otherwise win and leave cur pointing at a different photo than curIdx and
+  // the <select> — so a later Save would write to the wrong photo id. Commit
+  // state only if this is still the newest request.
+  const token = ++pickToken;
+  let img;
+  try { img = await loadPhoto(entry); }
+  catch (e) { if (token === pickToken) status('Could not load ' + entry.id, false); return; }
+  if (token !== pickToken) return;
+  curIdx = idx; cur = { entry, img };
   syncControls(); render();
 }
 function step(d) { pickPhoto(curIdx + d); }
@@ -317,8 +329,12 @@ async function saveCurrent() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Save failed');
     LIVE[id] = { focusX: c.focusX, focusY: c.focusY, zoom: c.zoom };
-    delete draft[id];
-    syncControls();
+    // Clear the draft only if it still matches what was actually sent. A drag
+    // made while the request was in flight must survive, or the canvas and the
+    // sliders would silently disagree about the saved position.
+    const d = draft[id];
+    if (d && d.focusX === c.focusX && d.focusY === c.focusY && d.zoom === c.zoom) delete draft[id];
+    syncControls(); render();
     status('✅ Saved — live now', true);
   } catch (e) {
     status('❌ ' + e.message, false);
