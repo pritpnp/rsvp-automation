@@ -316,7 +316,7 @@
         "key": "rsvp",
         "cxPct": 0.68,
         "yPct": 0.6,
-        "font": "AppleSDGothicNeoH",
+        "font": "GothamRegular",
         "sizePx": 29,
         "weight": 400,
         "color": "#4c4c4b",
@@ -344,12 +344,12 @@
         "yPct": 0.662,
         "font": "GothamRegular",
         "sizePx": 24,
-        "weight": 400,
-        "color": "#4c4c4b",
+        "weight": 700,
+        "color": "#85381c",
         "maxWidthPct": 0.5,
         "lineHeight": 1.3,
         "tracking": -50,
-        "tint2": true
+        "tint": true
       },
       {
         "key": "address",

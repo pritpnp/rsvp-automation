@@ -126,9 +126,9 @@
         { key: 'title',         cxPct: 0.68, yPct: 0.300, font: 'AddingtonCF',       sizePx: 66, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 0.85, wrap: true, tracking: -25, tint: true },
         { key: 'santos',        cxPct: 0.68, yPct: 0.540, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4a4882', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -40 },
         { key: 'datetime',      cxPct: 0.68, yPct: 0.585, font: 'AddingtonCF',       sizePx: 36, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -25, tint: true },
-        { key: 'rsvp',          cxPct: 0.68, yPct: 0.655, font: 'AppleSDGothicNeoH', sizePx: 18, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
+        { key: 'rsvp',          cxPct: 0.68, yPct: 0.655, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
         // host → locationLabel → address (same reorder as the portrait flyer).
-        { key: 'host',          cxPct: 0.68, yPct: 0.699, font: 'GothamRegular',     sizePx: 22, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
+        { key: 'host',          cxPct: 0.68, yPct: 0.699, font: 'GothamRegular',     sizePx: 22, weight: 700, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint: true },
         { key: 'locationLabel', cxPct: 0.68, yPct: 0.744, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
         { key: 'address',       cxPct: 0.68, yPct: 0.778, font: 'AddingtonCF',       sizePx: 20, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.12, tracking: -25, tint: true },
         { key: 'mahaprasad',    cxPct: 0.68, yPct: 0.880, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
