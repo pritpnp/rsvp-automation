@@ -225,6 +225,14 @@ let MANIFEST = null;     // { canvas, photos:[...] }
 let PHOTO_BY_ID = {};
 let ALL_IDS = [];
 let currentPhoto = null; // { id, entry, img }
+// Live per-photo LANDSCAPE crops from the Photo Positioner (og-photo-crops).
+// Empty until loaded; every lookup falls back to the manifest, so a failed
+// fetch degrades to the previous behaviour instead of breaking the card.
+let LIVE_OG_CROPS = {};
+// Precedence: flyer crop <- manifest ogPhoto <- live crop.
+function ogCropFor(entry) {
+  return { ...(entry.photo || {}), ...(entry.ogPhoto || {}), ...(LIVE_OG_CROPS[entry.id] || {}) };
+}
 const DECK_KEY = 'scr_swami_deck_v1';
 
 async function loadFlyerAssets() {
@@ -239,6 +247,13 @@ async function loadFlyerAssets() {
   try { const off = localStorage.getItem('scr_vetter_boxoffset'); if (off !== null) FlyerRender.LAYOUT.photoBox.offsetY = parseFloat(off); } catch (e) {}
   PHOTO_BY_ID = Object.fromEntries(MANIFEST.photos.map((p) => [p.id, p]));
   ALL_IDS = MANIFEST.photos.map((p) => p.id);
+  // Load live landscape crops BEFORE the first nextPhoto() so the very first
+  // render already uses them. Non-fatal by design: on any failure the card
+  // falls back to the manifest / flyer crop.
+  try {
+    const cr = await fetch('/.netlify/functions/og-photo-crops?t=' + Date.now());
+    if (cr.ok) LIVE_OG_CROPS = (await cr.json()).crops || {};
+  } catch (e) { console.warn('live OG crops unavailable, using manifest:', e.message); }
   [A.watercolor, A.header, A.footerBlack, A.footerWhite] = await Promise.all([
     FlyerRender.loadImage('/flyer-builder/base/watercolor.png'),
     FlyerRender.loadImage('/flyer-builder/base/header.png'),
@@ -483,9 +498,10 @@ function renderOG(W, canvasEl) {
     textColor: currentPhoto.entry.textColor,
     textColor2: currentPhoto.entry.textColor2,
     photoImg: currentPhoto.img,
-    // Landscape-specific crop when the photo has one (tuned in og-vetter.html);
-    // otherwise fall back to the flyer's crop.
-    photo: currentPhoto.entry.ogPhoto || currentPhoto.entry.photo,
+    // Landscape crop, resolved in ONE place: renderPreviewCanvas() (W=1200) and
+    // sendForReview()'s capture (W=2400) both come through here, so the preview
+    // and the published og.jpg can never drift apart.
+    photo: ogCropFor(currentPhoto.entry),
     headerImg: A.header,
     footerImg: currentPhoto.entry.footer === 'white' ? A.footerWhite : A.footerBlack,
     fields: buildFields(),

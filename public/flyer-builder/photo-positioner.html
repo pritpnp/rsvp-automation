@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Photo Positioner — SCREvents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+@font-face { font-family: 'AddingtonCF'; src: url('/flyer-builder/fonts/AddingtonCF.otf') format('opentype'); }
+@font-face { font-family: 'GothamRegular'; src: url('/flyer-builder/fonts/GothamRegular.ttf') format('truetype'); }
+@font-face { font-family: 'AppleSDGothicNeoH'; src: url('/flyer-builder/fonts/AppleSDGothicNeoH.ttf') format('truetype'); }
+:root {
+  --saffron:#E8650A; --gold:#C8860A; --gold-light:#F5C842;
+  --cream:#FDF6EC; --cream-dark:#F5E6CC;
+  --brown:#5C2D0A; --brown-mid:#8B4513; --text-muted:#8B6040;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'DM Sans',sans-serif; background:#f0e8df; color:var(--brown); min-height:100vh; display:flex; flex-direction:column; }
+.top-border { height:4px; background:linear-gradient(90deg,var(--brown),var(--saffron),var(--gold-light),var(--saffron),var(--brown)); }
+.app-header { background:linear-gradient(160deg,var(--brown) 0%,#7a1f00 100%); padding:14px 24px; color:#fff; }
+.app-header h1 { font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:700; }
+.app-header p { font-size:12px; opacity:.65; margin-top:2px; }
+.layout { display:flex; flex:1; flex-direction:row; }
+.controls { width:340px; flex-shrink:0; background:#fff; border-right:1px solid var(--cream-dark); overflow-y:auto; padding:20px 18px 40px; }
+.stage { flex:1; padding:28px 20px; display:flex; flex-direction:column; align-items:center; gap:14px; overflow-y:auto; }
+@media (max-width:820px){ .layout{flex-direction:column} .controls{width:100%;border-right:none;border-bottom:1px solid var(--cream-dark)} }
+h2 { font-family:'Cormorant Garamond',serif; font-size:19px; margin-bottom:6px; }
+.section { font-size:10px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); margin:18px 0 9px; padding-bottom:5px; border-bottom:1px solid var(--cream-dark); }
+.row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.row label { font-size:10px; font-weight:500; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); flex:0 0 52px; }
+.row input[type=range]{ flex:1; accent-color:var(--gold); }
+.row .val { font-size:10px; font-family:monospace; width:42px; text-align:right; }
+select { width:100%; padding:9px 11px; border:1px solid var(--cream-dark); border-radius:9px; font-size:13px; font-family:'DM Sans',sans-serif; background:var(--cream); color:var(--brown); }
+.btn { width:100%; padding:11px; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; margin-top:8px; }
+.btn:disabled { opacity:.45; cursor:not-allowed; }
+.btn-primary { background:linear-gradient(135deg,var(--saffron),var(--gold)); color:#fff; }
+.btn-ghost { background:var(--cream); color:var(--brown); border:1px solid var(--cream-dark); }
+.nav { display:flex; gap:8px; margin-top:8px; }
+.nav .btn { margin-top:0; }
+.pill { display:inline-block; font-size:11px; padding:3px 9px; border-radius:20px; background:var(--cream); border:1px solid var(--cream-dark); color:var(--text-muted); }
+.pill.tuned { background:#ecfdf5; border-color:#a7f3d0; color:#047857; }
+.pill.dirty { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
+.hint { background:var(--cream); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--text-muted); line-height:1.6; margin-top:14px; }
+#status { display:none; margin-top:10px; padding:10px 12px; border-radius:9px; font-size:13px; }
+.card-wrap { position:relative; width:100%; max-width:900px; }
+#preview { display:block; width:100%; height:auto; border-radius:10px; box-shadow:0 10px 40px rgba(92,45,10,.25); cursor:grab; touch-action:none; }
+#preview.grabbing { cursor:grabbing; }
+.stage-label { font-size:10px; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); }
+.gate { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+.gate .box { background:#fff; border-radius:16px; padding:40px 32px; max-width:420px; text-align:center; box-shadow:0 8px 32px rgba(92,45,10,.12); }
+</style>
+</head>
+<body>
+<div class="top-border"></div>
+<div class="app-header">
+  <h1>✦ Photo Positioner</h1>
+  <p>Position each photo for the landscape preview card • saves live</p>
+</div>
+
+<div class="layout" id="app" style="display:none">
+  <div class="controls">
+    <h2>Landscape crop</h2>
+    <div id="progress" class="pill">—</div>
+    <span id="state-pill" class="pill">saved</span>
+
+    <div class="section">Photo</div>
+    <select id="photo-select" onchange="pickPhoto(this.selectedIndex)"></select>
+    <div class="nav">
+      <button class="btn btn-ghost" onclick="step(-1)">← Prev</button>
+      <button class="btn btn-ghost" onclick="step(1)">Next →</button>
+    </div>
+
+    <div class="section">Position — drag the photo, or use these</div>
+    <div class="row"><label>Left / Right</label><input type="range" id="s-x" min="0" max="1" step="0.005" oninput="setCrop('focusX',this.value)"><span class="val" id="s-x-v"></span></div>
+    <div class="row"><label>Up / Down</label><input type="range" id="s-y" min="0" max="1" step="0.005" oninput="setCrop('focusY',this.value)"><span class="val" id="s-y-v"></span></div>
+    <div class="row"><label>Zoom</label><input type="range" id="s-z" min="0.6" max="2.5" step="0.01" oninput="setCrop('zoom',this.value)"><span class="val" id="s-z-v"></span></div>
+    <div class="row" style="margin-top:4px">
+      <label style="flex:0 0 auto">Guide</label>
+      <input type="checkbox" id="guide-cb" checked onchange="render()" style="accent-color:var(--saffron)">
+      <span style="font-size:11px;color:var(--text-muted)">show centre line of the visible area</span>
+    </div>
+
+    <button class="btn btn-primary" id="save-btn" onclick="saveCurrent()">💾 Save this photo</button>
+    <button class="btn btn-ghost" onclick="applyToAll()">⇊ Apply this position to ALL photos</button>
+    <button class="btn btn-ghost" onclick="resetCurrent()">↺ Reset this photo</button>
+    <div id="status"></div>
+
+    <div class="hint">
+      💡 The photo panel's right edge fades out, so a face centred in the panel looks
+      pushed right. Line the subject up with the dashed <strong>centre line</strong>.
+      Saves go live immediately — the flyer builder picks them up on its next load.
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-label">Landscape preview card (1200×630)</div>
+    <div class="card-wrap"><canvas id="preview" width="1200" height="630"></canvas></div>
+    <div class="stage-label" id="photo-id">—</div>
+  </div>
+</div>
+
+<div class="gate" id="gate">
+  <div class="box">
+    <div id="gate-icon" style="font-size:40px;margin-bottom:14px">⏳</div>
+    <h2 id="gate-title">Checking your session…</h2>
+    <p id="gate-msg" style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-top:10px"></p>
+  </div>
+</div>
+
+<script src="/flyer-builder/flyer-render.js?v=32"></script>
+<script>
+const PREVIEW_W = 1200;
+const SAMPLE = {
+  invitation: 'Invitation',
+  zoneLine: 'BAPS Swaminarayan Mandir | Moosic Zone',
+  cordially: 'Cordially invites you, your family, and friends to',
+  title: 'Para Satsang\nSabha',
+  datetime: 'Sat, June 6 at 4:00 pm',
+  rsvp: 'Please RSVP by June 12',
+  locationLabel: 'Location:',
+  host: 'Mehulbhai & Archanaben Patel',
+  address: '522 Orchid Drive\nMoosic, PA 18507',
+  mahaprasad: 'Mahaprasad will be served after sabha.',
+};
+
+let manifest = null, assets = {}, photoCache = {}, cur = null, curIdx = 0;
+let SESSION = null;            // builder session id
+let LIVE = {};                 // photoId -> {focusX,focusY,zoom}  (as saved on the server)
+let draft = {};                // photoId -> {focusX,focusY,zoom}  (local, unsaved)
+const $ = (id) => document.getElementById(id);
+
+function gate(title, msg, icon) {
+  $('gate').style.display = 'flex'; $('app').style.display = 'none';
+  $('gate-title').textContent = title; $('gate-msg').textContent = msg || '';
+  $('gate-icon').textContent = icon || '🔒';
+}
+function status(msg, ok) {
+  const el = $('status');
+  el.textContent = msg;
+  el.style.background = ok ? '#f0fdf4' : '#fef2f2';
+  el.style.color = ok ? '#166534' : '#991b1b';
+  el.style.display = 'block';
+  if (ok) setTimeout(() => { el.style.display = 'none'; }, 2600);
+}
+
+// ── crop helpers ────────────────────────────────────────────────────────────
+// Effective crop = flyer crop, overlaid by whatever is saved live, overlaid by
+// the local unsaved draft. Same precedence the builder uses.
+function cropFor(entry) {
+  const base = entry.photo || { focusX: 0.5, focusY: 0.5, zoom: 1 };
+  return { ...base, ...(LIVE[entry.id] || {}), ...(draft[entry.id] || {}) };
+}
+function isTuned(id) { return !!LIVE[id]; }
+function isDirty(id) { return !!draft[id]; }
+
+function setCrop(prop, val) {
+  if (!cur) return;
+  const c = cropFor(cur.entry);
+  draft[cur.entry.id] = { focusX: c.focusX, focusY: c.focusY, zoom: c.zoom, [prop]: parseFloat(val) };
+  syncControls(); render();
+}
+
+function syncControls() {
+  if (!cur) return;
+  const c = cropFor(cur.entry);
+  const set = (id, v) => { const el = $(id); if (el) el.value = v; const s = $(id + '-v'); if (s) s.textContent = (+v).toFixed(2); };
+  set('s-x', c.focusX != null ? c.focusX : 0.5);
+  set('s-y', c.focusY != null ? c.focusY : 0.5);
+  set('s-z', c.zoom != null ? c.zoom : 1);
+  const pill = $('state-pill');
+  const dirty = isDirty(cur.entry.id);
+  pill.textContent = dirty ? 'unsaved changes' : (isTuned(cur.entry.id) ? 'saved' : 'not positioned yet');
+  pill.className = 'pill ' + (dirty ? 'dirty' : (isTuned(cur.entry.id) ? 'tuned' : ''));
+  $('save-btn').disabled = !dirty;
+  $('photo-id').textContent = cur.entry.id;
+  const tunedCount = manifest.photos.filter((p) => isTuned(p.id)).length;
+  $('progress').textContent = tunedCount + ' of ' + manifest.photos.length + ' positioned';
+  buildOptions();
+}
+
+function buildOptions() {
+  const sel = $('photo-select');
+  const html = manifest.photos.map((p, i) =>
+    '<option' + (i === curIdx ? ' selected' : '') + '>' +
+    (i + 1) + '. ' + p.id + (isDirty(p.id) ? '  • unsaved' : (isTuned(p.id) ? '  ✓' : '')) +
+    '</option>').join('');
+  if (sel.innerHTML !== html) sel.innerHTML = html;
+  sel.selectedIndex = curIdx;
+}
+
+// ── render ──────────────────────────────────────────────────────────────────
+function render() {
+  if (!cur) return;
+  const canvas = $('preview');
+  const ctx = canvas.getContext('2d');
+  FlyerRender.compositeOG(ctx, PREVIEW_W, {
+    watercolorImg: assets.watercolor,
+    variant: 'parasabha',
+    bgColor: cur.entry.bgColor,
+    textColor: cur.entry.textColor,
+    textColor2: cur.entry.textColor2 || '#4c4c4b',
+    photoImg: cur.img,
+    photo: cropFor(cur.entry),
+    headerImg: assets.header,
+    footerImg: cur.entry.footer === 'white' ? assets.footerWhite : assets.footerBlack,
+    fields: SAMPLE,
+  });
+  if ($('guide-cb').checked) drawGuide(ctx, canvas);
+}
+
+// Dashed vertical line at the centre of the photo panel's SOLID (non-feathered)
+// area — the line a face should sit on to read as centred.
+function drawGuide(ctx, canvas) {
+  const L = FlyerRender.LAYOUT.og;
+  const W = canvas.width, H = canvas.height;
+  const pw = (L.photoPanel.widthPct || 0.44) * W;
+  const solid = pw * (1 - (L.photoFeatherPct || 0));
+  const cx = solid / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 2; ctx.setLineDash([10, 8]);
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx + 1.5, 0); ctx.lineTo(cx + 1.5, H); ctx.stroke();
+  ctx.restore();
+}
+
+// Geometry of the drawn photo inside the panel — needed to turn a drag in
+// screen pixels into a focusX/focusY delta.
+function panelGeom() {
+  const L = FlyerRender.LAYOUT.og, H = 630, W = PREVIEW_W;
+  const pw = (L.photoPanel.widthPct || 0.44) * W;
+  const ph = ((L.photoPanel.bottomPct != null ? L.photoPanel.bottomPct : 1) - (L.photoPanel.topPct || 0)) * H;
+  const c = cropFor(cur.entry);
+  const zoom = c.zoom != null ? c.zoom : 1;
+  const img = cur.img;
+  const scl = Math.max(pw / img.naturalWidth, ph / img.naturalHeight) * zoom;
+  return { pw, ph, dw: img.naturalWidth * scl, dh: img.naturalHeight * scl };
+}
+
+// ── drag to position ────────────────────────────────────────────────────────
+let dragging = false, lastX = 0, lastY = 0;
+function bindDrag() {
+  const c = $('preview');
+  const down = (e) => {
+    if (!cur) return;
+    dragging = true; c.classList.add('grabbing');
+    const p = pt(e); lastX = p.x; lastY = p.y;
+    e.preventDefault();
+  };
+  const move = (e) => {
+    if (!dragging || !cur) return;
+    const p = pt(e);
+    const scale = PREVIEW_W / c.clientWidth;      // CSS px -> canvas px
+    const dx = (p.x - lastX) * scale, dy = (p.y - lastY) * scale;
+    lastX = p.x; lastY = p.y;
+    const g = panelGeom();
+    const cr = cropFor(cur.entry);
+    let fx = cr.focusX != null ? cr.focusX : 0.5;
+    let fy = cr.focusY != null ? cr.focusY : 0.5;
+    // x = (pw - dw) * focusX, so dFocus = dPixels / (pw - dw). The denominator
+    // is negative when the image overflows the panel, which is what makes
+    // dragging right show more of the left — the sign works out on its own.
+    if (Math.abs(g.pw - g.dw) > 1) fx += dx / (g.pw - g.dw);
+    if (Math.abs(g.ph - g.dh) > 1) fy += dy / (g.ph - g.dh);
+    fx = Math.min(1, Math.max(0, fx)); fy = Math.min(1, Math.max(0, fy));
+    draft[cur.entry.id] = { focusX: fx, focusY: fy, zoom: cr.zoom };
+    syncControls(); render();
+  };
+  const up = () => { dragging = false; c.classList.remove('grabbing'); };
+  const pt = (e) => (e.touches && e.touches[0]) ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: e.clientX, y: e.clientY };
+  c.addEventListener('mousedown', down); window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  c.addEventListener('touchstart', down, { passive: false }); window.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', up);
+  c.addEventListener('wheel', (e) => {
+    if (!cur) return;
+    e.preventDefault();
+    const cr = cropFor(cur.entry);
+    const z = Math.min(2.5, Math.max(0.6, (cr.zoom != null ? cr.zoom : 1) - e.deltaY * 0.0015));
+    draft[cur.entry.id] = { focusX: cr.focusX, focusY: cr.focusY, zoom: z };
+    syncControls(); render();
+  }, { passive: false });
+}
+
+// ── photo navigation ────────────────────────────────────────────────────────
+async function loadPhoto(entry) {
+  if (photoCache[entry.id]) return photoCache[entry.id];
+  const img = await FlyerRender.loadImage('/flyer-builder/' + entry.file);
+  photoCache[entry.id] = img;
+  return img;
+}
+async function pickPhoto(i) {
+  const n = manifest.photos.length;
+  curIdx = Math.max(0, Math.min(n - 1, i));
+  const entry = manifest.photos[curIdx];
+  try { cur = { entry, img: await loadPhoto(entry) }; }
+  catch (e) { status('Could not load ' + entry.id, false); return; }
+  syncControls(); render();
+}
+function step(d) { pickPhoto(curIdx + d); }
+
+// ── saving ──────────────────────────────────────────────────────────────────
+function apiHeaders() { return { 'Content-Type': 'application/json', 'x-builder-session': SESSION }; }
+
+async function saveCurrent() {
+  if (!cur) return;
+  const id = cur.entry.id;
+  const c = cropFor(cur.entry);
+  $('save-btn').disabled = true;
+  try {
+    const res = await fetch('/.netlify/functions/og-photo-crops', {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ photoId: id, focusX: c.focusX, focusY: c.focusY, zoom: c.zoom }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+    LIVE[id] = { focusX: c.focusX, focusY: c.focusY, zoom: c.zoom };
+    delete draft[id];
+    syncControls();
+    status('✅ Saved — live now', true);
+  } catch (e) {
+    status('❌ ' + e.message, false);
+    $('save-btn').disabled = false;
+  }
+}
+
+async function applyToAll() {
+  if (!cur) return;
+  const c = cropFor(cur.entry);
+  if (!confirm('Apply this position to all ' + manifest.photos.length + ' photos?\n\nLandscape card only — the flyer crops are untouched.')) return;
+  const crops = {};
+  for (const p of manifest.photos) crops[p.id] = { focusX: c.focusX, focusY: c.focusY, zoom: c.zoom };
+  try {
+    const res = await fetch('/.netlify/functions/og-photo-crops', {
+      method: 'POST', headers: apiHeaders(), body: JSON.stringify({ crops }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+    LIVE = { ...LIVE, ...crops };
+    draft = {};
+    syncControls(); render();
+    status('✅ Applied to ' + data.saved + ' photos', true);
+  } catch (e) { status('❌ ' + e.message, false); }
+}
+
+async function resetCurrent() {
+  if (!cur) return;
+  const id = cur.entry.id;
+  try {
+    const res = await fetch('/.netlify/functions/og-photo-crops', {
+      method: 'DELETE', headers: apiHeaders(), body: JSON.stringify({ photoId: id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Reset failed');
+    delete LIVE[id]; delete draft[id];
+    syncControls(); render();
+    status('↺ Reset to the flyer crop', true);
+  } catch (e) { status('❌ ' + e.message, false); }
+}
+
+window.addEventListener('beforeunload', (e) => {
+  if (Object.keys(draft).length) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// ── boot ────────────────────────────────────────────────────────────────────
+(async function init() {
+  SESSION = new URLSearchParams(location.search).get('session');
+  if (!SESSION) {
+    gate('Open this from the admin portal', 'This tool needs a secure session. Go to the admin portal and click “Open Photo Positioner”.');
+    return;
+  }
+  try {
+    const vr = await fetch('/.netlify/functions/verify-builder-session', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: SESSION }),
+    });
+    const v = await vr.json().catch(() => ({}));
+    if (!vr.ok) { gate('Session invalid', v.error || 'Please reopen from the admin portal.'); return; }
+    if (!v.isSuperadmin && !v.allowAdvanced) {
+      gate('Not available for your account', 'Positioning photos needs the advanced flyer-builder permission. Ask a superadmin to enable it.');
+      return;
+    }
+  } catch (e) { gate('Could not verify session', e.message); return; }
+
+  try {
+    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+    manifest = await (await fetch('/flyer-builder/swami-photos.json?t=' + Date.now())).json();
+    try {
+      const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now());
+      if (lr.ok) FlyerRender.applyLayout(await lr.json());
+    } catch (e) {}
+    try {
+      const cr = await fetch('/.netlify/functions/og-photo-crops?t=' + Date.now());
+      if (cr.ok) LIVE = (await cr.json()).crops || {};
+    } catch (e) {}
+    [assets.watercolor, assets.header, assets.footerBlack, assets.footerWhite] = await Promise.all([
+      FlyerRender.loadImage('/flyer-builder/base/watercolor.png'),
+      FlyerRender.loadImage('/flyer-builder/base/header.png'),
+      FlyerRender.loadImage('/flyer-builder/base/footer-black.png'),
+      FlyerRender.loadImage('/flyer-builder/base/footer-white.png'),
+    ]);
+    $('gate').style.display = 'none'; $('app').style.display = 'flex';
+    bindDrag();
+    await pickPhoto(0);
+  } catch (e) {
+    gate('Could not load', e.message, '⚠️');
+  }
+})();
+</script>
+</body>
+</html>
