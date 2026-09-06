@@ -18,6 +18,14 @@ set -euo pipefail
 
 mkdir -p dist/flyer-builder
 
+# Prune junk left behind by the OLD `cp -r src/ dst/` form, which nested each
+# asset directory inside itself on Linux (dist/flyer-builder/base/base/ etc).
+# Netlify reuses the build workspace, so those copies persist in dist/ and ship
+# on every deploy until removed. Nothing references them.
+for d in templates preview-templates fonts base swami-photos; do
+  rm -rf "dist/flyer-builder/$d/$d"
+done
+
 cp -r public/flyer-builder/templates/. dist/flyer-builder/templates/
 cp -r public/flyer-builder/preview-templates/. dist/flyer-builder/preview-templates/
 cp -r public/flyer-builder/fonts/. dist/flyer-builder/fonts/
