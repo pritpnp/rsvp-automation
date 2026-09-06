@@ -4,6 +4,9 @@
 <meta charset="UTF-8" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- The URL carries the builder session id. Never send the path/query in a
+     Referer to third parties (Google Fonts) — origin only. -->
+<meta name="referrer" content="strict-origin-when-cross-origin" />
 <title>Photo Positioner — SCREvents</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -77,6 +80,11 @@ select { width:100%; padding:9px 11px; border:1px solid var(--cream-dark); borde
     <div class="row"><label>Left / Right</label><input type="range" id="s-x" min="0" max="1" step="0.005" oninput="setCrop('focusX',this.value)"><span class="val" id="s-x-v"></span></div>
     <div class="row"><label>Up / Down</label><input type="range" id="s-y" min="0" max="1" step="0.005" oninput="setCrop('focusY',this.value)"><span class="val" id="s-y-v"></span></div>
     <div class="row"><label>Zoom</label><input type="range" id="s-z" min="0.6" max="2.5" step="0.01" oninput="setCrop('zoom',this.value)"><span class="val" id="s-z-v"></span></div>
+    <div class="row" style="margin-top:2px">
+      <label style="flex:0 0 auto">Flip</label>
+      <input type="checkbox" id="flip-cb" onchange="setFlip(this.checked)" style="accent-color:var(--saffron)">
+      <span style="font-size:11px;color:var(--text-muted)">mirror the photo left ↔ right</span>
+    </div>
     <div class="row" style="margin-top:4px">
       <label style="flex:0 0 auto">Guide</label>
       <input type="checkbox" id="guide-cb" checked onchange="render()" style="accent-color:var(--saffron)">
@@ -110,7 +118,7 @@ select { width:100%; padding:9px 11px; border:1px solid var(--cream-dark); borde
   </div>
 </div>
 
-<script src="/flyer-builder/flyer-render.js?v=32"></script>
+<script src="/flyer-builder/flyer-render.js?v=33"></script>
 <script>
 const PREVIEW_W = 1200;
 const SAMPLE = {
@@ -160,10 +168,15 @@ function cropFor(entry) {
 function isTuned(id) { return !!LIVE[id]; }
 function isDirty(id) { return !!draft[id]; }
 
+function snap(c) { return { focusX: c.focusX, focusY: c.focusY, zoom: c.zoom, flipX: !!c.flipX }; }
 function setCrop(prop, val) {
   if (!cur) return;
-  const c = cropFor(cur.entry);
-  draft[cur.entry.id] = { focusX: c.focusX, focusY: c.focusY, zoom: c.zoom, [prop]: parseFloat(val) };
+  draft[cur.entry.id] = { ...snap(cropFor(cur.entry)), [prop]: parseFloat(val) };
+  syncControls(); render();
+}
+function setFlip(on) {
+  if (!cur) return;
+  draft[cur.entry.id] = { ...snap(cropFor(cur.entry)), flipX: !!on };
   syncControls(); render();
 }
 
@@ -174,6 +187,7 @@ function syncControls() {
   set('s-x', c.focusX != null ? c.focusX : 0.5);
   set('s-y', c.focusY != null ? c.focusY : 0.5);
   set('s-z', c.zoom != null ? c.zoom : 1);
+  $('flip-cb').checked = !!c.flipX;
   const pill = $('state-pill');
   const dirty = isDirty(cur.entry.id);
   pill.textContent = dirty ? 'unsaved changes' : (isTuned(cur.entry.id) ? 'saved' : 'not positioned yet');
@@ -187,9 +201,10 @@ function syncControls() {
 
 function buildOptions() {
   const sel = $('photo-select');
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const html = manifest.photos.map((p, i) =>
     '<option' + (i === curIdx ? ' selected' : '') + '>' +
-    (i + 1) + '. ' + p.id + (isDirty(p.id) ? '  • unsaved' : (isTuned(p.id) ? '  ✓' : '')) +
+    (i + 1) + '. ' + esc(p.id) + (isDirty(p.id) ? '  • unsaved' : (isTuned(p.id) ? '  ✓' : '')) +
     '</option>').join('');
   if (sel.innerHTML !== html) sel.innerHTML = html;
   sel.selectedIndex = curIdx;
@@ -259,10 +274,12 @@ function bindDrag() {
     if (!dragging || !cur) return;
     const p = pt(e);
     const scale = PREVIEW_W / c.clientWidth;      // CSS px -> canvas px
-    const dx = (p.x - lastX) * scale, dy = (p.y - lastY) * scale;
+    const cr = cropFor(cur.entry);
+    // When mirrored, moving the cursor right must still drag the visible
+    // content right — which is source-LEFT — so the x delta is inverted.
+    const dx = (p.x - lastX) * scale * (cr.flipX ? -1 : 1), dy = (p.y - lastY) * scale;
     lastX = p.x; lastY = p.y;
     const g = panelGeom();
-    const cr = cropFor(cur.entry);
     let fx = cr.focusX != null ? cr.focusX : 0.5;
     let fy = cr.focusY != null ? cr.focusY : 0.5;
     // x = (pw - dw) * focusX, so dFocus = dPixels / (pw - dw). The denominator
@@ -271,7 +288,7 @@ function bindDrag() {
     if (Math.abs(g.pw - g.dw) > 1) fx += dx / (g.pw - g.dw);
     if (Math.abs(g.ph - g.dh) > 1) fy += dy / (g.ph - g.dh);
     fx = Math.min(1, Math.max(0, fx)); fy = Math.min(1, Math.max(0, fy));
-    draft[cur.entry.id] = { focusX: fx, focusY: fy, zoom: cr.zoom };
+    draft[cur.entry.id] = { ...snap(cr), focusX: fx, focusY: fy };
     syncControls(); render();
   };
   const up = () => { dragging = false; c.classList.remove('grabbing'); };
@@ -283,7 +300,7 @@ function bindDrag() {
     e.preventDefault();
     const cr = cropFor(cur.entry);
     const z = Math.min(2.5, Math.max(0.6, (cr.zoom != null ? cr.zoom : 1) - e.deltaY * 0.0015));
-    draft[cur.entry.id] = { focusX: cr.focusX, focusY: cr.focusY, zoom: z };
+    draft[cur.entry.id] = { ...snap(cr), zoom: z };
     syncControls(); render();
   }, { passive: false });
 }
@@ -324,16 +341,16 @@ async function saveCurrent() {
   try {
     const res = await fetch('/.netlify/functions/og-photo-crops', {
       method: 'POST', headers: apiHeaders(),
-      body: JSON.stringify({ photoId: id, focusX: c.focusX, focusY: c.focusY, zoom: c.zoom }),
+      body: JSON.stringify({ photoId: id, focusX: c.focusX, focusY: c.focusY, zoom: c.zoom, flipX: !!c.flipX }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Save failed');
-    LIVE[id] = { focusX: c.focusX, focusY: c.focusY, zoom: c.zoom };
+    LIVE[id] = snap(c);
     // Clear the draft only if it still matches what was actually sent. A drag
     // made while the request was in flight must survive, or the canvas and the
     // sliders would silently disagree about the saved position.
     const d = draft[id];
-    if (d && d.focusX === c.focusX && d.focusY === c.focusY && d.zoom === c.zoom) delete draft[id];
+    if (d && d.focusX === c.focusX && d.focusY === c.focusY && d.zoom === c.zoom && !!d.flipX === !!c.flipX) delete draft[id];
     syncControls(); render();
     status('✅ Saved — live now', true);
   } catch (e) {
@@ -347,7 +364,7 @@ async function applyToAll() {
   const c = cropFor(cur.entry);
   if (!confirm('Apply this position to all ' + manifest.photos.length + ' photos?\n\nLandscape card only — the flyer crops are untouched.')) return;
   const crops = {};
-  for (const p of manifest.photos) crops[p.id] = { focusX: c.focusX, focusY: c.focusY, zoom: c.zoom };
+  for (const p of manifest.photos) crops[p.id] = snap(c);
   try {
     const res = await fetch('/.netlify/functions/og-photo-crops', {
       method: 'POST', headers: apiHeaders(), body: JSON.stringify({ crops }),

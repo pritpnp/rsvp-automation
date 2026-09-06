@@ -5,6 +5,9 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- The URL carries the builder session id. Send origin only in Referer to
+       third parties (Google Fonts), never the path/query. -->
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>Flyer Builder — SCREvents</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -201,7 +204,7 @@
   </div>
 </div>
 
-<script src="/flyer-builder/flyer-render.js?v=32"></script>
+<script src="/flyer-builder/flyer-render.js?v=33"></script>
 <script>
 // ── Zone config ───────────────────────────────────────────────────────────────
 const PREVIEW_TEMPLATES = {

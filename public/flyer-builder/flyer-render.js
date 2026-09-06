@@ -201,7 +201,10 @@
     const scale = Math.max(layer.width / photoImg.naturalWidth, layer.height / photoImg.naturalHeight) * zoom;
     const dw = photoImg.naturalWidth * scale;
     const dh = photoImg.naturalHeight * scale;
+    lctx.save();
+    if (photoCfg.flipX) { lctx.translate(layer.width, 0); lctx.scale(-1, 1); }
     lctx.drawImage(photoImg, (layer.width - dw) * focusX, (layer.height - dh) * focusY, dw, dh);
+    lctx.restore();
 
     lctx.globalCompositeOperation = 'destination-out';
 
@@ -393,7 +396,13 @@
     const zoom = photoCfg.zoom ?? 1.0, fx = photoCfg.focusX ?? 0.5, fy = photoCfg.focusY ?? 0.5;
     const scl = Math.max(layer.width / photoImg.naturalWidth, layer.height / photoImg.naturalHeight) * zoom;
     const dw = photoImg.naturalWidth * scl, dh = photoImg.naturalHeight * scl;
+    // flipX mirrors the photo horizontally. The mirror is applied to the IMAGE
+    // draw only (inside save/restore), so the right-edge feather below is
+    // untouched and stays on the side that meets the text column.
+    lctx.save();
+    if (photoCfg.flipX) { lctx.translate(layer.width, 0); lctx.scale(-1, 1); }
     lctx.drawImage(photoImg, (layer.width - dw) * fx, (layer.height - dh) * fy, dw, dh);
+    lctx.restore();
     const fw = (featherPct || 0) * layer.width;
     if (fw > 0) {
       lctx.globalCompositeOperation = 'destination-out';

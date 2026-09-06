@@ -98,6 +98,11 @@ async function authorize(supabase, event) {
   return { ok: false, status: 401, error: 'Unauthorized' };
 }
 
+// True when Postgres rejects a query because flip_x does not exist yet (the
+// flip migration has not been run). The function then retries without it so
+// nothing breaks between deploying the code and running the migration.
+const isMissingFlipColumn = (err) => !!err && /flip_x|42703/i.test((err.message || '') + ' ' + (err.code || ''));
+
 const num = (v, min, max, dflt) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return dflt;
@@ -109,9 +114,14 @@ async function handleRequest(event, headers) {
 
   // ── GET — every crop, as a photoId-keyed map ──────────────────────────────
   if (event.httpMethod === 'GET') {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('photo_og_crops')
-      .select('photo_id, focus_x, focus_y, zoom, updated_at');
+      .select('photo_id, focus_x, focus_y, zoom, flip_x, updated_at');
+    if (error && isMissingFlipColumn(error)) {
+      ({ data, error } = await supabase
+        .from('photo_og_crops')
+        .select('photo_id, focus_x, focus_y, zoom, updated_at'));
+    }
 
     if (error) {
       // Table missing (migration not run yet) must not break the builder — it
@@ -122,7 +132,7 @@ async function handleRequest(event, headers) {
 
     const crops = {};
     for (const r of (data || [])) {
-      crops[r.photo_id] = { focusX: r.focus_x, focusY: r.focus_y, zoom: r.zoom, updatedAt: r.updated_at };
+      crops[r.photo_id] = { focusX: r.focus_x, focusY: r.focus_y, zoom: r.zoom, flipX: !!r.flip_x, updatedAt: r.updated_at };
     }
     return { statusCode: 200, headers, body: JSON.stringify({ crops }) };
   }
@@ -155,22 +165,30 @@ async function handleRequest(event, headers) {
 
     const ids = Object.keys(incoming);
     if (!ids.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'No crops provided' }) };
+    if (ids.some((id) => !String(id).trim())) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'photoId cannot be empty' }) };
+    }
     if (ids.length > 500) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Too many crops in one request' }) };
 
     const now = new Date().toISOString();
-    const rows = ids.map((id) => {
+    let rows = ids.map((id) => {
       const c = incoming[id] || {};
       return {
         photo_id: String(id).slice(0, 200),
         focus_x: num(c.focusX, 0, 1, 0.5),
         focus_y: num(c.focusY, 0, 1, 0.5),
         zoom:    num(c.zoom, 0.2, 4, 1),
+        flip_x:  c.flipX === true,
         updated_at: now,
         updated_by: auth.actor,
       };
     });
 
-    const { error } = await supabase.from('photo_og_crops').upsert(rows, { onConflict: 'photo_id' });
+    let { error } = await supabase.from('photo_og_crops').upsert(rows, { onConflict: 'photo_id' });
+    if (error && isMissingFlipColumn(error)) {
+      rows = rows.map(({ flip_x, ...r }) => r);
+      ({ error } = await supabase.from('photo_og_crops').upsert(rows, { onConflict: 'photo_id' }));
+    }
     if (error) {
       console.error('og-photo-crops upsert error:', error.message);
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to save: ' + error.message }) };
