@@ -1,0 +1,19 @@
+# Netlify publish-directory headers (https://docs.netlify.com/routing/headers/).
+# Copied into dist/ by build.sh, so it travels WITH the deployed files.
+#
+# Why this exists alongside the [[headers]] block in netlify.toml: the toml
+# rule for "/*" was not being applied on the live deploy even though the
+# per-path CORS rules in the same file were. _headers is the file-based form
+# Netlify reads straight from the publish dir and is the more robust of the two.
+#
+#   X-Frame-Options SAMEORIGIN  -> admin portal / builder cannot be framed by
+#                                  another site (clickjacking). SAMEORIGIN, not
+#                                  DENY, so future self-embedding still works.
+#   X-Content-Type-Options      -> no MIME sniffing.
+#   Referrer-Policy             -> origin only on cross-origin requests, so the
+#                                  ?session= query in builder URLs never reaches
+#                                  Google Fonts in a Referer.
+/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

@@ -35,6 +35,10 @@ cp public/flyer-builder/swami-photos.json dist/flyer-builder/swami-photos.json
 cp public/flyer-builder/flyer-layout.json dist/flyer-builder/flyer-layout.json 2>/dev/null || true
 cp public/flyer-builder/flyer-render.js dist/flyer-builder/flyer-render.js
 
+# Publish-dir headers file (site-wide security headers). Lives in public/ so it
+# is versioned next to the pages it protects; Netlify reads it from dist/.
+cp public/_headers dist/_headers
+
 # Deployed pages. vetter.html / og-vetter.html are deliberately NOT copied —
 # they are unauthenticated local tuning tools ("Local tool — not deployed").
 cp public/flyer-builder/index.html dist/flyer-builder/index.html
