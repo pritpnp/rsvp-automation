@@ -524,6 +524,16 @@
             Open Flyer Builder →
           </button>
           <div id="launch-builder-status" style="display:none;margin-top:16px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
+
+          <div style="margin-top:34px;padding-top:26px;border-top:1px solid var(--cream-dark)">
+            <div style="font-size:32px;margin-bottom:10px">🖼</div>
+            <h3 style="margin-bottom:8px;font-family:'Cormorant Garamond',serif;font-size:20px">Photo Positioner</h3>
+            <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">Set where each Swami photo sits on the <strong>landscape preview card</strong>.<br>Changes save live — the builder picks them up straight away.</p>
+            <button class="btn-create" id="launch-positioner-btn" onclick="launchPhotoPositioner()" style="font-size:15px;padding:14px 32px">
+              Open Photo Positioner →
+            </button>
+            <div id="launch-positioner-status" style="display:none;margin-top:16px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
+          </div>
         </div>
       </div>
 
@@ -657,6 +667,38 @@
     }
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
+
+    async function launchPhotoPositioner() {
+      const btn    = document.getElementById('launch-positioner-btn');
+      const status = document.getElementById('launch-positioner-status');
+      btn.disabled = true;
+      btn.textContent = '⏳ Generating session...';
+      status.style.display = 'none';
+
+      // Open the tab before any async work, same popup-blocker workaround as
+      // launchFlyerBuilder().
+      const newTab = window.open('/flyer-builder/photo-positioner.html', '_blank');
+
+      try {
+        const res = await fetch('/.netlify/functions/create-builder-session', {
+          method: 'POST',
+          headers: authHeaders(),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to create session');
+        const url = `/flyer-builder/photo-positioner.html?session=${data.sessionId}`;
+        if (newTab) { newTab.location.href = url; } else { window.location.href = url; }
+      } catch (err) {
+        if (newTab) newTab.close();
+        status.textContent = '❌ ' + err.message;
+        status.style.background = '#fef2f2';
+        status.style.color = '#991b1b';
+        status.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Open Photo Positioner →';
+      }
+    }
 
     async function launchFlyerBuilder() {
       const btn    = document.getElementById('launch-builder-btn');
