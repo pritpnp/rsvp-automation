@@ -147,9 +147,9 @@
     },
     {
       "key": "rsvp",
-      "yPct": 0.7964,
+      "yPct": 0.797,
       "font": "GothamRegular",
-      "sizePx": 52,
+      "sizePx": 39,
       "weight": 400,
       "color": "#4c4c4b",
       "align": "center",
@@ -173,9 +173,9 @@
     },
     {
       "key": "host",
-      "yPct": 0.823,
+      "yPct": 0.818,
       "font": "GothamRegular",
-      "sizePx": 52,
+      "sizePx": 65,
       "weight": 700,
       "color": "#85381c",
       "align": "center",
