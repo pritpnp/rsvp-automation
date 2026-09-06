@@ -37,10 +37,12 @@ exports.handler = async (event) => {
   }
 };
 
-// Accepts EITHER a manager token (superadmin, or a manager with
-// flyer_builder_advanced) OR a live builder session with allow_advanced — the
-// positioner page is opened from the admin portal with a builder session, the
-// same ticket the flyer builder uses for review-flyer.
+// SUPERADMIN ONLY. Crops are per-photo and global — one row changes the
+// landscape card for EVERY zone — so a zone manager must not be able to change
+// them. Accepts a superadmin manager token, the admin password, or a builder
+// session that was minted for a superadmin (the positioner page is opened from
+// the admin portal with a builder session, the same ticket the flyer builder
+// uses for review-flyer). flyer_builder_advanced is deliberately NOT enough.
 async function authorize(supabase, event) {
   const adminPw = event.headers['x-admin-password'];
   if (adminPw && adminPw === process.env.ADMIN_PASSWORD) {
@@ -58,16 +60,7 @@ async function authorize(supabase, event) {
       return { ok: false, status: 401, error: 'Session expired' };
     }
     if (session.manager_id === null) return { ok: true, actor: 'superadmin' };
-
-    const { data: manager } = await supabase
-      .from('managers')
-      .select('username, permissions')
-      .eq('id', session.manager_id)
-      .single();
-    if (!manager?.permissions?.flyer_builder_advanced) {
-      return { ok: false, status: 403, error: 'No permission to position photos' };
-    }
-    return { ok: true, actor: manager.username || 'manager' };
+    return { ok: false, status: 403, error: 'Superadmin access required' };
   }
 
   const builderSessionId = event.headers['x-builder-session'];
@@ -80,19 +73,10 @@ async function authorize(supabase, event) {
     if (!b || new Date(b.expires_at) < new Date()) {
       return { ok: false, status: 401, error: 'Builder session expired. Please reopen from the admin portal.' };
     }
-    if (!b.is_superadmin && !b.allow_advanced) {
-      return { ok: false, status: 403, error: 'No permission to position photos' };
+    if (!b.is_superadmin) {
+      return { ok: false, status: 403, error: 'Superadmin access required' };
     }
-    let actor = b.is_superadmin ? 'superadmin' : 'manager';
-    if (!b.is_superadmin && b.manager_id) {
-      const { data: m } = await supabase
-        .from('managers')
-        .select('username')
-        .eq('id', b.manager_id)
-        .single();
-      actor = m?.username || actor;
-    }
-    return { ok: true, actor };
+    return { ok: true, actor: 'superadmin' };
   }
 
   return { ok: false, status: 401, error: 'Unauthorized' };

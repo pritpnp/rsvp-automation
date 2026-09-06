@@ -525,7 +525,7 @@
           </button>
           <div id="launch-builder-status" style="display:none;margin-top:16px;padding:12px 14px;border-radius:10px;font-size:13px;"></div>
 
-          <div style="margin-top:34px;padding-top:26px;border-top:1px solid var(--cream-dark)">
+          <div id="positioner-card" style="display:none;margin-top:34px;padding-top:26px;border-top:1px solid var(--cream-dark)">
             <div style="font-size:32px;margin-bottom:10px">🖼</div>
             <h3 style="margin-bottom:8px;font-family:'Cormorant Garamond',serif;font-size:20px">Photo Positioner</h3>
             <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">Set where each Swami photo sits on the <strong>landscape preview card</strong>.<br>Changes save live — the builder picks them up straight away.</p>
@@ -634,6 +634,9 @@
       loadEventPicker();
       if (isSuperadmin) {
         document.getElementById('invite-security-card').style.display = 'block';
+        // Photo Positioner is superadmin-only (crops are global across zones);
+        // the server enforces this too — hiding the card is just UX.
+        document.getElementById('positioner-card').style.display = 'block';
         loadInviteSecurity();
         loadManagers(); loadEvents(); loadZoneEventNames(); loadRsvpSettings();
       }

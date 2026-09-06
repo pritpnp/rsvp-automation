@@ -93,3 +93,24 @@
   for = "/flyer-builder/base/*"
   [headers.values]
     Access-Control-Allow-Origin = "*"
+
+# ── Site-wide security headers ─────────────────────────────────────────────
+# Netlify merges every matching [[headers]] rule, so this adds to (never
+# replaces) the per-path CORS headers above.
+#   X-Frame-Options SAMEORIGIN  — the admin portal and flyer builder must not be
+#                                 framed by another site (clickjacking). SAMEORIGIN
+#                                 rather than DENY so any future self-embedding
+#                                 still works.
+#   X-Content-Type-Options      — no MIME sniffing.
+#   Referrer-Policy             — origin only on cross-origin requests, so the
+#                                 ?session= query in builder URLs is never sent
+#                                 to third parties (Google Fonts) in a Referer.
+# No Content-Security-Policy: the pages rely on inline scripts/styles, data: URIs
+# (favicon, watermark SVG) and Google Fonts; a strict CSP needs nonce work and a
+# permissive one adds little. Revisit deliberately if wanted.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

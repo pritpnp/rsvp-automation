@@ -411,8 +411,10 @@ window.addEventListener('beforeunload', (e) => {
     });
     const v = await vr.json().catch(() => ({}));
     if (!vr.ok) { gate('Session invalid', v.error || 'Please reopen from the admin portal.'); return; }
-    if (!v.isSuperadmin && !v.allowAdvanced) {
-      gate('Not available for your account', 'Positioning photos needs the advanced flyer-builder permission. Ask a superadmin to enable it.');
+    // Superadmin only: crops are global (one row changes every zone's card).
+    // The server enforces this too — this gate is just a clear message.
+    if (!v.isSuperadmin) {
+      gate('Superadmin only', 'Photo positions apply to every zone\u2019s landscape card, so only a superadmin can change them.');
       return;
     }
   } catch (e) { gate('Could not verify session', e.message); return; }
