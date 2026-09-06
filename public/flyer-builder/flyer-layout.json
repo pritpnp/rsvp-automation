@@ -50,7 +50,7 @@
     },
     "datetime": {
       "yPct": 0.789,
-      "sizePx": 102
+      "sizePx": 86
     },
     "locationLabel": {
       "yPct": 0.841,
@@ -148,7 +148,7 @@
     {
       "key": "rsvp",
       "yPct": 0.7964,
-      "font": "AppleSDGothicNeoH",
+      "font": "GothamRegular",
       "sizePx": 52,
       "weight": 400,
       "color": "#4c4c4b",
@@ -173,16 +173,16 @@
     },
     {
       "key": "host",
-      "yPct": 0.8206,
+      "yPct": 0.823,
       "font": "GothamRegular",
       "sizePx": 52,
-      "weight": 400,
-      "color": "#4c4c4b",
+      "weight": 700,
+      "color": "#85381c",
       "align": "center",
       "maxWidthPct": 0.9,
       "lineHeight": 1.4,
       "tracking": -50,
-      "tint2": true
+      "tint": true
     },
     {
       "key": "address",
