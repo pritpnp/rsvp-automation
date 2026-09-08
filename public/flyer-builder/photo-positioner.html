@@ -333,8 +333,13 @@ function step(d) { pickPhoto(curIdx + d); }
 // ── saving ──────────────────────────────────────────────────────────────────
 function apiHeaders() { return { 'Content-Type': 'application/json', 'x-builder-session': SESSION }; }
 
+function cropsReadable() {
+  if (window.__cropsLoaded) return true;
+  status('Could not read the saved positions, so saving is blocked to avoid overwriting them. Reload and try again.', false);
+  return false;
+}
 async function saveCurrent() {
-  if (!cur) return;
+  if (!cur || !cropsReadable()) return;
   const id = cur.entry.id;
   const c = cropFor(cur.entry);
   $('save-btn').disabled = true;
@@ -360,7 +365,7 @@ async function saveCurrent() {
 }
 
 async function applyToAll() {
-  if (!cur) return;
+  if (!cur || !cropsReadable()) return;
   const c = cropFor(cur.entry);
   if (!confirm('Apply this position to all ' + manifest.photos.length + ' photos?\n\nLandscape card only — the flyer crops are untouched.')) return;
   const crops = {};
@@ -426,10 +431,23 @@ window.addEventListener('beforeunload', (e) => {
       const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now());
       if (lr.ok) FlyerRender.applyLayout(await lr.json());
     } catch (e) {}
+    // Live layout saved from the builder's Advanced panel, so this preview
+    // matches what the builder actually renders. Non-fatal.
+    try {
+      const ll = await fetch('/.netlify/functions/flyer-layout?t=' + Date.now());
+      if (ll.ok) { const j = await ll.json(); if (j && j.layout) FlyerRender.applyLayout(j.layout); }
+    } catch (e) {}
+    // If this read fails, LIVE stays empty and the sliders would show the FLYER
+    // crop — saving then overwrites a stored crop the user never saw. Block
+    // saving rather than silently clobbering it.
+    let cropsLoaded = false;
     try {
       const cr = await fetch('/.netlify/functions/og-photo-crops?t=' + Date.now());
-      if (cr.ok) LIVE = (await cr.json()).crops || {};
-    } catch (e) {}
+      if (!cr.ok) throw new Error('HTTP ' + cr.status);
+      LIVE = (await cr.json()).crops || {};
+      cropsLoaded = true;
+    } catch (e) { console.warn('saved crops unavailable:', e.message); }
+    window.__cropsLoaded = cropsLoaded;
     [assets.watercolor, assets.header, assets.footerBlack, assets.footerWhite] = await Promise.all([
       FlyerRender.loadImage('/flyer-builder/base/watercolor.png'),
       FlyerRender.loadImage('/flyer-builder/base/header.png'),
