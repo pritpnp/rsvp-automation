@@ -221,7 +221,7 @@
   </div>
 </div>
 
-<script src="/flyer-builder/flyer-render.js?v=35"></script>
+<script src="/flyer-builder/flyer-render.js?v=36"></script>
 <script>
 // ── Zone config ───────────────────────────────────────────────────────────────
 const PREVIEW_TEMPLATES = {
@@ -362,7 +362,7 @@ function buildFields() {
   const mahaprasad = document.getElementById('f-mahaprasad').value || 'Mahaprasad will be served after sabha.';
   const zoneName = ZONE_DISPLAY[currentZone] || currentZone;
   const santosCb = document.getElementById('santos-cb');
-  const santosOn = isSatsang && santosCb && santosCb.checked;
+  const santosOn = !!(santosCb && santosCb.checked);
   return {
     invitation: 'Invitation',
     zoneLine: isSatsang ? '' : ('BAPS Swaminarayan Mandir | ' + zoneName + ' Zone'),
@@ -553,8 +553,9 @@ function setZone(zone, btn) {
   document.querySelectorAll('.zone-btn').forEach((b) => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   document.getElementById('para-fields').style.display = isSatsang ? 'none' : 'block';
-  document.getElementById('santos-toggle').style.display = isSatsang ? 'block' : 'none';
-  if (!isSatsang) document.getElementById('santos-cb').checked = false;
+  // Santos line is available on EVERY zone, not just Satsang Sabha. The choice
+  // persists across zone switches (it describes the event, not the zone).
+  document.getElementById('santos-toggle').style.display = 'block';
   const isMandir = MANDIR_ZONES.includes(zone);
   document.getElementById('mandir-toggle').style.display = isMandir ? 'block' : 'none';
   const cb = document.getElementById('mandir-cb');
@@ -641,6 +642,9 @@ async function sendForReview() {
     const ogBase64 = ogCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 
     const santosChecked = document.getElementById('santos-cb').checked;
+    // Only Satsang Sabha has a '-santos' variant in review-flyer.js VALID_ZONES;
+    // '<other-zone>-santos' would be rejected. The santos flag itself travels in
+    // eventData.santos for every zone, so the round trip still works.
     const zone = (santosChecked && currentZone === 'satsang-sabha') ? 'satsang-sabha-santos' : currentZone;
     const m = document.getElementById('f-minute').value || '00';
     const eventData = {
