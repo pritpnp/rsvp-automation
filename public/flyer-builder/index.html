@@ -114,12 +114,15 @@
 
     <div class="section-label">Event Details</div>
     <div class="form-group"><label>Event Date</label><input type="date" id="f-date" oninput="scheduleRender();this.blur()" onchange="scheduleRender();this.blur()" /></div>
-    <div class="form-group"><label>Time (PM)</label>
+    <div class="form-group"><label>Time</label>
       <div style="display:flex;gap:8px;align-items:center">
         <input type="number" id="f-hour" min="1" max="12" placeholder="HH" oninput="scheduleRender()" style="width:70px;text-align:center" />
         <span style="font-size:16px;color:var(--brown);font-weight:500">:</span>
         <input type="number" id="f-minute" min="0" max="59" placeholder="MM" oninput="scheduleRender()" style="width:70px;text-align:center" />
-        <span style="font-size:13px;color:var(--text-muted);font-weight:500">PM</span>
+        <select id="f-ampm" onchange="scheduleRender()" aria-label="AM or PM" style="width:76px;padding:9px 8px;border:1px solid var(--cream-dark);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown);text-align:center">
+          <option value="AM">AM</option>
+          <option value="PM" selected>PM</option>
+        </select>
       </div>
     </div>
     <div id="para-fields">
@@ -307,11 +310,17 @@ function formatRsvpDate(s) {
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   return `${months[d.getMonth()]} ${d.getDate()}`;
 }
+// Lowercase am/pm from the selector; PM is the default (most sabhas are
+// evenings) and the fallback if the control is ever missing.
+function meridiem() {
+  const el = document.getElementById('f-ampm');
+  return (el && el.value === 'AM') ? 'am' : 'pm';
+}
 function buildFields() {
   const day = formatDate(document.getElementById('f-date').value);
   const h = document.getElementById('f-hour').value;
   const m = document.getElementById('f-minute').value || '00';
-  const time = h ? `${h}:${m.padStart(2,'0')} pm` : '';
+  const time = h ? `${h}:${m.padStart(2,'0')} ${meridiem()}` : '';
   const dt = [day, time ? 'at ' + time : ''].filter(Boolean).join(' ');
   const rsvp = formatRsvpDate(document.getElementById('f-rsvp-date').value);
   const host = document.getElementById('f-host').value.trim();
@@ -562,7 +571,7 @@ async function sendForReview() {
     const zone = (santosChecked && currentZone === 'satsang-sabha') ? 'satsang-sabha-santos' : currentZone;
     const m = document.getElementById('f-minute').value || '00';
     const eventData = {
-      date, time: hour ? `${hour}:${m.padStart(2,'0')} pm` : '',
+      date, time: hour ? `${hour}:${m.padStart(2,'0')} ${meridiem()}` : '',
       rsvpDate: document.getElementById('f-rsvp-date').value || '',
       host: document.getElementById('f-host').value.trim() || '',
       addr1, addr2: document.getElementById('f-addr2').value.trim() || '',
@@ -603,7 +612,14 @@ function readUrlParams() {
   const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
   set('f-date', p.get('date')); set('f-rsvp-date', p.get('rsvpDate')); set('f-host', p.get('host'));
   set('f-addr1', p.get('addr1')); set('f-addr2', p.get('addr2')); set('f-mahaprasad', p.get('mahaprasad'));
-  if (p.get('time')) { const mt = p.get('time').match(/(\d+):(\d+)/); if (mt) { set('f-hour', parseInt(mt[1],10)); set('f-minute', parseInt(mt[2],10)); } }
+  if (p.get('time')) {
+    const mt = p.get('time').match(/(\d+):(\d+)\s*(am|pm)?/i);
+    if (mt) {
+      set('f-hour', parseInt(mt[1],10)); set('f-minute', parseInt(mt[2],10));
+      const ap = document.getElementById('f-ampm');
+      if (ap) ap.value = (mt[3] && mt[3].toLowerCase() === 'am') ? 'AM' : 'PM';
+    }
+  }
   if (p.get('santos') === 'true') { const cb = document.getElementById('santos-cb'); if (cb) { cb.checked = true; } }
   scheduleRender();
 }
