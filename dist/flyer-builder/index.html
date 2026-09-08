@@ -179,7 +179,9 @@
       <p style="font-size:10px;color:var(--text-muted);margin:-4px 0 6px;line-height:1.4">Tunes the landscape Preview/social card. Open the <strong>🖼 Preview</strong> tab to see it update.</p>
       <div id="adv-og-rows"></div>
 
-      <button class="btn-dl" style="margin-top:12px;background:linear-gradient(135deg,var(--brown),var(--brown-mid));font-size:13px;padding:10px" onclick="saveLayout()">💾 Save layout</button>
+      <button class="btn-dl" id="save-layout-live-btn" disabled style="display:none;margin-top:12px;font-size:13px;padding:10px" onclick="saveLayoutToSite()">💾 Save layout to site</button>
+      <div id="save-layout-status" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12px"></div>
+      <button class="btn-dl" style="margin-top:8px;background:linear-gradient(135deg,var(--brown),var(--brown-mid));font-size:12px;padding:9px" onclick="saveLayout()">⬇ Download layout (json)</button>
     </div>
 
     <button class="btn-dl" id="review-btn" onclick="sendForReview()" style="margin-top:16px">📤 Send for Review</button>
@@ -236,6 +238,14 @@ let currentPhoto = null; // { id, entry, img }
 // Empty until loaded; every lookup falls back to the manifest, so a failed
 // fetch degrades to the previous behaviour instead of breaking the card.
 let LIVE_OG_CROPS = {};
+// Saving the layout is a FULL-SNAPSHOT REPLACE with no undo, so the Save button
+// must stay locked until we know what is currently live. verifyBuilderSession()
+// reveals the button after ONE fast round trip, but the live layout is several
+// fetches later — clicking in that window would publish the code defaults over
+// the live layout and report success. layoutSettled = the load attempt finished;
+// liveLayoutLoaded = it actually succeeded (a FAILED read must also block the
+// save, because the in-memory layout is then NOT the live one).
+let layoutSettled = false, liveLayoutLoaded = false;
 // Precedence: flyer crop <- manifest ogPhoto <- live crop.
 function ogCropFor(entry) {
   return { ...(entry.photo || {}), ...(entry.ogPhoto || {}), ...(LIVE_OG_CROPS[entry.id] || {}) };
@@ -247,6 +257,17 @@ async function loadFlyerAssets() {
   MANIFEST = await (await fetch('/flyer-builder/swami-photos.json?t=' + Date.now())).json();
   // Optional saved layout override (from the Advanced panel's "Save layout").
   try { const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now()); if (lr.ok) FlyerRender.applyLayout(await lr.json()); } catch (e) {}
+  // Then the LIVE layout saved from the Advanced panel ("Save layout to site"),
+  // which wins over the static file. Non-fatal: if it fails, the static file
+  // (and code defaults) stand exactly as before.
+  try {
+    const ll = await fetch('/.netlify/functions/flyer-layout?t=' + Date.now());
+    if (!ll.ok) throw new Error('HTTP ' + ll.status);
+    const j = await ll.json();
+    if (j && j.layout) FlyerRender.applyLayout(j.layout);
+    liveLayoutLoaded = true;          // includes "no row yet" — a first save is legitimate
+  } catch (e) { console.warn('live layout unavailable, using static:', e.message); }
+  markLayoutSettled();
   // Pick up the GLOBAL tuning the photo vetter saved in this browser (same-origin
   // localStorage) — header position/size/shadow + the global photo move — so the
   // builder matches the vetter without a manual export. (Production reads flyer-layout.json.)
@@ -469,6 +490,46 @@ function advShadow(prop, val) {
   if (v && prop !== 'color') v.textContent = (+val).toFixed(prop === 'opacity' ? 2 : 3);
   scheduleRender();
 }
+// Unlock saving once the live layout is known, and rebuild the Advanced sliders
+// if the panel was opened while they were still showing pre-load values.
+function markLayoutSettled() {
+  layoutSettled = true;
+  const b = document.getElementById('save-layout-live-btn');
+  if (b) b.disabled = !liveLayoutLoaded;
+  if (!liveLayoutLoaded) {
+    const st = document.getElementById('save-layout-status');
+    if (st) {
+      st.textContent = 'Could not read the current live layout, so saving is disabled (it would overwrite it). Reload to retry.';
+      st.style.background = '#fef2f2'; st.style.color = '#991b1b'; st.style.display = 'block';
+    }
+  }
+  if (_advOpen) buildAdvancedPanel();
+}
+
+// Save the current layout to the site (Supabase via flyer-layout). Superadmin
+// only, enforced server-side; the button is only revealed for superadmins.
+async function saveLayoutToSite() {
+  const btn = document.getElementById('save-layout-live-btn');
+  const st  = document.getElementById('save-layout-status');
+  const show = (msg, ok) => { st.textContent = msg; st.style.background = ok ? '#f0fdf4' : '#fef2f2'; st.style.color = ok ? '#166534' : '#991b1b'; st.style.display = 'block'; };
+  if (!window.BUILDER_SESSION_ID) { show('Open the builder from the admin portal to save to the site.', false); return; }
+  if (!layoutSettled) { show('Still loading the current layout — try again in a moment.', false); return; }
+  if (!liveLayoutLoaded) { show('Could not read the current live layout, so saving is blocked to avoid overwriting it. Reload and try again.', false); return; }
+  if (!confirm('Save this layout to the site?\n\nIt replaces the live layout for every zone and every user. The previous one is kept in history.')) return;
+  btn.disabled = true; const label = btn.textContent; btn.textContent = '⏳ Saving…';
+  try {
+    const res = await fetch('/.netlify/functions/flyer-layout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-builder-session': window.BUILDER_SESSION_ID },
+      body: JSON.stringify({ layout: FlyerRender.serializeLayout() }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+    show('✅ Saved — live for everyone on their next load.', true);
+  } catch (e) {
+    show('❌ ' + e.message, false);
+  } finally { btn.disabled = false; btn.textContent = label; }
+}
 function saveLayout() {
   const blob = new Blob([JSON.stringify(FlyerRender.serializeLayout(), null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'flyer-layout.json'; a.click();
@@ -636,7 +697,10 @@ async function verifyBuilderSession() {
     const data = await res.json();
     if (!res.ok) { showSessionError(data.error || 'Invalid session'); return; }
     window.ADMIN_TOKEN = sessionId; window.BUILDER_MANAGER_ID = data.managerId;
+    window.BUILDER_IS_SUPERADMIN = !!data.isSuperadmin;
     if (data.allowAdvanced) showAdvancedToggle();
+    // Reveal only — `disabled` is cleared by markLayoutSettled(), never here.
+    if (data.isSuperadmin) { const b = document.getElementById('save-layout-live-btn'); if (b) b.style.display = 'block'; }
     try {
       const allowed = data.allowedZones || [];
       if (!data.isSuperadmin && allowed.length) {
