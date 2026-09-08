@@ -72,8 +72,8 @@
       { key: 'invitation', yPct: 0.5575, font: 'AddingtonCF',       sizePx: 79,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.1,   tracking: -25, tint: true },
       { key: 'zoneLine',   yPct: 0.5907, font: 'AddingtonCF',       sizePx: 50,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.94, lineHeight: 1.1,   tracking: -40, tint: true },
       { key: 'cordially',  yPct: 0.6162, font: 'GothamRegular',     sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.92, lineHeight: 1.2,   tracking: -40, tint2: true },
-      { key: 'title',      yPct: 0.632, font: 'AddingtonCF',       sizePx: 140, weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 0.814, wrap: true, tracking: -25, tint: true },
-      // santos ("In the presence of Pujya Swamis") — Satsang only, gated by the
+      { key: 'title',      yPct: 0.632, font: 'AddingtonCF',       sizePx: 167, weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 0.814, wrap: true, tracking: -25, tint: true },
+      // santos ("In the presence of Pujya Santos") — optional on every zone,
       // toggle in buildFields (empty string = skipped). Fixed purple.
       { key: 'santos',     yPct: 0.7300, font: 'GothamRegular',     sizePx: 42,  weight: 400, color: '#4a4882', align: 'center', maxWidthPct: 0.92, lineHeight: 1.3,   tracking: -40 },
       { key: 'datetime',   yPct: 0.7545, font: 'AddingtonCF',       sizePx: 86,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 1.4,   tracking: -25, tint: true },
@@ -87,6 +87,19 @@
       { key: 'address',    yPct: 0.8654, font: 'AddingtonCF',       sizePx: 63,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.06,  tracking: -25, tint: true },
       { key: 'mahaprasad', yPct: 0.9216, font: 'AddingtonCF',       sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -25, tint2: true },
     ],
+
+    // Parasabha + santos overrides. The santos line needs room between the title
+    // and the date, so the whole upper block tightens and the title grows into
+    // the space it frees. Applied ONLY when santos is on and the zone is not
+    // Satsang; with santos off the base values above are used unchanged, so
+    // turning the toggle off restores the original flyer exactly.
+    parasabhaSantos: {
+      invitation: { yPct: 0.550, sizePx: 79,  lineHeight: 1.10 },
+      zoneLine:   { yPct: 0.584, sizePx: 50,  lineHeight: 1.10 },
+      cordially:  { yPct: 0.609, sizePx: 33,  lineHeight: 1.20 },
+      title:      { yPct: 0.615, sizePx: 175, lineHeight: 0.81 },
+      santos:     { yPct: 0.740, sizePx: 42,  lineHeight: 1.30 },
+    },
 
     // Satsang Sabha zone overrides (from the live flyer-positions.json — px ×3.125).
     // Satsang flyers have no host/RSVP; datetime + address sit lower than parasabha.
@@ -123,8 +136,8 @@
         { key: 'invitation',    cxPct: 0.68, yPct: 0.115, font: 'AddingtonCF',   sizePx: 30, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.1, tracking: -25, tint: true },
         { key: 'zoneLine',      cxPct: 0.68, yPct: 0.180, font: 'AddingtonCF',   sizePx: 23, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.1, tracking: -40, tint: true },
         { key: 'cordially',     cxPct: 0.68, yPct: 0.242, font: 'GothamRegular',     sizePx: 15, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.2, tracking: -40, tint2: true },
-        { key: 'title',         cxPct: 0.68, yPct: 0.239, font: 'AddingtonCF',       sizePx: 78, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 0.85, wrap: true, tracking: -25, tint: true },
-        { key: 'santos',        cxPct: 0.68, yPct: 0.460, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4a4882', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -40 },
+        { key: 'title',         cxPct: 0.68, yPct: 0.239, font: 'AddingtonCF',       sizePx: 66, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 0.85, wrap: true, tracking: -25, tint: true },
+        { key: 'santos',        cxPct: 0.68, yPct: 0.540, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4a4882', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -40 },
         { key: 'datetime',      cxPct: 0.68, yPct: 0.585, font: 'AddingtonCF',       sizePx: 36, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -25, tint: true },
         { key: 'rsvp',          cxPct: 0.68, yPct: 0.655, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
         // host → locationLabel → address (same reorder as the portrait flyer).
@@ -133,6 +146,12 @@
         { key: 'address',       cxPct: 0.68, yPct: 0.778, font: 'AddingtonCF',       sizePx: 20, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.12, tracking: -25, tint: true },
         { key: 'mahaprasad',    cxPct: 0.68, yPct: 0.880, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
       ],
+      // Landscape counterpart of parasabhaSantos: without it the title runs into
+      // the santos line and santos would sit BELOW the date.
+      parasabhaSantos: {
+        title:  { sizePx: 78 },
+        santos: { yPct: 0.460 },
+      },
       satsang: {
         title:         { yPct: 0.228, sizePx: 117 },
         santos:        { yPct: 0.560 },
@@ -371,7 +390,11 @@
 
     // 5. text
     const fields = opts.fields || {};
-    const ov = opts.variant === 'satsang' ? LAYOUT.satsang : null;
+    // Satsang has its own full override set; otherwise a non-empty santos field
+    // selects the parasabha+santos set. Derived from the field so the on-screen
+    // preview and sendForReview()'s capture always pick the same variant.
+    const santosOn = !!(opts.fields && opts.fields.santos);
+    const ov = opts.variant === 'satsang' ? LAYOUT.satsang : (santosOn ? LAYOUT.parasabhaSantos : null);
     for (const baseEl of LAYOUT.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
@@ -465,7 +488,8 @@
 
     // 5. text column (right)
     const fields = opts.fields || {};
-    const ov = opts.variant === 'satsang' ? L.satsang : null;
+    const santosOn = !!(opts.fields && opts.fields.santos);
+    const ov = opts.variant === 'satsang' ? L.satsang : (santosOn ? L.parasabhaSantos : null);
     for (const baseEl of L.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
@@ -492,6 +516,7 @@
     if (o.footer) Object.assign(LAYOUT.footer, o.footer);
     if (o.header) Object.assign(LAYOUT.header, o.header);
     if (o.satsang) for (const k in o.satsang) LAYOUT.satsang[k] = Object.assign(LAYOUT.satsang[k] || {}, o.satsang[k]);
+    if (o.parasabhaSantos) for (const k in o.parasabhaSantos) LAYOUT.parasabhaSantos[k] = Object.assign(LAYOUT.parasabhaSantos[k] || {}, o.parasabhaSantos[k]);
     if (Array.isArray(o.text)) for (const t of o.text) { const e = LAYOUT.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
     if (o.og) {
       const G = o.og;
@@ -501,11 +526,12 @@
       if (G.footer) Object.assign(LAYOUT.og.footer, G.footer);
       if (Array.isArray(G.text)) for (const t of G.text) { const e = LAYOUT.og.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
       if (G.satsang) for (const k in G.satsang) LAYOUT.og.satsang[k] = Object.assign(LAYOUT.og.satsang[k] || {}, G.satsang[k]);
+      if (G.parasabhaSantos) for (const k in G.parasabhaSantos) LAYOUT.og.parasabhaSantos[k] = Object.assign(LAYOUT.og.parasabhaSantos[k] || {}, G.parasabhaSantos[k]);
     }
   }
   // Snapshot the current LAYOUT for export (what the Advanced panel saves).
   function serializeLayout() {
-    return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, text: LAYOUT.text, og: LAYOUT.og };
+    return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, parasabhaSantos: LAYOUT.parasabhaSantos, text: LAYOUT.text, og: LAYOUT.og };
   }
 
   global.FlyerRender = { LAYOUT, recolorWatercolor, drawPhotoInBox, compositeFlyer, compositeOG, loadImage, hexToRgb, applyLayout, serializeLayout };

@@ -110,7 +110,7 @@
       "key": "title",
       "yPct": 0.632,
       "font": "AddingtonCF",
-      "sizePx": 140,
+      "sizePx": 167,
       "weight": 400,
       "color": "#85381c",
       "align": "center",
@@ -278,7 +278,7 @@
         "cxPct": 0.68,
         "yPct": 0.239,
         "font": "AddingtonCF",
-        "sizePx": 78,
+        "sizePx": 93,
         "weight": 400,
         "color": "#85381c",
         "maxWidthPct": 0.54,
@@ -290,7 +290,7 @@
       {
         "key": "santos",
         "cxPct": 0.68,
-        "yPct": 0.46,
+        "yPct": 0.54,
         "font": "GothamRegular",
         "sizePx": 18,
         "weight": 400,
@@ -407,6 +407,41 @@
       "widthPct": 0.18,
       "cxPct": 0.68,
       "bottomPct": 0.008
+    },
+    "parasabhaSantos": {
+      "title": {
+        "sizePx": 78
+      },
+      "santos": {
+        "yPct": 0.46
+      }
+    }
+  },
+  "parasabhaSantos": {
+    "invitation": {
+      "yPct": 0.55,
+      "sizePx": 79,
+      "lineHeight": 1.1
+    },
+    "zoneLine": {
+      "yPct": 0.584,
+      "sizePx": 50,
+      "lineHeight": 1.1
+    },
+    "cordially": {
+      "yPct": 0.609,
+      "sizePx": 33,
+      "lineHeight": 1.2
+    },
+    "title": {
+      "yPct": 0.615,
+      "sizePx": 175,
+      "lineHeight": 0.81
+    },
+    "santos": {
+      "yPct": 0.74,
+      "sizePx": 42,
+      "lineHeight": 1.3
     }
   }
 }
