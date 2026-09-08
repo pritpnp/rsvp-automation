@@ -72,7 +72,7 @@
       { key: 'invitation', yPct: 0.5575, font: 'AddingtonCF',       sizePx: 79,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.1,   tracking: -25, tint: true },
       { key: 'zoneLine',   yPct: 0.5907, font: 'AddingtonCF',       sizePx: 50,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.94, lineHeight: 1.1,   tracking: -40, tint: true },
       { key: 'cordially',  yPct: 0.6162, font: 'GothamRegular',     sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.92, lineHeight: 1.2,   tracking: -40, tint2: true },
-      { key: 'title',      yPct: 0.6367, font: 'AddingtonCF',       sizePx: 167, weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 0.814, wrap: true, tracking: -25, tint: true },
+      { key: 'title',      yPct: 0.632, font: 'AddingtonCF',       sizePx: 167, weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 0.814, wrap: true, tracking: -25, tint: true },
       // santos ("In the presence of Pujya Swamis") — Satsang only, gated by the
       // toggle in buildFields (empty string = skipped). Fixed purple.
       { key: 'santos',     yPct: 0.7300, font: 'GothamRegular',     sizePx: 42,  weight: 400, color: '#4a4882', align: 'center', maxWidthPct: 0.92, lineHeight: 1.3,   tracking: -40 },
@@ -123,7 +123,7 @@
         { key: 'invitation',    cxPct: 0.68, yPct: 0.115, font: 'AddingtonCF',   sizePx: 30, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.1, tracking: -25, tint: true },
         { key: 'zoneLine',      cxPct: 0.68, yPct: 0.180, font: 'AddingtonCF',   sizePx: 23, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.1, tracking: -40, tint: true },
         { key: 'cordially',     cxPct: 0.68, yPct: 0.242, font: 'GothamRegular',     sizePx: 15, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.2, tracking: -40, tint2: true },
-        { key: 'title',         cxPct: 0.68, yPct: 0.300, font: 'AddingtonCF',       sizePx: 66, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 0.85, wrap: true, tracking: -25, tint: true },
+        { key: 'title',         cxPct: 0.68, yPct: 0.239, font: 'AddingtonCF',       sizePx: 66, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 0.85, wrap: true, tracking: -25, tint: true },
         { key: 'santos',        cxPct: 0.68, yPct: 0.540, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4a4882', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -40 },
         { key: 'datetime',      cxPct: 0.68, yPct: 0.585, font: 'AddingtonCF',       sizePx: 36, weight: 400, color: '#85381c', maxWidthPct: 0.54, lineHeight: 1.3, tracking: -25, tint: true },
         { key: 'rsvp',          cxPct: 0.68, yPct: 0.655, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },

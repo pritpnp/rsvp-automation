@@ -108,7 +108,7 @@
     },
     {
       "key": "title",
-      "yPct": 0.6367,
+      "yPct": 0.632,
       "font": "AddingtonCF",
       "sizePx": 167,
       "weight": 400,
@@ -276,7 +276,7 @@
       {
         "key": "title",
         "cxPct": 0.68,
-        "yPct": 0.242,
+        "yPct": 0.239,
         "font": "AddingtonCF",
         "sizePx": 93,
         "weight": 400,
