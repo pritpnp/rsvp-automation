@@ -82,8 +82,8 @@
       // line, and "Location:" introduces the ADDRESS beneath it. (Previously
       // "Location:" sat above the host names, which read as if the family name
       // were the venue.)
-      { key: 'host',       yPct: 0.818,  font: 'GothamRegular',     sizePx: 65,  weight: 700, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint: true },
-      { key: 'locationLabel', yPct: 0.8469, font: 'AddingtonCF',    sizePx: 33, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.3,   tracking: -25, tint2: true },
+      { key: 'host',       yPct: 0.820,  font: 'GothamRegular',     sizePx: 65,  weight: 700, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint: true },
+      { key: 'locationLabel', yPct: 0.851, font: 'AddingtonCF',    sizePx: 33, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.3,   tracking: -25, tint2: true },
       { key: 'address',    yPct: 0.8654, font: 'AddingtonCF',       sizePx: 63,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.06,  tracking: -25, tint: true },
       { key: 'mahaprasad', yPct: 0.9216, font: 'AddingtonCF',       sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -25, tint2: true },
     ],

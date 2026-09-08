@@ -160,7 +160,7 @@
     },
     {
       "key": "locationLabel",
-      "yPct": 0.8469,
+      "yPct": 0.851,
       "font": "AddingtonCF",
       "sizePx": 33,
       "weight": 400,
@@ -173,7 +173,7 @@
     },
     {
       "key": "host",
-      "yPct": 0.818,
+      "yPct": 0.82,
       "font": "GothamRegular",
       "sizePx": 65,
       "weight": 700,
