@@ -95,6 +95,7 @@ exports.handler = async (event) => {
     if (eventData.addr2)       params.set('addr2', eventData.addr2);
     if (eventData.mahaprasad)  params.set('mahaprasad', eventData.mahaprasad);
     if (eventData.santos)      params.set('santos', eventData.santos);
+    if (eventData.titleType)   params.set('titleType', eventData.titleType);
   }
   params.set('zone', zone.replace('-santos', ''));
   // New session will be needed — direct to builder without session so they get prompted to reopen from admin

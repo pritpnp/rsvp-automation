@@ -116,6 +116,14 @@
       <button class="zone-btn" onclick="setZone('bloomsburg',this)">Bloomsburg</button>
       <button class="zone-btn full" onclick="setZone('satsang-sabha',this)">Satsang Sabha</button>
     </div>
+    <div id="title-toggle" style="margin-top:8px;padding:10px 12px;background:var(--cream);border-radius:9px;border:1px solid var(--cream-dark)">
+      <label for="f-title-type" style="display:block;font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Event title</label>
+      <select id="f-title-type" onchange="setTitleType()" style="width:100%;padding:8px 10px;border:1px solid var(--cream-dark);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:#fff;color:var(--brown);cursor:pointer">
+        <option value="para">Para Satsang Sabha</option>
+        <option value="satsang">Satsang Sabha</option>
+      </select>
+    </div>
+
     <div id="santos-toggle" style="display:none;margin-top:8px;padding:10px 12px;background:var(--cream);border-radius:9px;border:1px solid var(--cream-dark)">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;font-weight:500;color:var(--brown)">
         <input type="checkbox" id="santos-cb" onchange="toggleSantos(this.checked)" style="width:16px;height:16px;accent-color:var(--saffron);cursor:pointer" />
@@ -220,7 +228,7 @@
   </div>
 </div>
 
-<script src="/flyer-builder/flyer-render.js?v=37"></script>
+<script src="/flyer-builder/flyer-render.js?v=38"></script>
 <script>
 // ── Zone config ───────────────────────────────────────────────────────────────
 const PREVIEW_TEMPLATES = {
@@ -348,6 +356,25 @@ function meridiem() {
   const el = document.getElementById('f-ampm');
   return (el && el.value === 'AM') ? 'am' : 'pm';
 }
+// Which title to print. Independent of the zone since #50 — the zone still
+// decides the LAYOUT, this only decides the words.
+function titleType() {
+  const el = document.getElementById('f-title-type');
+  return el && el.value === 'satsang' ? 'satsang' : 'para';
+}
+// Once the user picks a title explicitly, switching zones must not silently
+// overwrite that choice; until then each zone supplies its natural default.
+let titleTypeTouched = false;
+function setTitleType() {
+  titleTypeTouched = true;
+  scheduleRender();
+  renderPreviewCanvas();
+}
+function applyDefaultTitleType() {
+  if (titleTypeTouched) return;
+  const el = document.getElementById('f-title-type');
+  if (el) el.value = isSatsang ? 'satsang' : 'para';
+}
 function buildFields() {
   const day = formatDate(document.getElementById('f-date').value);
   const h = document.getElementById('f-hour').value;
@@ -366,8 +393,8 @@ function buildFields() {
     invitation: 'Invitation',
     zoneLine: isSatsang ? '' : ('BAPS Swaminarayan Mandir | ' + zoneName + ' Zone'),
     cordially: isSatsang ? 'We cordially invite you, your family, and friends to' : 'Cordially invites you, your family, and friends to',
-    title: isSatsang ? 'Satsang\nSabha' : 'Para Satsang\nSabha',
-    santos: santosOn ? 'In the presence of Pujya Santos' : '',
+    title: titleType() === 'satsang' ? 'Satsang\nSabha' : 'Para Satsang\nSabha',
+    santos: santosOn ? 'In the presence of Pujya Swamis' : '',
     datetime: dt || 'Fri, April 10 at 5:00 pm',
     rsvp: isSatsang ? '' : (rsvp ? 'Please RSVP by ' + rsvp : ''),
     locationLabel: 'Location:',
@@ -384,6 +411,7 @@ function renderFlyer(W, canvasEl) {
   FlyerRender.compositeFlyer(ctx, W, {
     watercolorImg: A.watercolor,
     variant: isSatsang ? 'satsang' : 'parasabha',
+    titleType: titleType(),
     bgColor: currentPhoto.entry.bgColor,
     textColor: currentPhoto.entry.textColor,
     textColor2: currentPhoto.entry.textColor2,
@@ -560,6 +588,7 @@ function setZone(zone, btn) {
   isSatsang = zone === 'satsang-sabha';
   document.querySelectorAll('.zone-btn').forEach((b) => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  applyDefaultTitleType();
   document.getElementById('para-fields').style.display = isSatsang ? 'none' : 'block';
   // Santos line is available on EVERY zone, not just Satsang Sabha. The choice
   // persists across zone switches (it describes the event, not the zone).
@@ -588,6 +617,7 @@ function renderOG(W, canvasEl) {
   FlyerRender.compositeOG(ctx, W, {
     watercolorImg: A.watercolor,
     variant: isSatsang ? 'satsang' : 'parasabha',
+    titleType: titleType(),
     bgColor: currentPhoto.entry.bgColor,
     textColor: currentPhoto.entry.textColor,
     textColor2: currentPhoto.entry.textColor2,
@@ -662,6 +692,7 @@ async function sendForReview() {
       addr1, addr2: document.getElementById('f-addr2').value.trim() || '',
       mahaprasad: document.getElementById('f-mahaprasad').value || '',
       santos: santosChecked ? 'true' : 'false',
+      titleType: titleType(),
       photoId: currentPhoto.id,
       zone,
     };
@@ -706,6 +737,12 @@ function readUrlParams() {
     }
   }
   if (p.get('santos') === 'true') { const cb = document.getElementById('santos-cb'); if (cb) { cb.checked = true; } }
+  const tt = p.get('titleType');
+  if (tt === 'para' || tt === 'satsang') {
+    const el = document.getElementById('f-title-type');
+    // Mark as touched so a late verifyBuilderSession() zone click cannot reset it.
+    if (el) { el.value = tt; titleTypeTouched = true; }
+  }
   scheduleRender();
 }
 
