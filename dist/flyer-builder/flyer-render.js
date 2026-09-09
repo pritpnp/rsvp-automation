@@ -73,7 +73,7 @@
       { key: 'zoneLine',   yPct: 0.5907, font: 'AddingtonCF',       sizePx: 50,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.94, lineHeight: 1.1,   tracking: -40, tint: true },
       { key: 'cordially',  yPct: 0.6162, font: 'GothamRegular',     sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.92, lineHeight: 1.2,   tracking: -40, tint2: true },
       { key: 'title',      yPct: 0.632, font: 'AddingtonCF',       sizePx: 167, weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 0.814, wrap: true, tracking: -25, tint: true },
-      // santos ("In the presence of Pujya Santos") — optional on every zone,
+      // santos ("In the presence of Pujya Swamis") — optional on every zone,
       // toggle in buildFields (empty string = skipped). Fixed purple.
       { key: 'santos',     yPct: 0.7300, font: 'GothamRegular',     sizePx: 42,  weight: 400, color: '#4a4882', align: 'center', maxWidthPct: 0.92, lineHeight: 1.3,   tracking: -40 },
       { key: 'datetime',   yPct: 0.7545, font: 'AddingtonCF',       sizePx: 86,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.96, lineHeight: 1.4,   tracking: -25, tint: true },
@@ -100,6 +100,13 @@
       title:      { yPct: 0.615, sizePx: 175, lineHeight: 0.81 },
       santos:     { yPct: 0.740, sizePx: 42,  lineHeight: 1.30 },
     },
+
+    // Satsang zone showing the LONGER "Para Satsang Sabha" title. The staggered
+    // layout below is sized (209px) for the short word: "Para Satsang" measures
+    // 1110px against a 1080px limit, so it would wrap to THREE lines and the
+    // two-entry lineCxPct/lineAlign stagger would break on the third. 175px
+    // measures 930px, so the stagger still reads and nothing wraps.
+    satsangParaTitle: { title: { sizePx: 175 } },
 
     // Satsang Sabha zone overrides (from the live flyer-positions.json — px ×3.125).
     // Satsang flyers have no host/RSVP; datetime + address sit lower than parasabha.
@@ -394,7 +401,12 @@
     // selects the parasabha+santos set. Derived from the field so the on-screen
     // preview and sendForReview()'s capture always pick the same variant.
     const santosOn = !!(opts.fields && opts.fields.santos);
-    const ov = opts.variant === 'satsang' ? LAYOUT.satsang : (santosOn ? LAYOUT.parasabhaSantos : null);
+    let ov = opts.variant === 'satsang' ? LAYOUT.satsang : (santosOn ? LAYOUT.parasabhaSantos : null);
+    // titleType is independent of the zone, so the Satsang layout can be asked
+    // to render the long title; shrink it so the stagger survives.
+    if (opts.variant === 'satsang' && opts.titleType === 'para') {
+      ov = { ...ov, title: { ...(ov && ov.title), ...LAYOUT.satsangParaTitle.title } };
+    }
     for (const baseEl of LAYOUT.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
