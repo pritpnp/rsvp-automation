@@ -228,7 +228,7 @@
   </div>
 </div>
 
-<script src="/flyer-builder/flyer-render.js?v=38"></script>
+<script src="/flyer-builder/flyer-render.js?v=39"></script>
 <script>
 // ── Zone config ───────────────────────────────────────────────────────────────
 const PREVIEW_TEMPLATES = {
@@ -358,6 +358,11 @@ function meridiem() {
 }
 // Which title to print. Independent of the zone since #50 — the zone still
 // decides the LAYOUT, this only decides the words.
+// The chosen title IS the layout: "Satsang Sabha" -> staggered form (no zone
+// line, no host/RSVP); "Para Satsang Sabha" -> centred form. The zone still
+// decides which zone/mandir the flyer is FOR (address, zone line text, where it
+// publishes), never how it looks.
+function useSatsangLayout() { return titleType() === 'satsang'; }
 function titleType() {
   const el = document.getElementById('f-title-type');
   return el && el.value === 'satsang' ? 'satsang' : 'para';
@@ -367,8 +372,15 @@ function titleType() {
 let titleTypeTouched = false;
 function setTitleType() {
   titleTypeTouched = true;
+  syncLayoutMode();
   scheduleRender();
   renderPreviewCanvas();
+}
+// Host / RSVP only exist in the Para Satsang Sabha layout.
+function syncLayoutMode() {
+  const pf = document.getElementById('para-fields');
+  if (pf) pf.style.display = useSatsangLayout() ? 'none' : 'block';
+  if (_advOpen) buildAdvancedPanel();
 }
 function applyDefaultTitleType() {
   if (titleTypeTouched) return;
@@ -391,14 +403,14 @@ function buildFields() {
   const santosOn = !!(santosCb && santosCb.checked);
   return {
     invitation: 'Invitation',
-    zoneLine: isSatsang ? '' : ('BAPS Swaminarayan Mandir | ' + zoneName + ' Zone'),
-    cordially: isSatsang ? 'We cordially invite you, your family, and friends to' : 'Cordially invites you, your family, and friends to',
+    zoneLine: useSatsangLayout() ? '' : ('BAPS Swaminarayan Mandir | ' + zoneName + ' Zone'),
+    cordially: useSatsangLayout() ? 'We cordially invite you, your family, and friends to' : 'Cordially invites you, your family, and friends to',
     title: titleType() === 'satsang' ? 'Satsang\nSabha' : 'Para Satsang\nSabha',
     santos: santosOn ? 'In the presence of Pujya Swamis' : '',
     datetime: dt || 'Fri, April 10 at 5:00 pm',
-    rsvp: isSatsang ? '' : (rsvp ? 'Please RSVP by ' + rsvp : ''),
+    rsvp: useSatsangLayout() ? '' : (rsvp ? 'Please RSVP by ' + rsvp : ''),
     locationLabel: 'Location:',
-    host: isSatsang ? '' : host,
+    host: useSatsangLayout() ? '' : host,
     address: [addr1, addr2].filter(Boolean).join('\n') || 'Address Line 1\nAddress Line 2',
     mahaprasad,
   };
@@ -410,8 +422,7 @@ function renderFlyer(W, canvasEl) {
   const ctx = canvasEl.getContext('2d');
   FlyerRender.compositeFlyer(ctx, W, {
     watercolorImg: A.watercolor,
-    variant: isSatsang ? 'satsang' : 'parasabha',
-    titleType: titleType(),
+    variant: useSatsangLayout() ? 'satsang' : 'parasabha',
     bgColor: currentPhoto.entry.bgColor,
     textColor: currentPhoto.entry.textColor,
     textColor2: currentPhoto.entry.textColor2,
@@ -454,8 +465,8 @@ function santosChecked() { const cb = document.getElementById('santos-cb'); retu
 // santos on would silently edit the base and change the santos-off flyer too.
 function advTarget(key) {
   const L = FlyerRender.LAYOUT;
-  if (isSatsang && L.satsang[key]) return L.satsang[key];
-  if (!isSatsang && santosChecked() && L.parasabhaSantos[key]) return L.parasabhaSantos[key];
+  if (useSatsangLayout() && L.satsang[key]) return L.satsang[key];
+  if (!useSatsangLayout() && santosChecked() && L.parasabhaSantos[key]) return L.parasabhaSantos[key];
   return L.text.find((e) => e.key === key);
 }
 function buildAdvancedPanel() {
@@ -463,10 +474,10 @@ function buildAdvancedPanel() {
   if (!host || !window.FlyerRender) return;
   const L = FlyerRender.LAYOUT;
   const note = document.getElementById('adv-zone-note');
-  if (note) note.textContent = isSatsang ? 'Satsang Sabha' : (santosChecked() ? 'all Parasabha zones WITH santos' : 'all Parasabha zones (no santos)');
+  if (note) note.textContent = useSatsangLayout() ? 'the Satsang Sabha layout' : (santosChecked() ? 'the Para Satsang Sabha layout WITH santos' : 'the Para Satsang Sabha layout');
   host.innerHTML = L.text.map((base) => {
     const k = base.key;
-    const ovSet = isSatsang ? L.satsang : (santosChecked() ? L.parasabhaSantos : null);
+    const ovSet = useSatsangLayout() ? L.satsang : (santosChecked() ? L.parasabhaSantos : null);
     const eff = (ovSet && ovSet[k]) ? { ...base, ...ovSet[k] } : base;
     const lh = eff.lineHeight != null ? eff.lineHeight : 1.4;
     return `<div class="adv-el">${k}</div>
@@ -479,7 +490,7 @@ function buildAdvancedPanel() {
     const G = L.og;
     ogHost.innerHTML = G.text.map((base) => {
       const k = base.key;
-      const gOv = isSatsang ? G.satsang : (santosChecked() ? G.parasabhaSantos : null);
+      const gOv = useSatsangLayout() ? G.satsang : (santosChecked() ? G.parasabhaSantos : null);
       const eff = (gOv && gOv[k]) ? { ...base, ...gOv[k] } : base;
       const lh = eff.lineHeight != null ? eff.lineHeight : 1.3;
       return `<div class="adv-el">${k}</div>
@@ -511,8 +522,8 @@ function advBox(prop, val) {
 }
 function advOgTarget(key) {
   const G = FlyerRender.LAYOUT.og;
-  if (isSatsang && G.satsang[key]) return G.satsang[key];
-  if (!isSatsang && santosChecked() && G.parasabhaSantos[key]) return G.parasabhaSantos[key];
+  if (useSatsangLayout() && G.satsang[key]) return G.satsang[key];
+  if (!useSatsangLayout() && santosChecked() && G.parasabhaSantos[key]) return G.parasabhaSantos[key];
   return G.text.find((e) => e.key === key);
 }
 function advOgEdit(key, prop, val) {
@@ -589,7 +600,7 @@ function setZone(zone, btn) {
   document.querySelectorAll('.zone-btn').forEach((b) => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   applyDefaultTitleType();
-  document.getElementById('para-fields').style.display = isSatsang ? 'none' : 'block';
+  syncLayoutMode();
   // Santos line is available on EVERY zone, not just Satsang Sabha. The choice
   // persists across zone switches (it describes the event, not the zone).
   document.getElementById('santos-toggle').style.display = 'block';
@@ -616,8 +627,7 @@ function renderOG(W, canvasEl) {
   const ctx = canvasEl.getContext('2d');
   FlyerRender.compositeOG(ctx, W, {
     watercolorImg: A.watercolor,
-    variant: isSatsang ? 'satsang' : 'parasabha',
-    titleType: titleType(),
+    variant: useSatsangLayout() ? 'satsang' : 'parasabha',
     bgColor: currentPhoto.entry.bgColor,
     textColor: currentPhoto.entry.textColor,
     textColor2: currentPhoto.entry.textColor2,
