@@ -102,6 +102,21 @@
     },
 
 
+    // ── Title-only overrides ────────────────────────────────────────────────
+    // The ZONE picks the content set (below); the TITLE picks only how the title
+    // is drawn. These two adjust just the title element, on top of whatever zone
+    // set is active, so the rest of the flyer is untouched.
+    //
+    // "Satsang Sabha" on a ZONE flyer: stagger it ("Satsang" left / "Sabha"
+    // right) but keep the zone slot's size and position. It must NOT borrow the
+    // Satsang zone's 209px @0.606 — that ends at 1860.8 and would run into the
+    // date at 1838 on a flyer that still has host + RSVP.
+    zoneStaggeredTitle: { title: { lineCxPct: [0.06, 0.94], lineAlign: ['left', 'right'] } },
+    // "Para Satsang Sabha" on the SATSANG zone: centre it and shrink it. The
+    // staggered 209px is sized for the short word — "Para Satsang" measures
+    // 1110px against a 1080px limit and would wrap to three lines.
+    satsangParaTitle: { title: { sizePx: 175, lineCxPct: null, lineAlign: null } },
+
     // Satsang Sabha zone overrides (from the live flyer-positions.json — px ×3.125).
     // Satsang flyers have no host/RSVP; datetime + address sit lower than parasabha.
     // Satsang Sabha overrides — matched to the staggered reference flyer. No
@@ -147,6 +162,13 @@
         { key: 'address',       cxPct: 0.68, yPct: 0.778, font: 'AddingtonCF',       sizePx: 20, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.12, tracking: -25, tint: true },
         { key: 'mahaprasad',    cxPct: 0.68, yPct: 0.880, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
       ],
+      // Landscape counterpart of satsangParaTitle. The card centres the title on
+      // the text column (cx 0.68), so width overruns to the LEFT, into the photo
+      // panel that ends at x=528 — the wrap limit alone does not catch it:
+      // "Para Satsang" at the satsang 117px is 622px wide (under the 648 limit)
+      // but starts at x=505, printing over the photo. 100px starts at 550.
+      satsangParaTitle: { title: { sizePx: 100 } },
+
       // Landscape counterpart of parasabhaSantos: without it the title runs into
       // the santos line and santos would sit BELOW the date.
       parasabhaSantos: {
@@ -395,7 +417,12 @@
     // selects the parasabha+santos set. Derived from the field so the on-screen
     // preview and sendForReview()'s capture always pick the same variant.
     const santosOn = !!(opts.fields && opts.fields.santos);
-    const ov = opts.variant === 'satsang' ? LAYOUT.satsang : (santosOn ? LAYOUT.parasabhaSantos : null);
+    let ov = opts.variant === 'satsang' ? LAYOUT.satsang : (santosOn ? LAYOUT.parasabhaSantos : null);
+    // Layer the title-only override for the two cross cases.
+    const titleOv = (opts.variant === 'satsang')
+      ? (opts.titleType === 'para'    ? LAYOUT.satsangParaTitle.title   : null)
+      : (opts.titleType === 'satsang' ? LAYOUT.zoneStaggeredTitle.title : null);
+    if (titleOv) ov = { ...ov, title: { ...(ov && ov.title), ...titleOv } };
     for (const baseEl of LAYOUT.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
@@ -490,7 +517,11 @@
     // 5. text column (right)
     const fields = opts.fields || {};
     const santosOn = !!(opts.fields && opts.fields.santos);
-    const ov = opts.variant === 'satsang' ? L.satsang : (santosOn ? L.parasabhaSantos : null);
+    let ov = opts.variant === 'satsang' ? L.satsang : (santosOn ? L.parasabhaSantos : null);
+    // The card never staggers, so only the satsang+para size case needs a layer.
+    if (opts.variant === 'satsang' && opts.titleType === 'para' && L.satsangParaTitle) {
+      ov = { ...ov, title: { ...(ov && ov.title), ...L.satsangParaTitle.title } };
+    }
     for (const baseEl of L.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
@@ -518,6 +549,8 @@
     if (o.header) Object.assign(LAYOUT.header, o.header);
     if (o.satsang) for (const k in o.satsang) LAYOUT.satsang[k] = Object.assign(LAYOUT.satsang[k] || {}, o.satsang[k]);
     if (o.parasabhaSantos) for (const k in o.parasabhaSantos) LAYOUT.parasabhaSantos[k] = Object.assign(LAYOUT.parasabhaSantos[k] || {}, o.parasabhaSantos[k]);
+    if (o.zoneStaggeredTitle) for (const k in o.zoneStaggeredTitle) LAYOUT.zoneStaggeredTitle[k] = Object.assign(LAYOUT.zoneStaggeredTitle[k] || {}, o.zoneStaggeredTitle[k]);
+    if (o.satsangParaTitle) for (const k in o.satsangParaTitle) LAYOUT.satsangParaTitle[k] = Object.assign(LAYOUT.satsangParaTitle[k] || {}, o.satsangParaTitle[k]);
     if (Array.isArray(o.text)) for (const t of o.text) { const e = LAYOUT.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
     if (o.og) {
       const G = o.og;
@@ -528,11 +561,12 @@
       if (Array.isArray(G.text)) for (const t of G.text) { const e = LAYOUT.og.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
       if (G.satsang) for (const k in G.satsang) LAYOUT.og.satsang[k] = Object.assign(LAYOUT.og.satsang[k] || {}, G.satsang[k]);
       if (G.parasabhaSantos) for (const k in G.parasabhaSantos) LAYOUT.og.parasabhaSantos[k] = Object.assign(LAYOUT.og.parasabhaSantos[k] || {}, G.parasabhaSantos[k]);
+      if (G.satsangParaTitle) for (const k in G.satsangParaTitle) LAYOUT.og.satsangParaTitle[k] = Object.assign(LAYOUT.og.satsangParaTitle[k] || {}, G.satsangParaTitle[k]);
     }
   }
   // Snapshot the current LAYOUT for export (what the Advanced panel saves).
   function serializeLayout() {
-    return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, parasabhaSantos: LAYOUT.parasabhaSantos, text: LAYOUT.text, og: LAYOUT.og };
+    return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, parasabhaSantos: LAYOUT.parasabhaSantos, zoneStaggeredTitle: LAYOUT.zoneStaggeredTitle, satsangParaTitle: LAYOUT.satsangParaTitle, text: LAYOUT.text, og: LAYOUT.og };
   }
 
   global.FlyerRender = { LAYOUT, recolorWatercolor, drawPhotoInBox, compositeFlyer, compositeOG, loadImage, hexToRgb, applyLayout, serializeLayout };
