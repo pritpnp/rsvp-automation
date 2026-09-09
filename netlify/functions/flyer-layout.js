@@ -13,7 +13,7 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 //   POST -> { layout: {...} }  save                   (SUPERADMIN ONLY — layout
 //            is global across every zone)
 const LAYOUT_KEY  = 'flyer';
-const TOP_KEYS    = ['header', 'footer', 'photoBox', 'fade', 'satsang', 'parasabhaSantos', 'zoneStaggeredTitle', 'satsangParaTitle', 'text', 'og'];
+const TOP_KEYS    = ['header', 'footer', 'photoBox', 'fade', 'satsang', 'parasabhaSantos', 'zoneSatsangTitle', 'satsangParaTitle', 'text', 'og'];
 const MAX_BYTES   = 200 * 1024;
 
 exports.handler = async (event) => {

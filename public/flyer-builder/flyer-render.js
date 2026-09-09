@@ -107,11 +107,12 @@
     // is drawn. These two adjust just the title element, on top of whatever zone
     // set is active, so the rest of the flyer is untouched.
     //
-    // "Satsang Sabha" on a ZONE flyer: stagger it ("Satsang" left / "Sabha"
-    // right) but keep the zone slot's size and position. It must NOT borrow the
-    // Satsang zone's 209px @0.606 — that ends at 1860.8 and would run into the
-    // date at 1838 on a flyer that still has host + RSVP.
-    zoneStaggeredTitle: { title: { lineCxPct: [0.06, 0.94], lineAlign: ['left', 'right'] } },
+    // "Satsang Sabha" on a ZONE flyer: CENTRED at the zone slot's normal size —
+    // geometrically identical to the Para title, only the words differ. The
+    // left/right stagger is the Satsang zone's own look and read oddly here.
+    // lineCxPct/lineAlign are nulled explicitly so a saved layout carrying the
+    // old stagger cannot resurrect it.
+    zoneSatsangTitle: { title: { lineCxPct: null, lineAlign: null } },
     // "Para Satsang Sabha" on the SATSANG zone: centre it and shrink it. The
     // staggered 209px is sized for the short word — "Para Satsang" measures
     // 1110px against a 1080px limit and would wrap to three lines.
@@ -421,7 +422,7 @@
     // Layer the title-only override for the two cross cases.
     const titleOv = (opts.variant === 'satsang')
       ? (opts.titleType === 'para'    ? LAYOUT.satsangParaTitle.title   : null)
-      : (opts.titleType === 'satsang' ? LAYOUT.zoneStaggeredTitle.title : null);
+      : (opts.titleType === 'satsang' ? LAYOUT.zoneSatsangTitle.title : null);
     if (titleOv) ov = { ...ov, title: { ...(ov && ov.title), ...titleOv } };
     for (const baseEl of LAYOUT.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
@@ -518,10 +519,10 @@
     const fields = opts.fields || {};
     const santosOn = !!(opts.fields && opts.fields.santos);
     let ov = opts.variant === 'satsang' ? L.satsang : (santosOn ? L.parasabhaSantos : null);
-    // The card never staggers, so only the satsang+para size case needs a layer.
-    if (opts.variant === 'satsang' && opts.titleType === 'para' && L.satsangParaTitle) {
-      ov = { ...ov, title: { ...(ov && ov.title), ...L.satsangParaTitle.title } };
-    }
+    const ogTitleOv = (opts.variant === 'satsang')
+      ? (opts.titleType === 'para' ? (L.satsangParaTitle && L.satsangParaTitle.title) : null)
+      : (opts.titleType === 'satsang' ? (L.zoneSatsangTitle && L.zoneSatsangTitle.title) : null);
+    if (ogTitleOv) ov = { ...ov, title: { ...(ov && ov.title), ...ogTitleOv } };
     for (const baseEl of L.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
@@ -549,7 +550,7 @@
     if (o.header) Object.assign(LAYOUT.header, o.header);
     if (o.satsang) for (const k in o.satsang) LAYOUT.satsang[k] = Object.assign(LAYOUT.satsang[k] || {}, o.satsang[k]);
     if (o.parasabhaSantos) for (const k in o.parasabhaSantos) LAYOUT.parasabhaSantos[k] = Object.assign(LAYOUT.parasabhaSantos[k] || {}, o.parasabhaSantos[k]);
-    if (o.zoneStaggeredTitle) for (const k in o.zoneStaggeredTitle) LAYOUT.zoneStaggeredTitle[k] = Object.assign(LAYOUT.zoneStaggeredTitle[k] || {}, o.zoneStaggeredTitle[k]);
+    if (o.zoneSatsangTitle) for (const k in o.zoneSatsangTitle) LAYOUT.zoneSatsangTitle[k] = Object.assign(LAYOUT.zoneSatsangTitle[k] || {}, o.zoneSatsangTitle[k]);
     if (o.satsangParaTitle) for (const k in o.satsangParaTitle) LAYOUT.satsangParaTitle[k] = Object.assign(LAYOUT.satsangParaTitle[k] || {}, o.satsangParaTitle[k]);
     if (Array.isArray(o.text)) for (const t of o.text) { const e = LAYOUT.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
     if (o.og) {
@@ -566,7 +567,7 @@
   }
   // Snapshot the current LAYOUT for export (what the Advanced panel saves).
   function serializeLayout() {
-    return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, parasabhaSantos: LAYOUT.parasabhaSantos, zoneStaggeredTitle: LAYOUT.zoneStaggeredTitle, satsangParaTitle: LAYOUT.satsangParaTitle, text: LAYOUT.text, og: LAYOUT.og };
+    return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, parasabhaSantos: LAYOUT.parasabhaSantos, zoneSatsangTitle: LAYOUT.zoneSatsangTitle, satsangParaTitle: LAYOUT.satsangParaTitle, text: LAYOUT.text, og: LAYOUT.og };
   }
 
   global.FlyerRender = { LAYOUT, recolorWatercolor, drawPhotoInBox, compositeFlyer, compositeOG, loadImage, hexToRgb, applyLayout, serializeLayout };
