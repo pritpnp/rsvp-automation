@@ -101,12 +101,6 @@
       santos:     { yPct: 0.740, sizePx: 42,  lineHeight: 1.30 },
     },
 
-    // Satsang zone showing the LONGER "Para Satsang Sabha" title. The staggered
-    // layout below is sized (209px) for the short word: "Para Satsang" measures
-    // 1110px against a 1080px limit, so it would wrap to THREE lines and the
-    // two-entry lineCxPct/lineAlign stagger would break on the third. 175px
-    // measures 930px, so the stagger still reads and nothing wraps.
-    satsangParaTitle: { title: { sizePx: 175 } },
 
     // Satsang Sabha zone overrides (from the live flyer-positions.json — px ×3.125).
     // Satsang flyers have no host/RSVP; datetime + address sit lower than parasabha.
@@ -401,12 +395,7 @@
     // selects the parasabha+santos set. Derived from the field so the on-screen
     // preview and sendForReview()'s capture always pick the same variant.
     const santosOn = !!(opts.fields && opts.fields.santos);
-    let ov = opts.variant === 'satsang' ? LAYOUT.satsang : (santosOn ? LAYOUT.parasabhaSantos : null);
-    // titleType is independent of the zone, so the Satsang layout can be asked
-    // to render the long title; shrink it so the stagger survives.
-    if (opts.variant === 'satsang' && opts.titleType === 'para') {
-      ov = { ...ov, title: { ...(ov && ov.title), ...LAYOUT.satsangParaTitle.title } };
-    }
+    const ov = opts.variant === 'satsang' ? LAYOUT.satsang : (santosOn ? LAYOUT.parasabhaSantos : null);
     for (const baseEl of LAYOUT.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
