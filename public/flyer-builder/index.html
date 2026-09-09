@@ -82,16 +82,6 @@
     }
     .preview-label { font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
     .flyer-wrap { position: relative; display: inline-block; border-radius: 6px; overflow: hidden; box-shadow: 0 8px 40px rgba(92,45,10,0.22); user-select: none; }
-    /* Tiled "PREVIEW" watermark over the on-screen draft ONLY. It is a DOM overlay,
-       NOT drawn into any canvas — sendForReview() exports from its own offscreen
-       canvas and toDataURL() captures only canvas pixels, never this sibling div,
-       so the published flyer.jpg / og.jpg are always watermark-free. white fill +
-       dark stroke keeps it visible on both light and dark flyers. */
-    .preview-watermark {
-      position: absolute; inset: 0; pointer-events: none; z-index: 4; border-radius: 6px;
-      background-repeat: repeat;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200'%3E%3Ctext x='150' y='112' fill='rgba(255,255,255,0.46)' stroke='rgba(0,0,0,0.24)' stroke-width='1' font-family='Arial, sans-serif' font-size='38' font-weight='bold' text-anchor='middle' transform='rotate(-30 150 100)'%3EPREVIEW%3C/text%3E%3C/svg%3E");
-    }
     #flyer-canvas { display: block; width: auto; max-width: 100%; max-height: 78vh; border-radius: 6px; }
     .flyer-wrap img.template { display: block; width: 100%; pointer-events: none; }
     .drag-item { position: absolute; left: 50%; transform: translateX(-50%); cursor: grab; text-align: center; white-space: nowrap; padding: 3px 6px; border-radius: 3px; border: 1.5px dashed transparent; line-height: 1.4; }
@@ -193,8 +183,8 @@
       <p style="font-size:10px;color:var(--text-muted);margin:-4px 0 6px;line-height:1.4">Edits the live flyer layout for <strong id="adv-zone-note">all zones</strong>. Save when done.</p>
       <div id="adv-text-rows"></div>
 
-      <div class="section-label">Preview card text — size / position / leading</div>
-      <p style="font-size:10px;color:var(--text-muted);margin:-4px 0 6px;line-height:1.4">Tunes the landscape Preview/social card. Open the <strong>🖼 Preview</strong> tab to see it update.</p>
+      <div class="section-label">Announcement text — size / position / leading</div>
+      <p style="font-size:10px;color:var(--text-muted);margin:-4px 0 6px;line-height:1.4">Tunes the landscape announcement card. Open the <strong>📢 Announcement</strong> tab to see it update.</p>
       <div id="adv-og-rows"></div>
 
       <button class="btn-dl" id="save-layout-live-btn" disabled style="display:none;margin-top:12px;font-size:13px;padding:10px" onclick="saveLayoutToSite()">💾 Save layout to site</button>
@@ -210,25 +200,23 @@
   <div class="preview-panel">
     <div class="builder-tabs" id="builder-tabs">
       <button class="builder-tab active" onclick="switchBuilderTab('flyer', this)">✏️ Flyer</button>
-      <button class="builder-tab" onclick="switchBuilderTab('preview', this)">🖼 Preview</button>
+      <button class="builder-tab" onclick="switchBuilderTab('preview', this)">📢 Announcement</button>
     </div>
     <div class="preview-label" id="preview-label">Live Preview</div>
     <div class="flyer-wrap-outer" id="flyer-wrap-outer">
       <div class="flyer-wrap" id="flyer-wrap">
         <canvas id="flyer-canvas" width="430" height="931"></canvas>
-        <div class="preview-watermark" aria-hidden="true"></div>
       </div>
     </div>
     <div class="preview-canvas-wrap" id="preview-canvas-wrap">
       <div class="flyer-wrap" style="max-width:100%;border-radius:12px;overflow:hidden">
         <canvas id="og-canvas" width="1200" height="630" style="display:block;width:100%;height:auto;border-radius:12px"></canvas>
-        <div class="preview-watermark" aria-hidden="true"></div>
       </div>
     </div>
   </div>
 </div>
 
-<script src="/flyer-builder/flyer-render.js?v=42"></script>
+<script src="/flyer-builder/flyer-render.js?v=43"></script>
 <script>
 // ── Zone config ───────────────────────────────────────────────────────────────
 const PREVIEW_TEMPLATES = {
@@ -443,6 +431,9 @@ function renderFlyerPreview() {
   const canvas = document.getElementById('flyer-canvas');
   // Render at native width and let CSS scale it down → crisp preview.
   renderFlyer((MANIFEST && MANIFEST.canvas.width) || 1125, canvas);
+  // Watermark the on-screen pixels. sendForReview() renders into its OWN
+  // offscreen canvases, so the submitted and published images stay clean.
+  stampPreview(canvas);
   // keep the OG/social preview in sync when it's the visible tab
   const ogWrap = document.getElementById('preview-canvas-wrap');
   if (ogWrap && ogWrap.classList.contains('active')) renderPreviewCanvas();
@@ -670,6 +661,7 @@ function renderOG(W, canvasEl) {
     // sendForReview()'s capture (W=2400) both come through here, so the preview
     // and the published og.jpg can never drift apart.
     photo: ogCropFor(currentPhoto.entry),
+    zone: currentZone,          // selects the per-zone text-column nudge
     headerImg: A.header,
     footerImg: currentPhoto.entry.footer === 'white' ? A.footerWhite : A.footerBlack,
     fields: buildFields(),
@@ -677,7 +669,13 @@ function renderOG(W, canvasEl) {
 }
 function renderPreviewCanvas() {
   const c = document.getElementById('og-canvas');
-  if (c) renderOG(1200, c);
+  if (c) { renderOG(1200, c); stampPreview(c); }
+}
+// Draw the PREVIEW watermark into a canvas's pixels. Only ever called on the
+// two on-screen canvases — never on the capture canvases in sendForReview().
+function stampPreview(canvas) {
+  try { FlyerRender.drawPreviewWatermark(canvas.getContext('2d'), canvas.width, canvas.height); }
+  catch (e) { console.warn('watermark failed:', e.message); }
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -695,7 +693,7 @@ function switchBuilderTab(tab, btn) {
   } else {
     flyerOuter.classList.add('hidden');
     previewWrap.classList.add('active');
-    label.textContent = 'Social Media Preview (1200×630)';
+    label.textContent = 'Announcement (1200×630)';
     renderPreviewCanvas();
   }
 }
