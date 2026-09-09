@@ -142,6 +142,11 @@
       canvas: { width: 1200, height: 630 },
       photoPanel: { leftPct: 0, widthPct: 0.44, topPct: 0, bottomPct: 1.0 },
       photoFeatherPct: 0.22, // right-edge fade of the photo panel into the bg
+      // Per-zone horizontal nudge for the announcement card's text column, as a
+      // fraction of card width (+ right, - left). Every text line plus the
+      // emblem and footer bar move together, because they are all anchored to
+      // the same column — shifting only the text would leave them behind.
+      zoneTextDx: { scranton: 0, 'mountain-top': 0, moosic: 0, bloomsburg: 0, 'satsang-sabha': 0 },
       // Header emblem + BAPS footer bar, both centred on the TEXT column (cxPct)
       // rather than the card, because the left ~44% is the photo panel. Sized to
       // fit the clear bands above the first text line and below the last one —
@@ -488,10 +493,12 @@
     // 3. header emblem — top of the text column (cxPct-anchored, not card-centred,
     //    so it never lands on the photo panel). Optional soft drop-shadow, same
     //    treatment as the flyer.
+    // Per-zone column nudge (see zoneTextDx above).
+    const dx = (L.zoneTextDx && opts.zone && L.zoneTextDx[opts.zone]) || 0;
     if (opts.headerImg && opts.headerImg.naturalWidth && L.header) {
       const hw = L.header.widthPct * W;
       const hh = hw * (opts.headerImg.naturalHeight / opts.headerImg.naturalWidth);
-      const hx = (L.header.cxPct != null ? L.header.cxPct : 0.5) * W - hw / 2;
+      const hx = ((L.header.cxPct != null ? L.header.cxPct : 0.5) + dx) * W - hw / 2;
       const hy = (L.header.topPct || 0) * H;
       const sh = L.header.shadow;
       ctx.save();
@@ -510,7 +517,7 @@
     if (opts.footerImg && opts.footerImg.naturalWidth && L.footer) {
       const fw = L.footer.widthPct * W;
       const fh = fw * (opts.footerImg.naturalHeight / opts.footerImg.naturalWidth);
-      const fx = (L.footer.cxPct != null ? L.footer.cxPct : 0.5) * W - fw / 2;
+      const fx = ((L.footer.cxPct != null ? L.footer.cxPct : 0.5) + dx) * W - fw / 2;
       const fy = H - fh - (L.footer.bottomPct || 0) * H;
       drawContain(ctx, opts.footerImg, fx, fy, fw, fh);
     }
@@ -524,10 +531,46 @@
       : (opts.titleType === 'satsang' ? (L.zoneSatsangTitle && L.zoneSatsangTitle.title) : null);
     if (ogTitleOv) ov = { ...ov, title: { ...(ov && ov.title), ...ogTitleOv } };
     for (const baseEl of L.text) {
-      const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
+      let el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
+      if (dx) el = { ...el, cxPct: (el.cxPct != null ? el.cxPct : 0.5) + dx };
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
     }
     return { W, H };
+  }
+
+  /**
+   * Tiled "PREVIEW" watermark drawn INTO the canvas.
+   *
+   * The builder used to overlay this as a sibling <div>, which looked right but
+   * was not in the pixels: right-click -> Copy Image, or any screenshot, yielded
+   * a clean unapproved flyer. Drawing it into the canvas means a copy and a
+   * screenshot are both watermarked.
+   *
+   * MUST only be called on the ON-SCREEN canvases. sendForReview() renders into
+   * its own offscreen canvases, so the submitted/published images stay clean.
+   */
+  function drawPreviewWatermark(ctx, W, H, label) {
+    const text = label || 'PREVIEW';
+    const size = Math.max(12, Math.round(W * 0.075));
+    ctx.save();
+    ctx.font = '700 ' + size + 'px Arial, Helvetica, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,255,255,0.46)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.24)';
+    ctx.lineWidth = Math.max(1, size * 0.03);
+    const tw = ctx.measureText(text).width;
+    const stepX = tw * 1.5, stepY = size * 3.2;
+    const diag = Math.sqrt(W * W + H * H);
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(-30 * Math.PI / 180);
+    for (let y = -diag / 2; y <= diag / 2; y += stepY) {
+      for (let x = -diag / 2; x <= diag / 2; x += stepX) {
+        ctx.strokeText(text, x, y);
+        ctx.fillText(text, x, y);
+      }
+    }
+    ctx.restore();
   }
 
   function loadImage(src, crossOrigin) {
@@ -562,6 +605,7 @@
       if (Array.isArray(G.text)) for (const t of G.text) { const e = LAYOUT.og.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
       if (G.satsang) for (const k in G.satsang) LAYOUT.og.satsang[k] = Object.assign(LAYOUT.og.satsang[k] || {}, G.satsang[k]);
       if (G.parasabhaSantos) for (const k in G.parasabhaSantos) LAYOUT.og.parasabhaSantos[k] = Object.assign(LAYOUT.og.parasabhaSantos[k] || {}, G.parasabhaSantos[k]);
+      if (G.zoneTextDx) Object.assign(LAYOUT.og.zoneTextDx, G.zoneTextDx);
       if (G.satsangParaTitle) for (const k in G.satsangParaTitle) LAYOUT.og.satsangParaTitle[k] = Object.assign(LAYOUT.og.satsangParaTitle[k] || {}, G.satsangParaTitle[k]);
     }
   }
@@ -570,5 +614,5 @@
     return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, parasabhaSantos: LAYOUT.parasabhaSantos, zoneSatsangTitle: LAYOUT.zoneSatsangTitle, satsangParaTitle: LAYOUT.satsangParaTitle, text: LAYOUT.text, og: LAYOUT.og };
   }
 
-  global.FlyerRender = { LAYOUT, recolorWatercolor, drawPhotoInBox, compositeFlyer, compositeOG, loadImage, hexToRgb, applyLayout, serializeLayout };
+  global.FlyerRender = { LAYOUT, recolorWatercolor, drawPhotoInBox, compositeFlyer, compositeOG, drawPreviewWatermark, loadImage, hexToRgb, applyLayout, serializeLayout };
 })(window);

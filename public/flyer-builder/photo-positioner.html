@@ -60,7 +60,7 @@ select { width:100%; padding:9px 11px; border:1px solid var(--cream-dark); borde
 <div class="top-border"></div>
 <div class="app-header">
   <h1>✦ Photo Positioner</h1>
-  <p>Position each photo for the landscape preview card • saves live</p>
+  <p>Position each photo and the text for the announcement card • saves live</p>
 </div>
 
 <div class="layout" id="app" style="display:none">
@@ -76,7 +76,21 @@ select { width:100%; padding:9px 11px; border:1px solid var(--cream-dark); borde
       <button class="btn btn-ghost" onclick="step(1)">Next →</button>
     </div>
 
-    <div class="section">Position — drag the photo, or use these</div>
+    <div class="section">Text position — this zone</div>
+  <div class="row"><label>Zone</label>
+    <select id="tz" onchange="pickTextZone()" style="flex:1;padding:8px;border:1px solid var(--cream-dark);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--brown)">
+      <option value="moosic">Moosic</option>
+      <option value="scranton">Scranton</option>
+      <option value="mountain-top">Mountain Top</option>
+      <option value="bloomsburg">Bloomsburg</option>
+      <option value="satsang-sabha">Satsang Sabha</option>
+    </select>
+  </div>
+  <div class="row"><label>Left / Right</label><input type="range" id="tz-dx" min="-0.20" max="0.20" step="0.005" oninput="setTextDx(this.value)"><span class="val" id="tz-dx-v"></span></div>
+  <button class="btn btn-primary" id="tz-save" onclick="saveTextDx()">💾 Save text position</button>
+  <button class="btn btn-ghost" onclick="resetTextDx()">↺ Centre this zone</button>
+
+  <div class="section">Position — drag the photo, or use these</div>
     <div class="row"><label>Left / Right</label><input type="range" id="s-x" min="0" max="1" step="0.005" oninput="setCrop('focusX',this.value)"><span class="val" id="s-x-v"></span></div>
     <div class="row"><label>Up / Down</label><input type="range" id="s-y" min="0" max="1" step="0.005" oninput="setCrop('focusY',this.value)"><span class="val" id="s-y-v"></span></div>
     <div class="row"><label>Zoom</label><input type="range" id="s-z" min="0.6" max="2.5" step="0.01" oninput="setCrop('zoom',this.value)"><span class="val" id="s-z-v"></span></div>
@@ -104,7 +118,7 @@ select { width:100%; padding:9px 11px; border:1px solid var(--cream-dark); borde
   </div>
 
   <div class="stage">
-    <div class="stage-label">Landscape preview card (1200×630)</div>
+    <div class="stage-label">Announcement card (1200×630)</div>
     <div class="card-wrap"><canvas id="preview" width="1200" height="630"></canvas></div>
     <div class="stage-label" id="photo-id">—</div>
   </div>
@@ -118,7 +132,7 @@ select { width:100%; padding:9px 11px; border:1px solid var(--cream-dark); borde
   </div>
 </div>
 
-<script src="/flyer-builder/flyer-render.js?v=42"></script>
+<script src="/flyer-builder/flyer-render.js?v=43"></script>
 <script>
 const PREVIEW_W = 1200;
 const SAMPLE = {
@@ -210,6 +224,44 @@ function buildOptions() {
   sel.selectedIndex = curIdx;
 }
 
+// ── per-zone text-column nudge (announcement card) ──────────────────────────
+// Shifts every text line plus the emblem and footer bar together, since they all
+// hang off the same column centre. Stored in the live layout (site_layouts), not
+// with the photo crops — it is layout, and it is per ZONE not per photo.
+let textZone = 'moosic';
+function dxMap() {
+  const G = FlyerRender.LAYOUT.og;
+  if (!G.zoneTextDx) G.zoneTextDx = {};
+  return G.zoneTextDx;
+}
+function pickTextZone() {
+  textZone = $('tz').value;
+  syncTextDx(); render();
+}
+function syncTextDx() {
+  const v = dxMap()[textZone] || 0;
+  $('tz-dx').value = v;
+  $('tz-dx-v').textContent = (v > 0 ? '+' : '') + (+v).toFixed(3);
+}
+function setTextDx(v) { dxMap()[textZone] = parseFloat(v); syncTextDx(); render(); }
+function resetTextDx() { dxMap()[textZone] = 0; syncTextDx(); render(); }
+
+async function saveTextDx() {
+  const btn = $('tz-save');
+  btn.disabled = true; const label = btn.textContent; btn.textContent = '⏳ Saving…';
+  try {
+    const res = await fetch('/.netlify/functions/flyer-layout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-builder-session': SESSION },
+      body: JSON.stringify({ layout: FlyerRender.serializeLayout() }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+    status('✅ Text position saved — live now', true);
+  } catch (e) { status('❌ ' + e.message, false); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+
 // ── render ──────────────────────────────────────────────────────────────────
 function render() {
   if (!cur) return;
@@ -223,6 +275,7 @@ function render() {
     textColor2: cur.entry.textColor2 || '#4c4c4b',
     photoImg: cur.img,
     photo: cropFor(cur.entry),
+    zone: textZone,
     headerImg: assets.header,
     footerImg: cur.entry.footer === 'white' ? assets.footerWhite : assets.footerBlack,
     fields: SAMPLE,
@@ -456,6 +509,7 @@ window.addEventListener('beforeunload', (e) => {
     ]);
     $('gate').style.display = 'none'; $('app').style.display = 'flex';
     bindDrag();
+    syncTextDx();
     await pickPhoto(0);
   } catch (e) {
     gate('Could not load', e.message, '⚠️');
