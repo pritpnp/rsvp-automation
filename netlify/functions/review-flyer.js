@@ -96,6 +96,10 @@ exports.handler = async (event) => {
     if (eventData.mahaprasad)  params.set('mahaprasad', eventData.mahaprasad);
     if (eventData.santos)      params.set('santos', eventData.santos);
     if (eventData.titleType)   params.set('titleType', eventData.titleType);
+    // The swami photo is part of the flyer, not just a field. Without it a
+    // rejected flyer reopened for a small text fix came back with a different
+    // photo, silently changing the thing that was already approved-in-spirit.
+    if (eventData.photoId)     params.set('photoId', eventData.photoId);
   }
   params.set('zone', zone.replace('-santos', ''));
   // No session token in this URL on purpose: it is posted into a Telegram chat,

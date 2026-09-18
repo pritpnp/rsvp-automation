@@ -303,7 +303,11 @@ async function loadFlyerAssets() {
     FlyerRender.loadImage('/flyer-builder/base/footer-white.png'),
   ]);
   assetsReady = true;
-  await nextPhoto();
+  // A reject link names the photo the flyer was built with — restore it rather
+  // than drawing a new one. Falls back to a normal draw if that id is gone.
+  let wanted = null;
+  try { wanted = new URLSearchParams(window.location.search).get('photoId'); } catch (e) {}
+  if (!wanted || !(await setPhotoById(wanted))) await nextPhoto();
 }
 
 // Shuffle-bag: no repeat until every photo has been used, persisted per browser.
@@ -316,6 +320,22 @@ function drawNextId() {
   const id = deck.shift();
   localStorage.setItem(DECK_KEY, JSON.stringify(deck));
   return id;
+}
+// Load one named photo. Unlike nextPhoto() this does NOT touch the shuffle bag:
+// restoring the photo a reject link names is not "using up" a new one.
+// Returns false when the id is unknown (a photo retired from the manifest since
+// the flyer was built), so the caller can fall back to a normal draw.
+async function setPhotoById(id) {
+  const entry = PHOTO_BY_ID[id];
+  if (!entry) return false;
+  try {
+    const img = await FlyerRender.loadImage('/flyer-builder/' + entry.file);
+    currentPhoto = { id, entry, img };
+    const n = ALL_IDS.indexOf(id) + 1;
+    document.getElementById('photo-caption').textContent = `${id}  (${n}/${ALL_IDS.length})`;
+    renderFlyerPreview();
+    return true;
+  } catch (e) { return false; }
 }
 async function nextPhoto() {
   if (!ALL_IDS.length) return;
