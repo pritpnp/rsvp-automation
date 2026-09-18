@@ -10,7 +10,46 @@
   # empty/invalid $CACHED_COMMIT_REF errors (exit 128) → builds. This halves
   # builds from the double-commit pattern (a flyer upload commit is skipped; the
   # follow-up "deploy: update dist" commit it triggers still builds).
-  ignore = "git diff --quiet \"$CACHED_COMMIT_REF\" \"$COMMIT_REF\" -- ':(exclude)flyers' ':(exclude)scripts' ':(exclude).github' ':(exclude)*.md'"
+  # exit 0 = skip the build, anything else = build.
+  #
+  # Fails SAFE in three separate ways, all deliberate:
+  #   * empty / invalid $CACHED_COMMIT_REF -> git exits 128 -> BUILD.
+  #   * unexpected $CONTEXT -> falls through the case -> BUILD. (Written as a
+  #     positive match on known non-production contexts, never "!= production":
+  #     if $CONTEXT were unset, a != test would be true for EVERY build and
+  #     production would silently stop deploying.)
+  #   * CACHELESS BUILD -> caught by the explicit same-ref guard -> BUILD.
+  #     Netlify documents that "when a build runs without cache,
+  #     CACHED_COMMIT_REF will be the same as the COMMIT_REF". Diffing a commit
+  #     against itself reports no changes, so git exits 0 and the build is
+  #     SKIPPED. That silently drops production deploys — including approved
+  #     flyers — and, worst of all, "Clear cache and deploy site" is itself a
+  #     cacheless build, so the operator's recovery button is skipped too.
+  #     The guard must sit AFTER the $CONTEXT case (so cacheless previews are
+  #     still skipped) and BEFORE the git diff. Use = not ==; == is a bashism
+  #     and this runs under sh.
+  #
+  # Two skips, in order:
+  #  1. NON-PRODUCTION CONTEXTS. Every pull request was building a Deploy
+  #     Preview on top of the production build — ~36 of them across Aug/Sep,
+  #     each costing a full build's credits. Nothing here consumes them: PRs are
+  #     merged immediately and verified against production, so the preview was
+  #     pure waste.
+  #
+  #     Written as a positive match on the two KNOWN non-production contexts,
+  #     never as "!= production". If $CONTEXT were ever unset or renamed, a
+  #     != test would be true for EVERY build and silently skip production too —
+  #     the site would simply stop deploying. Matching known values means an
+  #     unexpected $CONTEXT falls through to the git check and builds.
+  #  2. COMMITS THAT CANNOT AFFECT THE DEPLOY. flyers/ (source images the GitHub
+  #     Action processes), scripts/ (runs on Actions, not Netlify), .github/,
+  #     *.md docs, and deadlines.json — the last of these lives at the repo ROOT
+  #     so it escaped the list. It is safe to exclude because automate.js BAKES
+  #     the deadlines into the pages it generates and commits those in the same
+  #     run, so the content ships via dist/. (The "deploy: update dist" commit
+  #     lands BEFORE the deadlines.json commit, not after — do not add other
+  #     paths here on the assumption that a later build will pick them up.)
+  ignore = "case \"$CONTEXT\" in deploy-preview|branch-deploy) exit 0;; esac; if [ \"$CACHED_COMMIT_REF\" = \"$COMMIT_REF\" ]; then exit 1; fi; git diff --quiet \"$CACHED_COMMIT_REF\" \"$COMMIT_REF\" -- ':(exclude)flyers' ':(exclude)scripts' ':(exclude).github' ':(exclude)*.md' ':(exclude)deadlines.json'"
 
 [functions]
   directory = "netlify/functions"
