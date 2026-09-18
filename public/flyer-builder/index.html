@@ -608,11 +608,17 @@ async function saveLayoutToSite() {
   if (!confirm('Save this layout to the site?\n\nIt replaces the live layout for every zone and every user. The previous one is kept in history.')) return;
   btn.disabled = true; const label = btn.textContent; btn.textContent = '⏳ Saving…';
   try {
-    const res = await fetch('/.netlify/functions/flyer-layout', {
+    const body = JSON.stringify({ layout: FlyerRender.serializeLayout() });
+    const post = (sess) => fetch('/.netlify/functions/flyer-layout', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-builder-session': window.BUILDER_SESSION_ID },
-      body: JSON.stringify({ layout: FlyerRender.serializeLayout() }),
+      headers: { 'Content-Type': 'application/json', 'x-builder-session': sess || '' },
+      body,
     });
+    let res = await post(window.BUILDER_SESSION_ID);
+    if (res.status === 401) {
+      const fresh = await mintSessionFromAdminToken();
+      if (fresh) res = await post(fresh);
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Save failed');
     show('✅ Saved — live for everyone on their next load.', true);
@@ -709,7 +715,6 @@ function switchBuilderTab(tab, btn) {
 // ── Send for Review ───────────────────────────────────────────────────────────
 async function sendForReview() {
   const btn = document.getElementById('review-btn');
-  const token = new URLSearchParams(window.location.search).get('session') || 'standalone';
   const date = document.getElementById('f-date').value;
   const hour = document.getElementById('f-hour').value;
   const addr1 = document.getElementById('f-addr1').value.trim();
@@ -748,10 +753,23 @@ async function sendForReview() {
     };
 
     btn.textContent = '⏳ Sending...';
-    const res = await fetch('/.netlify/functions/review-flyer', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-builder-session': token },
-      body: JSON.stringify({ zone, imageBase64: base64, ogBase64, eventData }),
+    // Submit with the live session — NOT a fresh read of ?session=. Arriving from
+    // a Telegram reject link there is no ?session= at all, and the old code sent
+    // the literal string 'standalone', which the server rejected as an expired
+    // session after the user had already composed the whole flyer.
+    const payload = JSON.stringify({ zone, imageBase64: base64, ogBase64, eventData });
+    const post = (sess) => fetch('/.netlify/functions/review-flyer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-builder-session': sess || '' },
+      body: payload,
     });
+    let res = await post(window.BUILDER_SESSION_ID);
+    // A builder session lives 30 minutes and a carefully built flyer can take
+    // longer than that. Mint a fresh one and retry once rather than making the
+    // user lose the composition.
+    if (res.status === 401) {
+      const fresh = await mintSessionFromAdminToken();
+      if (fresh) res = await post(fresh);
+    }
     if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'Submission failed'); }
     window.location.href = '/flyer-builder/review-sent/';
   } catch (err) {
@@ -773,7 +791,9 @@ function readUrlParams() {
   if (zoneParam) {
     const zoneKey = zoneParam.replace('-santos','');
     const zoneBtn = document.querySelector('.zone-btn[onclick*="\'' + zoneKey + '\'"]');
-    if (zoneBtn) setZone(zoneKey, zoneBtn);
+    // Skip a zone the session hid: the server would refuse the submission anyway,
+    // and silently switching to a forbidden zone just confuses the manager.
+    if (zoneBtn && zoneBtn.style.display !== 'none') setZone(zoneKey, zoneBtn);
   }
   const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
   set('f-date', p.get('date')); set('f-rsvp-date', p.get('rsvpDate')); set('f-host', p.get('host'));
@@ -809,33 +829,108 @@ function readUrlParams() {
 }
 
 // ── Session verification ─────────────────────────────────────────────────────
+// A builder session is a 30-minute row minted by create-builder-session from a
+// manager's 24h admin_token. It normally arrives as ?session= because the admin
+// portal mints one before opening this page. It deliberately does NOT arrive
+// that way from a Telegram reject link — review-flyer.js keeps the session out
+// of a URL it posts into a chat — so on that path we mint one here instead,
+// from the admin_token this browser already holds. Same origin as /admin, same
+// endpoint the portal calls, and the server still validates that token and the
+// manager's zone permissions, so this grants nothing the manager did not have.
 window.ADMIN_TOKEN = null; window.BUILDER_SESSION_ID = null;
-async function verifyBuilderSession() {
-  const sessionId = new URLSearchParams(window.location.search).get('session');
-  if (!sessionId) return;
-  window.BUILDER_SESSION_ID = sessionId;
+
+async function mintSessionFromAdminToken() {
+  let mgr = null;
+  try { mgr = localStorage.getItem('admin_token'); } catch (e) {}
+  if (!mgr) return null;
   try {
-    const res = await fetch('/.netlify/functions/verify-builder-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId }) });
-    const data = await res.json();
-    if (!res.ok) { showSessionError(data.error || 'Invalid session'); return; }
-    window.ADMIN_TOKEN = sessionId; window.BUILDER_MANAGER_ID = data.managerId;
-    window.BUILDER_IS_SUPERADMIN = !!data.isSuperadmin;
-    if (data.allowAdvanced) showAdvancedToggle();
-    // Reveal only — `disabled` is cleared by markLayoutSettled(), never here.
-    if (data.isSuperadmin) { const b = document.getElementById('save-layout-live-btn'); if (b) b.style.display = 'block'; }
-    try {
-      const allowed = data.allowedZones || [];
-      if (!data.isSuperadmin && allowed.length) {
-        document.querySelectorAll('.zone-btn').forEach((btn) => {
-          const mt = (btn.getAttribute('onclick') || '').match(/'([^']+)'/);
-          const zone = mt ? mt[1] : ''; const base = zone.replace('-santos','');
-          if (!allowed.includes(base) && !allowed.includes(zone)) btn.style.display = 'none';
-        });
-        const firstAllowed = document.querySelector('.zone-btn:not([style*="display: none"])');
-        if (firstAllowed) firstAllowed.click();
-      }
-    } catch (e) {}
-  } catch (err) { if (err.message && !err.message.includes('Cannot read')) showSessionError('Could not verify session: ' + err.message); }
+    const res = await fetch('/.netlify/functions/create-builder-session', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-manager-token': mgr },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.sessionId) return null;
+    window.BUILDER_SESSION_ID = data.sessionId; window.ADMIN_TOKEN = data.sessionId;
+    return data.sessionId;
+  } catch (e) { return null; }
+}
+
+async function fetchSessionCapabilities(sessionId) {
+  try {
+    const res = await fetch('/.netlify/functions/verify-builder-session', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? data : null;
+  } catch (e) { return null; }
+}
+
+function applySessionCapabilities(sessionId, data) {
+  window.BUILDER_SESSION_ID = sessionId;
+  window.ADMIN_TOKEN = sessionId;
+  window.BUILDER_MANAGER_ID = data.managerId;
+  window.BUILDER_IS_SUPERADMIN = !!data.isSuperadmin;
+  // Authoritative, both ways. A page opened without ?session= reveals the
+  // advanced toggle at parse time (standalone mode); once a real session says
+  // this manager is not allowed it, take it back.
+  if (data.allowAdvanced) showAdvancedToggle();
+  else { const a = document.getElementById('advanced-toggle'); if (a) a.style.display = 'none'; }
+  // Reveal only — `disabled` is cleared by markLayoutSettled(), never here.
+  if (data.isSuperadmin) { const b = document.getElementById('save-layout-live-btn'); if (b) b.style.display = 'block'; }
+  try {
+    const allowed = data.allowedZones || [];
+    if (!data.isSuperadmin && allowed.length) {
+      document.querySelectorAll('.zone-btn').forEach((btn) => {
+        const mt = (btn.getAttribute('onclick') || '').match(/'([^']+)'/);
+        const zone = mt ? mt[1] : ''; const base = zone.replace('-santos','');
+        if (!allowed.includes(base) && !allowed.includes(zone)) btn.style.display = 'none';
+      });
+      const firstAllowed = document.querySelector('.zone-btn:not([style*="display: none"])');
+      if (firstAllowed) firstAllowed.click();
+    }
+  } catch (e) {}
+}
+
+// True when the page was opened with event data to restore — i.e. a reject link.
+// Such a page must never be wiped: the manager's work is in those fields.
+function hasPrefillParams() {
+  const p = new URLSearchParams(window.location.search);
+  return ['zone','date','time','rsvpDate','host','addr1','addr2','mahaprasad','santos','titleType'].some((k) => p.get(k));
+}
+
+async function verifyBuilderSession() {
+  const urlSession = new URLSearchParams(window.location.search).get('session');
+
+  if (urlSession) {
+    const data = await fetchSessionCapabilities(urlSession);
+    if (data) { applySessionCapabilities(urlSession, data); return; }
+  }
+
+  // No session in the URL, or the one there is dead. Recover silently.
+  const minted = await mintSessionFromAdminToken();
+  if (minted) {
+    const data = await fetchSessionCapabilities(minted);
+    if (data) { applySessionCapabilities(minted, data); return; }
+  }
+
+  // Recovery failed — this browser has no usable manager login. Prompt for one
+  // without destroying a pre-filled page; signing in returns here with the same
+  // URL, so the event data comes back. A bare visit with no session and no
+  // prefill stays in standalone mode exactly as before (export and layout-save
+  // are gated server-side regardless).
+  if (hasPrefillParams()) { showSignInPrompt(); return; }
+  if (urlSession) showSessionError('Invalid session');
+}
+
+function showSignInPrompt() {
+  if (document.getElementById('signin-banner')) return;
+  const next = encodeURIComponent(window.location.pathname + window.location.search);
+  const bar = document.createElement('div');
+  bar.id = 'signin-banner';
+  bar.style.cssText = 'position:sticky;top:0;z-index:9999;background:#FEF3C7;border-bottom:1px solid #F59E0B;color:#7C2D12;padding:12px 16px;font-family:\'DM Sans\',sans-serif;font-size:14px;line-height:1.5;text-align:center';
+  bar.innerHTML = 'You are not signed in, so this flyer cannot be submitted for review. '
+    + '<a href="/login?next=' + next + '" style="color:#7C2D12;font-weight:700;text-decoration:underline">Sign in</a>'
+    + ' — you will come straight back here with these details still filled in.';
+  document.body.insertBefore(bar, document.body.firstChild);
 }
 function showSessionError(msg) {
   document.body.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F7F0E8;font-family:'DM Sans',sans-serif"><div style="background:#fff;border-radius:16px;padding:40px 32px;max-width:400px;text-align:center;box-shadow:0 8px 32px rgba(92,45,10,0.12)"><div style="font-size:40px;margin-bottom:16px">🔒</div><h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#5C2D0A;margin-bottom:12px">Session Invalid</h2><p style="font-size:14px;color:#8B6040;line-height:1.6;margin-bottom:24px">${msg}</p><p style="font-size:13px;color:#8B6040">Please go back to the admin portal and click <strong>Open Flyer Builder</strong> again.</p></div></div>`;
@@ -844,10 +939,17 @@ if (!new URLSearchParams(window.location.search).get('session')) { window.ADMIN_
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async function init() {
-  verifyBuilderSession();
   setZone('moosic', document.querySelector('.zone-btn'));
-  try { await loadFlyerAssets(); } catch (e) { document.getElementById('photo-caption').textContent = 'asset load failed: ' + e.message; }
-  setTimeout(readUrlParams, 150);
+  // Assets load alongside the session check so recovery costs no extra wait, but
+  // readUrlParams runs strictly last: the session check can click a zone button,
+  // and setZone() rewrites the address fields, so a prefilled reject link must
+  // be applied after it rather than racing it on a 150ms timer.
+  const assets = loadFlyerAssets().catch((e) => {
+    document.getElementById('photo-caption').textContent = 'asset load failed: ' + e.message;
+  });
+  await verifyBuilderSession().catch(() => {});
+  await assets;
+  readUrlParams();
 })();
 </script>
 </body>

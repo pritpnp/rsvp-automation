@@ -65,6 +65,20 @@
   <script>
     const AUTH_API = '/.netlify/functions/manager-auth';
 
+    // Where to land after signing in. The flyer builder sends managers here with
+    // ?next= when a Telegram reject link is opened without a session, so they
+    // return to the pre-filled flyer instead of a bare admin portal.
+    // Only a same-site absolute path is honoured: "//evil.com" and "/\evil.com"
+    // are both read as another origin by browsers, so they are rejected.
+    function safeNext() {
+      let raw = null;
+      try { raw = new URLSearchParams(window.location.search).get('next'); } catch (e) {}
+      if (!raw || raw[0] !== '/') return '/admin';
+      if (raw.startsWith('//') || raw.startsWith('/\\')) return '/admin';
+      return raw;
+    }
+    const NEXT = safeNext();
+
     // If already logged in, redirect — clear stale token if invalid
     const token = localStorage.getItem('admin_token');
     if (token) {
@@ -72,7 +86,7 @@
         .then(r => r.json())
         .then(d => {
           if (d.valid) {
-            window.location.replace('/admin');
+            window.location.replace(NEXT);
           } else {
             localStorage.removeItem('admin_token');
             localStorage.removeItem('admin_username');
@@ -112,7 +126,7 @@
         localStorage.setItem('admin_username', data.username);
         localStorage.setItem('admin_role', data.role);
         localStorage.setItem('admin_permissions', JSON.stringify(data.permissions));
-        window.location.replace('/admin');
+        window.location.replace(NEXT);
       } catch (e) {
         errEl.textContent = e.message || 'Invalid username or password';
         errEl.style.display = 'block';

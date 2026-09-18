@@ -98,7 +98,10 @@ exports.handler = async (event) => {
     if (eventData.titleType)   params.set('titleType', eventData.titleType);
   }
   params.set('zone', zone.replace('-santos', ''));
-  // New session will be needed — direct to builder without session so they get prompted to reopen from admin
+  // No session token in this URL on purpose: it is posted into a Telegram chat,
+  // where a live bearer token would outlive the message and be readable by
+  // everyone in the group. The builder mints its own session on arrival from the
+  // manager's stored admin_token, and prompts for sign-in if there isn't one.
   const rejectUrl = `https://screvents.com/flyer-builder/?${params.toString()}`;
 
   // ── Save review record (with rejectUrl baked in from the start) ────────────
