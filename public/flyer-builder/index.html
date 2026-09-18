@@ -9,6 +9,14 @@
        third parties (Google Fonts), never the path/query. -->
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>Flyer Builder — SCREvents</title>
+  <!-- Favicon lives here, in the source, because build.sh owns this file.
+       Do NOT add /flyer-builder/index.html back to automate.js's staticPages:
+       that loop strips any existing <link rel="icon"> and injects its own, and
+       build.sh then copies public/ over the top and strips it again. The two
+       fought over this file on every deploy, and the resulting diff is what
+       produced a redundant "deploy: update dist" commit (and a second Netlify
+       build) after every flyer-builder change. -->
+  <link rel="icon" type="image/png" href="/images/tab-logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">

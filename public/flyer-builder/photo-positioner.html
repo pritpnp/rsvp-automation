@@ -8,6 +8,11 @@
      Referer to third parties (Google Fonts) — origin only. -->
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <title>Photo Positioner — SCREvents</title>
+  <!-- Favicon lives here, in the source, because build.sh is the SOLE writer of
+       this file — it copies public/flyer-builder/photo-positioner.html into
+       dist/ at Netlify build time, so a tag injected into dist/ by anything else
+       would simply be overwritten by that copy. Keep the tag in the source. -->
+  <link rel="icon" type="image/png" href="/images/tab-logo.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">

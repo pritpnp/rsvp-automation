@@ -987,7 +987,13 @@ async function deployAllToNetlify(pages, deadlines = {}, eventInfoMap = {}) {
     { filePath: '/invite/index.html',        diskPath: path.join(__dirname, '..', 'public', 'invite',        'index.html') },
     { filePath: '/login/index.html',         diskPath: path.join(__dirname, '..', 'public', 'login',         'index.html') },
     { filePath: '/admin/index.html',         diskPath: path.join(__dirname, '..', 'public', 'admin',         'index.html') },
-    { filePath: '/flyer-builder/index.html',              diskPath: path.join(__dirname, '..', 'public', 'flyer-builder', 'index.html') },
+    // '/flyer-builder/index.html' is deliberately NOT here: build.sh copies it
+    // into dist/ at Netlify build time and would overwrite anything written
+    // here anyway. Listing it made automate.js rewrite the file (favicon
+    // injected) on every run, which build.sh then undid — a permanent diff
+    // that produced a redundant 'deploy: update dist' commit, and so a SECOND
+    // Netlify build, after every flyer-builder change. review-sent/index.html
+    // below MUST stay: build.sh does not copy it, so this is its only path to dist.
     { filePath: '/flyer-builder/review-sent/index.html', diskPath: path.join(__dirname, '..', 'public', 'flyer-builder', 'review-sent', 'index.html') },
   ];
   const tabLogoPath = path.join(REPO_ROOT, 'images', 'tab-logo.png');
