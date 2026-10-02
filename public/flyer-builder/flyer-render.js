@@ -83,6 +83,11 @@
       // "Location:" sat above the host names, which read as if the family name
       // were the venue.)
       { key: 'host',       yPct: 0.820,  font: 'GothamRegular',     sizePx: 65,  weight: 700, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -50, tint: true },
+      // Optional second host line, under the main one and smaller — same face,
+      // weight and colour so it reads as part of the same name block. Empty =
+      // not drawn at all (drawTextEl skips empty values), so the flyer without
+      // one is byte-identical to before.
+      { key: 'subhost',    yPct: 0.8483, font: 'GothamRegular',     sizePx: 44,  weight: 700, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.3,   tracking: -50, tint: true },
       { key: 'locationLabel', yPct: 0.851, font: 'AddingtonCF',    sizePx: 33, weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9, lineHeight: 1.3,   tracking: -25, tint2: true },
       { key: 'address',    yPct: 0.8654, font: 'AddingtonCF',       sizePx: 63,  weight: 400, color: '#85381c', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.06,  tracking: -25, tint: true },
       { key: 'mahaprasad', yPct: 0.9216, font: 'AddingtonCF',       sizePx: 33,  weight: 400, color: '#4b4b4a', align: 'center', maxWidthPct: 0.9,  lineHeight: 1.4,   tracking: -25, tint2: true },
@@ -101,6 +106,27 @@
       santos:     { yPct: 0.740, sizePx: 42,  lineHeight: 1.30 },
     },
 
+
+    // Subhost overrides. Applied ONLY when a subhost is present, so a flyer
+    // without one is unchanged.
+    //
+    // The host line does NOT move: everything above it stays exactly where it
+    // is. The room comes from below instead. There is very little of it — the
+    // base bottom block runs to y=2278 and the footer starts at y=2288, so only
+    // 10px are free, and an extra 44px line cannot fit by shrinking the text
+    // alone (fitting it that way needs the address cut 63->54, which is not a
+    // small change). So the bar at the bottom gives a little too: slightly
+    // narrower and slightly lower frees 23px, which together with a modest
+    // shrink of the three lines below the host leaves 6px of clearance.
+    //
+    // All three lower lines move DOWN, never up.
+    subhost: {
+      locationLabel: { yPct: 0.8689, sizePx: 31 },
+      address:       { yPct: 0.8824, sizePx: 57 },
+      mahaprasad:    { yPct: 0.9335, sizePx: 31 },
+      // Not a text element — read by the footer step, not the text loop.
+      footer:        { widthPct: 0.465, bottomPct: 0.006 },
+    },
 
     // ── Title-only overrides ────────────────────────────────────────────────
     // The ZONE picks the content set (below); the TITLE picks only how the title
@@ -164,6 +190,7 @@
         { key: 'rsvp',          cxPct: 0.68, yPct: 0.655, font: 'GothamRegular',     sizePx: 18, weight: 400, color: '#4c4c4b', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint2: true },
         // host → locationLabel → address (same reorder as the portrait flyer).
         { key: 'host',          cxPct: 0.68, yPct: 0.699, font: 'GothamRegular',     sizePx: 22, weight: 700, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint: true },
+        { key: 'subhost',       cxPct: 0.68, yPct: 0.7371, font: 'GothamRegular',    sizePx: 15, weight: 700, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -50, tint: true },
         { key: 'locationLabel', cxPct: 0.68, yPct: 0.744, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
         { key: 'address',       cxPct: 0.68, yPct: 0.778, font: 'AddingtonCF',       sizePx: 20, weight: 400, color: '#85381c', maxWidthPct: 0.50, lineHeight: 1.12, tracking: -25, tint: true },
         { key: 'mahaprasad',    cxPct: 0.68, yPct: 0.880, font: 'AddingtonCF',       sizePx: 16, weight: 400, color: '#4b4b4a', maxWidthPct: 0.50, lineHeight: 1.3, tracking: -25, tint2: true },
@@ -180,6 +207,14 @@
       parasabhaSantos: {
         title:  { sizePx: 78 },
         santos: { yPct: 0.460 },
+      },
+      // Landscape counterpart. The card has more room below the host than the
+      // flyer does, so the three lower lines only shift down a little and the
+      // footer bar is left alone — it still clears by 6px.
+      subhost: {
+        locationLabel: { yPct: 0.7650, sizePx: 15 },
+        address:       { yPct: 0.7960, sizePx: 18 },
+        mahaprasad:    { yPct: 0.8850, sizePx: 15 },
       },
       satsang: {
         title:         { yPct: 0.228, sizePx: 117 },
@@ -411,10 +446,17 @@
     }
 
     // 4. footer (bottom)
+    // A subhost adds a line the bottom block has no room for, so the bar shrinks
+    // and drops slightly to make it. Derived from the field, like every other
+    // variant, so the preview and the submitted capture always agree.
+    const subhostOnF = !!(opts.fields && opts.fields.subhost);
+    const footerCfg = (subhostOnF && LAYOUT.subhost && LAYOUT.subhost.footer)
+      ? { ...LAYOUT.footer, ...LAYOUT.subhost.footer }
+      : LAYOUT.footer;
     if (opts.footerImg && opts.footerImg.naturalWidth) {
-      const fw = LAYOUT.footer.widthPct * W;
+      const fw = footerCfg.widthPct * W;
       const fh = fw * (opts.footerImg.naturalHeight / opts.footerImg.naturalWidth);
-      drawContain(ctx, opts.footerImg, (W - fw) / 2, H - fh - LAYOUT.footer.bottomPct * H, fw, fh);
+      drawContain(ctx, opts.footerImg, (W - fw) / 2, H - fh - footerCfg.bottomPct * H, fw, fh);
     }
 
     // 5. text
@@ -429,6 +471,16 @@
       ? (opts.titleType === 'para'    ? LAYOUT.satsangParaTitle.title   : null)
       : (opts.titleType === 'satsang' ? LAYOUT.zoneSatsangTitle.title : null);
     if (titleOv) ov = { ...ov, title: { ...(ov && ov.title), ...titleOv } };
+    // Layered per key on top of whatever variant is active, so a santos flyer
+    // with a subhost keeps its santos geometry and only the bottom block shifts.
+    if (subhostOnF && LAYOUT.subhost) {
+      const merged = { ...ov };
+      for (const k in LAYOUT.subhost) {
+        if (k === 'footer') continue;                       // handled in step 4
+        merged[k] = { ...(ov && ov[k]), ...LAYOUT.subhost[k] };
+      }
+      ov = merged;
+    }
     for (const baseEl of LAYOUT.text) {
       const el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       drawTextEl(ctx, el, fields[el.key], W, H, scale, opts.textColor, opts.textColor2);
@@ -530,6 +582,11 @@
       ? (opts.titleType === 'para' ? (L.satsangParaTitle && L.satsangParaTitle.title) : null)
       : (opts.titleType === 'satsang' ? (L.zoneSatsangTitle && L.zoneSatsangTitle.title) : null);
     if (ogTitleOv) ov = { ...ov, title: { ...(ov && ov.title), ...ogTitleOv } };
+    if (opts.fields && opts.fields.subhost && L.subhost) {
+      const merged = { ...ov };
+      for (const k in L.subhost) merged[k] = { ...(ov && ov[k]), ...L.subhost[k] };
+      ov = merged;
+    }
     for (const baseEl of L.text) {
       let el = (ov && ov[baseEl.key]) ? { ...baseEl, ...ov[baseEl.key] } : baseEl;
       if (dx) el = { ...el, cxPct: (el.cxPct != null ? el.cxPct : 0.5) + dx };
@@ -593,6 +650,7 @@
     if (o.header) Object.assign(LAYOUT.header, o.header);
     if (o.satsang) for (const k in o.satsang) LAYOUT.satsang[k] = Object.assign(LAYOUT.satsang[k] || {}, o.satsang[k]);
     if (o.parasabhaSantos) for (const k in o.parasabhaSantos) LAYOUT.parasabhaSantos[k] = Object.assign(LAYOUT.parasabhaSantos[k] || {}, o.parasabhaSantos[k]);
+    if (o.subhost) for (const k in o.subhost) LAYOUT.subhost[k] = Object.assign(LAYOUT.subhost[k] || {}, o.subhost[k]);
     if (o.zoneSatsangTitle) for (const k in o.zoneSatsangTitle) LAYOUT.zoneSatsangTitle[k] = Object.assign(LAYOUT.zoneSatsangTitle[k] || {}, o.zoneSatsangTitle[k]);
     if (o.satsangParaTitle) for (const k in o.satsangParaTitle) LAYOUT.satsangParaTitle[k] = Object.assign(LAYOUT.satsangParaTitle[k] || {}, o.satsangParaTitle[k]);
     if (Array.isArray(o.text)) for (const t of o.text) { const e = LAYOUT.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
@@ -605,13 +663,14 @@
       if (Array.isArray(G.text)) for (const t of G.text) { const e = LAYOUT.og.text.find((x) => x.key === t.key); if (e) Object.assign(e, t); }
       if (G.satsang) for (const k in G.satsang) LAYOUT.og.satsang[k] = Object.assign(LAYOUT.og.satsang[k] || {}, G.satsang[k]);
       if (G.parasabhaSantos) for (const k in G.parasabhaSantos) LAYOUT.og.parasabhaSantos[k] = Object.assign(LAYOUT.og.parasabhaSantos[k] || {}, G.parasabhaSantos[k]);
+      if (G.subhost) for (const k in G.subhost) LAYOUT.og.subhost[k] = Object.assign(LAYOUT.og.subhost[k] || {}, G.subhost[k]);
       if (G.zoneTextDx) Object.assign(LAYOUT.og.zoneTextDx, G.zoneTextDx);
       if (G.satsangParaTitle) for (const k in G.satsangParaTitle) LAYOUT.og.satsangParaTitle[k] = Object.assign(LAYOUT.og.satsangParaTitle[k] || {}, G.satsangParaTitle[k]);
     }
   }
   // Snapshot the current LAYOUT for export (what the Advanced panel saves).
   function serializeLayout() {
-    return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, parasabhaSantos: LAYOUT.parasabhaSantos, zoneSatsangTitle: LAYOUT.zoneSatsangTitle, satsangParaTitle: LAYOUT.satsangParaTitle, text: LAYOUT.text, og: LAYOUT.og };
+    return { header: LAYOUT.header, footer: LAYOUT.footer, photoBox: LAYOUT.photoBox, fade: LAYOUT.fade, satsang: LAYOUT.satsang, parasabhaSantos: LAYOUT.parasabhaSantos, zoneSatsangTitle: LAYOUT.zoneSatsangTitle, satsangParaTitle: LAYOUT.satsangParaTitle, subhost: LAYOUT.subhost, text: LAYOUT.text, og: LAYOUT.og };
   }
 
   global.FlyerRender = { LAYOUT, recolorWatercolor, drawPhotoInBox, compositeFlyer, compositeOG, drawPreviewWatermark, loadImage, hexToRgb, applyLayout, serializeLayout };

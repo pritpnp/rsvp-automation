@@ -91,6 +91,7 @@ exports.handler = async (event) => {
     if (eventData.time)        params.set('time', eventData.time);
     if (eventData.rsvpDate)    params.set('rsvpDate', eventData.rsvpDate);
     if (eventData.host)        params.set('host', eventData.host);
+    if (eventData.subhost)     params.set('subhost', eventData.subhost);
     if (eventData.addr1)       params.set('addr1', eventData.addr1);
     if (eventData.addr2)       params.set('addr2', eventData.addr2);
     if (eventData.mahaprasad)  params.set('mahaprasad', eventData.mahaprasad);
