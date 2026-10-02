@@ -266,8 +266,33 @@ function ogCropFor(entry) {
 }
 const DECK_KEY = 'scr_swami_deck_v1';
 
+// The canvas fonts must be loaded BEFORE the first draw, and `document.fonts.ready`
+// does not do that. CSS font loading is lazy: nothing in the DOM uses AddingtonCF
+// or GothamRegular — they exist only for the canvas — so the browser never
+// requests them, `ready` resolves in a few ms with them still unloaded, and
+// ctx.font falls back to a system face. Same words, different metrics, so the
+// spacing and wrapping are wrong. Setting ctx.font does not trigger a fetch
+// either, so the FIRST render is the broken one and only a later re-render looks
+// right. Typing into the form hides this; a reject link renders final text once
+// and keeps it. document.fonts.load() asks for the faces explicitly.
+const FLYER_FONT_SPECS = [
+  '400 100px AddingtonCF', '700 100px AddingtonCF',
+  '400 100px GothamRegular', '700 100px GothamRegular',
+];
+function flyerFontsReady() {
+  if (!document.fonts || !document.fonts.check) return true;   // no API: nothing to wait for
+  try { return FLYER_FONT_SPECS.every((spec) => document.fonts.check(spec)); } catch (e) { return true; }
+}
+async function ensureFlyerFonts() {
+  if (!document.fonts || !document.fonts.load) return;
+  // A hung font request must not leave the builder with no flyer at all, so cap
+  // the wait. On timeout we render with the fallback exactly as before.
+  const loads = Promise.all(FLYER_FONT_SPECS.map((spec) => document.fonts.load(spec).catch(() => {})));
+  await Promise.race([loads, new Promise((r) => setTimeout(r, 10000))]);
+}
+
 async function loadFlyerAssets() {
-  if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+  await ensureFlyerFonts();
   MANIFEST = await (await fetch('/flyer-builder/swami-photos.json?t=' + Date.now())).json();
   // Optional saved layout override (from the Advanced panel's "Save layout").
   try { const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now()); if (lr.ok) FlyerRender.applyLayout(await lr.json()); } catch (e) {}
@@ -303,6 +328,11 @@ async function loadFlyerAssets() {
     FlyerRender.loadImage('/flyer-builder/base/footer-white.png'),
   ]);
   assetsReady = true;
+  // Belt and braces: if the fonts timed out above, redraw as soon as they land
+  // rather than leaving a substituted-font flyer on screen.
+  if (!flyerFontsReady() && document.fonts) {
+    document.fonts.ready.then(() => { try { scheduleRender(); renderPreviewCanvas(); } catch (e) {} }).catch(() => {});
+  }
   // A reject link names the photo the flyer was built with — restore it rather
   // than drawing a new one. Falls back to a normal draw if that id is gone.
   let wanted = null;
@@ -740,6 +770,9 @@ async function sendForReview() {
   const addr1 = document.getElementById('f-addr1').value.trim();
   if (!date || !hour || !addr1) { showReviewStatus('⚠️ Please fill in at least Date, Time, and Address before submitting.', false); return; }
   if (!currentPhoto) { showReviewStatus('⚠️ No photo loaded yet — try again in a moment.', false); return; }
+  // sendForReview() composites into its own offscreen canvases, so it must not
+  // run before the fonts are in — this is the image that gets approved.
+  if (!flyerFontsReady()) { showReviewStatus('⏳ Waiting for fonts to finish loading…', false); await ensureFlyerFonts(); }
 
   btn.disabled = true; btn.textContent = '⏳ Capturing flyer...';
   try {

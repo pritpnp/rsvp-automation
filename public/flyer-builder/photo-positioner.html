@@ -483,7 +483,16 @@ window.addEventListener('beforeunload', (e) => {
   } catch (e) { gate('Could not verify session', e.message); return; }
 
   try {
-    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+    // document.fonts.ready does NOT cover these: nothing in the DOM uses them, so
+    // the browser never fetches them and ready resolves with the canvas fonts
+    // still unloaded. Ask for the faces explicitly. (Same bug as the builder.)
+    if (document.fonts && document.fonts.load) {
+      const specs = ['400 100px AddingtonCF','700 100px AddingtonCF','400 100px GothamRegular','700 100px GothamRegular'];
+      await Promise.race([
+        Promise.all(specs.map((s) => document.fonts.load(s).catch(() => {}))),
+        new Promise((r) => setTimeout(r, 10000)),
+      ]);
+    }
     manifest = await (await fetch('/flyer-builder/swami-photos.json?t=' + Date.now())).json();
     try {
       const lr = await fetch('/flyer-builder/flyer-layout.json?t=' + Date.now());
