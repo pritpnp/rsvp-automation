@@ -338,6 +338,53 @@
     return lines;
   }
 
+  // ── Cross-engine text metrics ──────────────────────────────────────────
+  // Every yPct in LAYOUT was calibrated in Chromium with textBaseline='top',
+  // which Chromium defines as the top of the em box. WebKit — Safari, and
+  // every browser on iOS, since they all use WebKit there — puts 'top' at the
+  // font's ascent line instead. So on phones every line was drawn lower, and
+  // by a different amount per face: ~0.25em for AddingtonCF, ~0.11em for
+  // GothamRegular (address 14px lower, the title ~42px). Neighbouring lines in
+  // different faces then crowded into each other: the zone line into
+  // "Cordially…", the RSVP into the date, mahaprasad into the address.
+  //
+  // The alphabetic baseline has no such ambiguity — every engine draws the
+  // glyphs at the same place relative to it. So draw on it, at the distance
+  // below the em-box top that Chromium uses. These are measured in Chromium:
+  // constant across sizes 12-240px and both weights to within +/-0.0002,
+  // i.e. under 0.05px even at 240px, so desktop output does not move.
+  // A face not listed here falls back to 0.8, typical of Latin text faces.
+  const EM_TOP_TO_BASELINE = { AddingtonCF: 0.8205, GothamRegular: 0.7998 };
+
+  // Faces we ship with ONE weight on disk, whose "bold" is therefore the
+  // browser's synthetic bold. Engines disagree about that too: Chromium only
+  // thickens the strokes, while WebKit also pushes every character size/36 px
+  // further along — so the bold host line came out ~5% wider on phones and a
+  // long host name could run off the edge there and nowhere else. A face with
+  // a real bold file must NOT be listed: its wider advances are genuine.
+  const SYNTHETIC_BOLD_FACES = { AddingtonCF: true, GothamRegular: true };
+  const _boldExtraCache = new Map();
+  // The engine's extra advance per character for synthetic bold, measured
+  // directly rather than assumed, so each engine corrects only itself.
+  // Chromium measures 0 here, so its rendering is untouched.
+  function syntheticBoldExtraPerChar(ctx, family, size) {
+    const key = family + '|' + size;
+    if (_boldExtraCache.has(key)) return _boldExtraCache.get(key);
+    const probe = '0000000000';
+    const font0 = ctx.font, ls0 = ctx.letterSpacing;
+    ctx.letterSpacing = '0px';
+    ctx.font = '400 ' + size + 'px "' + family + '"'; const a = ctx.measureText(probe).width;
+    ctx.font = '700 ' + size + 'px "' + family + '"'; const b = ctx.measureText(probe).width;
+    ctx.font = font0; ctx.letterSpacing = ls0;
+    const extra = Math.max(0, (b - a) / probe.length);
+    // Only cache a measurement taken with the face actually loaded; a fallback
+    // face measured during loading would otherwise stick for the session.
+    const loaded = (typeof document === 'undefined' || !document.fonts || !document.fonts.check)
+      ? true : document.fonts.check('700 ' + size + 'px "' + family + '"');
+    if (loaded) _boldExtraCache.set(key, extra);
+    return extra;
+  }
+
   function drawTextEl(ctx, el, value, W, H, scale, textColor, textColor2) {
     if (value === undefined || value === null || value === '') return;
     // tint → per-photo PRIMARY color; tint2 → per-photo SECONDARY color; else fixed.
@@ -346,7 +393,9 @@
                : el.color;
     const size = el.sizePx * scale;
     const fontStr = (el.weight >= 600 ? '700 ' : '400 ') + size + 'px "' + el.font + '"';
-    const ls = (el.tracking ? (el.tracking / 1000) * size : 0) + 'px';  // PS tracking = 1/1000 em
+    let lsPx = el.tracking ? (el.tracking / 1000) * size : 0;          // PS tracking = 1/1000 em
+    if (el.weight >= 600 && SYNTHETIC_BOLD_FACES[el.font]) lsPx -= syntheticBoldExtraPerChar(ctx, el.font, size);
+    const ls = lsPx + 'px';
     const maxW = (el.maxWidthPct || 0.9) * W;
     const cx = (el.cxPct != null ? el.cxPct : 0.5) * W;  // center column (OG uses an off-centre text column)
     // lineCxPct: optional per-line horizontal centre (used to STAGGER a title,
@@ -358,8 +407,10 @@
     const alignFor = (i) => ((el.lineAlign && el.lineAlign[i]) ? el.lineAlign[i] : (el.align || 'center'));
     const yTop = el.yPct * H;                            // yPct is the TOP of the first line
     const lineH = size * (el.lineHeight || 1.3);
+    // yPct still means "em-box top of the first line"; convert to a baseline.
+    const baseY = yTop + (EM_TOP_TO_BASELINE[el.font] != null ? EM_TOP_TO_BASELINE[el.font] : 0.8) * size;
 
-    ctx.font = fontStr; ctx.letterSpacing = ls; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = fontStr; ctx.letterSpacing = ls; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     let lines = String(value).split('\n');
     if (el.wrap) lines = lines.flatMap((ln) => wrapLines(ctx, ln, maxW));
 
@@ -376,7 +427,7 @@
     const rgba = (c, a) => 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + a + ')';
 
     lines.forEach((line, i) => {
-      const x = cxFor(i), y = yTop + i * lineH;
+      const x = cxFor(i), y = baseY + i * lineH;
       ctx.textAlign = alignFor(i);
       if (emb) {
         ctx.save();
