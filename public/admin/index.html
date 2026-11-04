@@ -202,7 +202,7 @@
             <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Guests look up their invitation at <strong>screvents.com/invite</strong> using the name and phone you save here.</p>
             <div class="form-row">
               <div class="form-group" style="flex:2;min-width:160px"><label>Guest Name</label><input type="text" id="new-guest" placeholder="Full Name" /></div>
-              <div class="form-group"><label>Phone Number</label><input type="tel" id="new-phone" placeholder="(555) 123-4567" inputmode="tel" /></div>
+              <div class="form-group"><label>Phone Number (10 digits)</label><input type="tel" id="new-phone" placeholder="5705551234" inputmode="numeric" autocomplete="off" data-us-phone /></div>
             </div>
             <button class="btn-create" style="margin-top:14px" onclick="createPass()">Generate Pass →</button>
             <div class="success-msg" id="pass-success"></div>
@@ -831,7 +831,7 @@
           <div id="pass-edit-${p.id}" style="display:none;background:var(--cream);border-radius:10px;padding:12px">
             <div class="form-row">
               <div class="form-group" style="flex:2;min-width:160px"><label>Guest Name</label><input type="text" id="pass-edit-name-${p.id}" value="${escapeHtml(p.guest_name)}" /></div>
-              <div class="form-group"><label>Phone Number</label><input type="tel" id="pass-edit-phone-${p.id}" value="${escapeHtml(p.phone || '')}" placeholder="(555) 123-4567" inputmode="tel" /></div>
+              <div class="form-group"><label>Phone Number (10 digits)</label><input type="tel" id="pass-edit-phone-${p.id}" value="${escapeHtml(toUsPhoneDigits(p.phone || ''))}" placeholder="5705551234" inputmode="numeric" autocomplete="off" data-us-phone /></div>
             </div>
             <div style="display:flex;gap:8px;margin-top:10px">
               <button onclick="savePass('${p.id}')" style="padding:8px 18px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
@@ -900,12 +900,30 @@
     }
 
     // ── Single pass actions ────────────────────────────────────────────────
+    // US numbers only: digits, exactly 10, no +1. Every [data-us-phone] field
+    // is cleaned as it is typed (one delegated listener, so it also covers the
+    // edit fields rendered later); a pasted "+1 (570) 555-1234" becomes its 10
+    // digits. No maxlength: it would truncate a paste before it is cleaned.
+    // The guest lookup page applies the same rule.
+    function toUsPhoneDigits(v) {
+      let d = String(v || '').replace(/\D+/g, '');
+      if (d.length === 11 && d[0] === '1') d = d.slice(1);
+      return d.slice(0, 10);
+    }
+    document.addEventListener('input', (e) => {
+      const el = e.target;
+      if (!el || !el.matches || !el.matches('input[data-us-phone]')) return;
+      const clean = toUsPhoneDigits(el.value);
+      if (clean !== el.value) el.value = clean;   // leave the caret alone otherwise
+    });
+
     async function createPass() {
       const guest_name = document.getElementById('new-guest').value.trim();
-      const phone = document.getElementById('new-phone').value.trim();
+      const phone = toUsPhoneDigits(document.getElementById('new-phone').value);
       const sucEl = document.getElementById('pass-success');
       if (!guest_name || !selectedEventId) return;
       if (!phone) { alert('Phone number is required so guests can look up their invitation.'); return; }
+      if (phone.length !== 10) { alert('Phone number must be 10 digits, numbers only.'); return; }
       const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ guest_name, phone, event_id: selectedEventId }) });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Failed to create pass'); return; }
@@ -941,8 +959,9 @@
 
     async function savePass(id) {
       const guest_name = document.getElementById('pass-edit-name-' + id).value.trim();
-      const phone = document.getElementById('pass-edit-phone-' + id).value.trim();
+      const phone = toUsPhoneDigits(document.getElementById('pass-edit-phone-' + id).value);
       if (!guest_name) return;
+      if (phone && phone.length !== 10) { alert('Phone number must be 10 digits, numbers only.'); return; }
       const body = { id, guest_name };
       if (phone) body.phone = phone;
       const res = await fetch(PASSES_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) });
@@ -954,7 +973,7 @@
     let parsedRows = [];
 
     function downloadTemplate() {
-      const csv = 'Name,Phone,Email,Telegram\nJohn Doe,(555) 123-4567,,\n';
+      const csv = 'Name,Phone,Email,Telegram\nJohn Doe,5705551234,,\n';
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);

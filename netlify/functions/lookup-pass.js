@@ -104,6 +104,12 @@ exports.handler = async (event) => {
   if (!name || !phone_normalized) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Name and phone are required' }) };
   }
+  // US numbers only. Every pass is stored with a 10-digit number, so anything
+  // else cannot match. Refused here, before the attempt is logged, so a
+  // mistyped number does not count toward the failed-attempt rate limit.
+  if (phone_normalized.length !== 10) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please enter your 10-digit phone number, numbers only.' }) };
+  }
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
   const ip = getClientIp(event);

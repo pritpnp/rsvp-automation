@@ -197,7 +197,12 @@
         </div>
         <div class="form-group">
           <label for="phone">Phone Number</label>
-          <input type="tel" id="phone" name="phone" autocomplete="tel" required placeholder="(555) 123-4567" inputmode="tel" />
+          <!-- inputmode=numeric brings up the digits-only keypad on iPhone and
+               Android; tel-national asks autofill for the number without +1.
+               No maxlength on purpose: it would cut a pasted "+1 (570) 555-1234"
+               down to "+1 (570) 5" before the script could clean it up. -->
+          <input type="tel" id="phone" name="phone" autocomplete="tel-national" required placeholder="5705551234" inputmode="numeric" />
+          <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">10 digits, numbers only</div>
         </div>
         <button type="submit" class="btn-submit" id="submit-btn">View My Invitation →</button>
         <div class="error" id="error"></div>
@@ -210,6 +215,22 @@
     const form = document.getElementById('lookup-form');
     const btn = document.getElementById('submit-btn');
     const errEl = document.getElementById('error');
+
+    // US numbers only: digits, exactly 10, no +1. Applied as the guest types,
+    // so letters and symbols never appear. An autofilled or pasted
+    // "+1 (570) 555-1234" is reduced to its 10 digits rather than refused.
+    function toUsPhoneDigits(v) {
+      let d = String(v || '').replace(/\D+/g, '');
+      if (d.length === 11 && d[0] === '1') d = d.slice(1);
+      return d.slice(0, 10);
+    }
+    const phoneEl = document.getElementById('phone');
+    phoneEl.addEventListener('input', () => {
+      const clean = toUsPhoneDigits(phoneEl.value);
+      // Only rewrite when something was removed, so the caret is left alone
+      // while the guest is simply typing digits.
+      if (clean !== phoneEl.value) phoneEl.value = clean;
+    });
 
     function showError(msg) {
       errEl.textContent = msg;
@@ -225,9 +246,14 @@
       clearError();
 
       const name = document.getElementById('name').value.trim();
-      const phone = document.getElementById('phone').value.trim();
+      const phone = toUsPhoneDigits(phoneEl.value);
+      phoneEl.value = phone;
       if (!name || !phone) {
         showError('Please enter both your name and phone number.');
+        return;
+      }
+      if (phone.length !== 10) {
+        showError('Please enter your 10-digit phone number, numbers only.');
         return;
       }
 
