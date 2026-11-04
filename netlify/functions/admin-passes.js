@@ -81,7 +81,7 @@ function dbError(error) {
 
 async function authenticate(event, supabase) {
   const adminPassword = event.headers['x-admin-password'];
-  if (adminPassword === process.env.ADMIN_PASSWORD) {
+  if (!!process.env.ADMIN_PASSWORD && !!adminPassword && adminPassword === process.env.ADMIN_PASSWORD) {
     return { ok: true, role: 'superadmin', permissions: { view_passes: true, create_delete_passes: true, edit_passes: true } };
   }
 

@@ -29,7 +29,7 @@ exports.handler = async (event) => {
 
     // Superadmin check
     if (username.toLowerCase().trim() === 'admin') {
-      if (password === process.env.ADMIN_PASSWORD) {
+      if (!!process.env.ADMIN_PASSWORD && !!password && password === process.env.ADMIN_PASSWORD) {
         const token = crypto.randomBytes(32).toString('hex');
         const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         // Store superadmin session in a special way

@@ -11,7 +11,7 @@ const RATE_LIMIT_MAX_FAILS  = 5;
 
 async function authenticateSuperadmin(event, supabase) {
   const adminPassword = event.headers['x-admin-password'];
-  if (adminPassword === process.env.ADMIN_PASSWORD) {
+  if (!!process.env.ADMIN_PASSWORD && !!adminPassword && adminPassword === process.env.ADMIN_PASSWORD) {
     return { ok: true, username: 'superadmin' };
   }
   const token = event.headers['x-manager-token'];

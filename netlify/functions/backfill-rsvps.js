@@ -24,7 +24,8 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed. POST only.' }) };
   }
 
-  if (event.headers['x-admin-password'] !== process.env.ADMIN_PASSWORD) {
+  const adminPassword = event.headers['x-admin-password'];
+  if (!(!!process.env.ADMIN_PASSWORD && !!adminPassword && adminPassword === process.env.ADMIN_PASSWORD)) {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Superadmin password required' }) };
   }
 

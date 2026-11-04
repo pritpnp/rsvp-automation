@@ -13,7 +13,7 @@ async function authCheck(event) {
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
   const adminPassword = event.headers['x-admin-password'];
   const managerToken = event.headers['x-manager-token'];
-  if (adminPassword === process.env.ADMIN_PASSWORD) {
+  if (!!process.env.ADMIN_PASSWORD && !!adminPassword && adminPassword === process.env.ADMIN_PASSWORD) {
     return { ok: true, permissions: { view_rsvps: true, edit_rsvps: true, delete_rsvps: true } };
   }
   if (managerToken) {
