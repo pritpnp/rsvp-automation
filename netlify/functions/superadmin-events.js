@@ -6,6 +6,26 @@ const headers = {
   'Content-Type': 'application/json'
 };
 
+// VIP parking for an event, shown on every pass for it: a location (an address,
+// or "lat, lng" coordinates — the admin portal normalises map links to those)
+// and an optional one-line direction. Both are plain text, trimmed and capped.
+const PARKING_MAX = 300, PARKING_NOTE_MAX = 200;
+function parkingFields(body) {
+  const out = {};
+  if (body.vip_parking !== undefined) out.vip_parking = String(body.vip_parking || '').trim().slice(0, PARKING_MAX);
+  if (body.vip_parking_note !== undefined) out.vip_parking_note = String(body.vip_parking_note || '').trim().slice(0, PARKING_NOTE_MAX);
+  return out;
+}
+// The parking columns are added by a one-off SQL migration. If this code is
+// live before that has been run, say so plainly instead of a raw Postgres error.
+function dbError(error) {
+  const m = (error && error.message) || 'Database error';
+  if (/vip_parking/.test(m) && /(column|schema cache)/i.test(m)) {
+    return 'VIP parking is not set up in the database yet — run the VIP parking SQL in Supabase, then try again.';
+  }
+  return m;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
@@ -45,30 +65,32 @@ exports.handler = async (event) => {
   }
 
   if (event.httpMethod === 'POST') {
-    const { event_name, start_date, end_date, start_time, end_time, max_passes, notes } = JSON.parse(event.body);
+    const body = JSON.parse(event.body);
+    const { event_name, start_date, end_date, start_time, end_time, max_passes, notes } = body;
     if (!event_name || !start_date || !end_date) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
     const { data, error } = await supabase
       .from('events')
-      .insert([{ event_name, start_date, end_date, start_time: start_time || '', end_time: end_time || '', max_passes: max_passes || 50, notes: notes || '' }])
+      .insert([{ event_name, start_date, end_date, start_time: start_time || '', end_time: end_time || '', max_passes: max_passes || 50, notes: notes || '', ...parkingFields(body) }])
       .select()
       .single();
-    if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: dbError(error) }) };
     logAudit(supabase, event, { action: 'event.create', target: data.event_name || data.id });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
 
   if (event.httpMethod === 'PATCH') {
-    const { id, event_name, start_date, end_date, start_time, end_time, max_passes, notes } = JSON.parse(event.body);
+    const body = JSON.parse(event.body);
+    const { id, event_name, start_date, end_date, start_time, end_time, max_passes, notes } = body;
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
     const { data, error } = await supabase
       .from('events')
-      .update({ event_name, start_date, end_date, start_time: start_time || '', end_time: end_time || '', max_passes, notes })
+      .update({ event_name, start_date, end_date, start_time: start_time || '', end_time: end_time || '', max_passes, notes, ...parkingFields(body) })
       .eq('id', id)
       .select()
       .single();
-    if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: dbError(error) }) };
     logAudit(supabase, event, { action: 'event.update', target: id });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }

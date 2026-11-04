@@ -400,6 +400,11 @@
           <div class="form-row" style="margin-top:10px">
             <div class="form-group"><label>Notes (optional)</label><input type="text" id="new-event-notes" placeholder="Any additional info" /></div>
           </div>
+          <div class="form-row" style="margin-top:10px">
+            <div class="form-group" style="flex:2;min-width:180px"><label>VIP Parking Location (optional)</label><input type="text" id="new-event-parking" placeholder="Address, or coordinates like 41.40123, -75.66543" /></div>
+            <div class="form-group" style="flex:2;min-width:180px"><label>Parking Directions (optional)</label><input type="text" id="new-event-parking-note" placeholder="e.g. Enter from the back gate" maxlength="200" /></div>
+          </div>
+          <div style="margin-top:6px;font-size:12px;color:var(--text-muted);line-height:1.5">Shown on every VIP pass for this event, with Apple Maps and Google Maps directions. For the exact spot, press and hold the lot in Google Maps and paste the numbers that appear. A Google or Apple Maps link works too.</div>
           <button class="btn-create" onclick="addEvent()">Add Event →</button>
           <div id="event-error" style="display:none;margin-top:10px;padding:10px 14px;background:#fef2f2;border-radius:10px;font-size:13px;color:#991b1b"></div>
           <div id="event-success" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border-radius:10px;font-size:13px;color:#166534"></div>
@@ -1608,6 +1613,45 @@
     }
 
     // ── VIP Pass Events ────────────────────────────────────────────────────
+    // VIP parking location: an address, or "lat, lng" coordinates. Coordinates
+    // pin the lot itself, so a pasted Google / Apple Maps link — or Apple's
+    // "41.40123° N, 75.66543° W" copy format — is reduced to plain coordinates.
+    // A short share link (maps.app.goo.gl) carries no coordinates, so ask for
+    // them instead of saving a link the pass cannot turn into directions.
+    // Keep the coordinate pattern in step with COORDS_RE on the VIP pass page.
+    function normalizeParking(raw) {
+      const s = String(raw || '').trim();
+      if (!s) return { value: '' };
+      const ok = (lat, lng) => Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+      const fmt = (lat, lng) => ({ value: (+lat) + ', ' + (+lng) });
+      let m = s.match(/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/);
+      if (m) return ok(+m[1], +m[2]) ? fmt(m[1], m[2]) : { error: 'Those coordinates are out of range.' };
+      m = s.match(/^(\d{1,2}(?:\.\d+)?)\s*°?\s*([NS])\s*,?\s*(\d{1,3}(?:\.\d+)?)\s*°?\s*([EW])$/i);
+      if (m) {
+        const lat = (m[2].toUpperCase() === 'S' ? -1 : 1) * m[1], lng = (m[4].toUpperCase() === 'W' ? -1 : 1) * m[3];
+        return ok(lat, lng) ? fmt(lat, lng) : { error: 'Those coordinates are out of range.' };
+      }
+      if (/^https?:\/\//i.test(s)) {
+        let u = s; try { u = decodeURIComponent(s); } catch (e) {}
+        // A place's own pin (!3d/!4d) beats query parameters, which beat the
+        // @lat,lng map-view centre.
+        m = u.match(/!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/)
+          || u.match(/[?&](?:q|query|ll|sll|destination|daddr|center|coordinate)=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/)
+          || u.match(/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/);
+        if (m && ok(+m[1], +m[2])) return fmt(m[1], m[2]);
+        return { error: "That map link doesn't include the location itself. In Google Maps, press and hold the parking lot and paste the numbers that appear (like 41.40123, -75.66543), or type the address." };
+      }
+      if (s.length > 300) return { error: 'Parking location is too long (300 characters max).' };
+      return { value: s };
+    }
+    function mapCheckUrl(location) {
+      return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(location);
+    }
+    // False until the VIP parking SQL migration has added the columns: while
+    // it is false, saving an event with no parking typed omits the fields, so
+    // every other event edit keeps working before the migration is run.
+    let PARKING_SUPPORTED = true;
+
     async function addEvent() {
       const event_name = document.getElementById('new-event-name').value.trim();
       const start_date = document.getElementById('new-event-start').value.trim();
@@ -1616,14 +1660,19 @@
       const end_time   = document.getElementById('new-event-end-time').value.trim();
       const max_passes = parseInt(document.getElementById('new-event-max').value) || 50;
       const notes      = document.getElementById('new-event-notes').value.trim();
+      const parkingIn  = normalizeParking(document.getElementById('new-event-parking').value);
+      const parkNote   = document.getElementById('new-event-parking-note').value.trim();
       const errEl = document.getElementById('event-error');
       const sucEl = document.getElementById('event-success');
       errEl.style.display = 'none';
       if (!event_name || !start_date) { errEl.textContent = 'Please fill in Event Name and Start Date'; errEl.style.display = 'block'; return; }
-      const res = await fetch(EVENTS_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ event_name, start_date, end_date: end_date || start_date, start_time, end_time, max_passes, notes }) });
+      if (parkingIn.error) { errEl.textContent = parkingIn.error; errEl.style.display = 'block'; return; }
+      const payload = { event_name, start_date, end_date: end_date || start_date, start_time, end_time, max_passes, notes };
+      if (parkingIn.value || parkNote) { payload.vip_parking = parkingIn.value; payload.vip_parking_note = parkNote; }
+      const res = await fetch(EVENTS_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
-      ['new-event-name','new-event-start','new-event-end','new-event-start-time','new-event-end-time','new-event-max','new-event-notes'].forEach(id => document.getElementById(id).value = '');
+      ['new-event-name','new-event-start','new-event-end','new-event-start-time','new-event-end-time','new-event-max','new-event-notes','new-event-parking','new-event-parking-note'].forEach(id => document.getElementById(id).value = '');
       sucEl.textContent = '✅ Event "' + data.event_name + '" created!';
       sucEl.style.display = 'block';
       setTimeout(() => sucEl.style.display = 'none', 5000);
@@ -1644,6 +1693,7 @@
     function renderEvents(events) {
       const c = document.getElementById('events-container');
       if (!events.length) { c.innerHTML = '<div class="empty-state">No events yet.</div>'; return; }
+      PARKING_SUPPORTED = 'vip_parking' in events[0];
       c.innerHTML = '<div class="item-list">' + events.map(e => `
         <div class="item" id="evt-${e.id}" style="flex-direction:column;align-items:stretch;gap:10px">
           <div style="display:flex;align-items:center;gap:12px">
@@ -1651,6 +1701,7 @@
               <div class="item-name">${escapeHtml(e.event_name)}</div>
               <div class="item-sub">${escapeHtml(e.start_date)}${e.end_date !== e.start_date ? ' — ' + escapeHtml(e.end_date) : ''}${e.start_time ? ' · ' + (e.end_time ? escapeHtml(e.start_time) + ' – ' + escapeHtml(e.end_time) : escapeHtml(e.start_time)) : ''} · Max ${escapeHtml(e.max_passes)} passes</div>
               ${e.notes ? `<div class="item-sub" style="margin-top:2px;font-style:italic">${escapeHtml(e.notes)}</div>` : ''}
+              ${e.vip_parking ? `<div class="item-sub" style="margin-top:2px">🅿️ VIP parking: ${escapeHtml(e.vip_parking)}${e.vip_parking_note ? ' — ' + escapeHtml(e.vip_parking_note) : ''} · <a href="${escapeHtml(mapCheckUrl(e.vip_parking))}" target="_blank" rel="noopener" style="color:var(--gold)">Check on map ↗</a></div>` : ''}
             </div>
             <button onclick="toggleEditEvent('${e.id}')" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0">Edit</button>
             <button class="btn-delete" onclick="deleteEvent('${e.id}')">Delete</button>
@@ -1669,6 +1720,11 @@
             <div class="form-row" style="margin-top:8px">
               <div class="form-group"><label>Notes</label><input type="text" id="edit-notes-${e.id}" value="${escapeHtml(e.notes || '')}" /></div>
             </div>
+            <div class="form-row" style="margin-top:8px">
+              <div class="form-group" style="flex:2;min-width:160px"><label>VIP Parking Location</label><input type="text" id="edit-parking-${e.id}" value="${escapeHtml(e.vip_parking || '')}" placeholder="Address, or coordinates like 41.40123, -75.66543" /></div>
+              <div class="form-group" style="flex:2;min-width:160px"><label>Parking Directions</label><input type="text" id="edit-parking-note-${e.id}" value="${escapeHtml(e.vip_parking_note || '')}" placeholder="e.g. Enter from the back gate" maxlength="200" /></div>
+            </div>
+            <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">Changes here update every VIP pass already sent for this event.</div>
             <div style="display:flex;gap:8px;margin-top:12px">
               <button onclick="saveEvent('${e.id}')" style="padding:8px 20px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
               <button onclick="toggleEditEvent('${e.id}')" style="padding:8px 16px;background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">Cancel</button>
@@ -1706,10 +1762,16 @@
       const end_time   = document.getElementById('edit-end-time-' + id).value.trim();
       const max_passes = parseInt(document.getElementById('edit-max-' + id).value) || 50;
       const notes      = document.getElementById('edit-notes-' + id).value.trim();
+      const parkingIn  = normalizeParking(document.getElementById('edit-parking-' + id).value);
+      const parkNote   = document.getElementById('edit-parking-note-' + id).value.trim();
       const errEl = document.getElementById('edit-err-' + id);
       if (!event_name || !start_date) { errEl.textContent = 'Event name and start date are required'; errEl.style.display = 'block'; return; }
+      if (parkingIn.error) { errEl.textContent = parkingIn.error; errEl.style.display = 'block'; return; }
       errEl.style.display = 'none';
-      const res = await fetch(EVENTS_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id, event_name, start_date, end_date: end_date || start_date, start_time, end_time, max_passes, notes }) });
+      const payload = { id, event_name, start_date, end_date: end_date || start_date, start_time, end_time, max_passes, notes };
+      // Always sent once the columns exist, so clearing the fields clears them.
+      if (PARKING_SUPPORTED || parkingIn.value || parkNote) { payload.vip_parking = parkingIn.value; payload.vip_parking_note = parkNote; }
+      const res = await fetch(EVENTS_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
       loadEvents();
