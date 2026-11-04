@@ -45,6 +45,13 @@
     .form-group label { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 6px; }
     .form-group input { width: 100%; padding: 11px 13px; border: 1px solid var(--cream-dark); border-radius: 10px; font-size: 14px; font-family: 'DM Sans', sans-serif; background: var(--cream); }
     .form-group input:focus { outline: none; border-color: var(--gold); }
+    /* Several phone numbers on one pass */
+    .phone-row { display: flex; gap: 6px; align-items: center; }
+    .phone-row + .phone-row { margin-top: 6px; }
+    .phone-remove { flex: none; width: 34px; height: 34px; border: 1px solid var(--cream-dark); background: #fff; color: var(--text-muted); border-radius: 8px; font-size: 18px; line-height: 1; cursor: pointer; }
+    .phone-add { margin-top: 6px; background: none; border: none; padding: 4px 0; color: var(--gold); font-size: 12px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+    .phone-warn { margin-top: 6px; padding: 8px 10px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; font-size: 12px; line-height: 1.5; color: #991b1b; }
+    [hidden] { display: none !important; }
     .btn-create { margin-top: 14px; padding: 12px 24px; background: linear-gradient(135deg, var(--saffron), var(--gold)); color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; }
     .zone-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--brown); cursor: pointer; padding: 7px 10px; border: 1px solid var(--cream-dark); border-radius: 8px; background: var(--cream); }
     .zone-check input { accent-color: #dc2626; cursor: pointer; }
@@ -202,7 +209,7 @@
             <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Guests look up their invitation at <strong>screvents.com/invite</strong> using the name and phone you save here.</p>
             <div class="form-row">
               <div class="form-group" style="flex:2;min-width:160px"><label>Guest Name</label><input type="text" id="new-guest" placeholder="Full Name" /></div>
-              <div class="form-group"><label>Phone Number (10 digits)</label><input type="tel" id="new-phone" placeholder="5705551234" inputmode="numeric" autocomplete="off" data-us-phone /></div>
+              <div class="form-group" style="flex:1;min-width:230px"><label>Phone Number(s) — 10 digits</label><div id="new-phones-wrap"></div></div>
             </div>
             <button class="btn-create" style="margin-top:14px" onclick="createPass()">Generate Pass →</button>
             <div class="success-msg" id="pass-success"></div>
@@ -214,7 +221,7 @@
               <h2 style="margin:0">Bulk Upload</h2>
               <button onclick="downloadTemplate()" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">⬇ Download Template</button>
             </div>
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Upload a CSV or Excel file. The <strong>Name</strong> and <strong>Phone</strong> columns are required — phone is what guests use to look up their invite.</p>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Upload a CSV or Excel file. The <strong>Name</strong> and <strong>Phone</strong> columns are required — phone is what guests use to look up their invite. For a pass with more than one number (e.g. husband and wife), put them in the same Phone cell separated by commas.</p>
 
             <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()"
               ondragover="event.preventDefault();this.classList.add('drag-over')"
@@ -776,6 +783,8 @@
       const canCreate = sessionPermissions.create_delete_passes;
       document.getElementById('create-pass-card').style.display = canCreate ? 'block' : 'none';
       document.getElementById('bulk-upload-card').style.display = canCreate ? 'block' : 'none';
+      resetNewPhones();
+      LOADED_PASSES = [];
       clearUpload();
       loadPasses();
     }
@@ -812,6 +821,8 @@
       const selectAllCb = document.getElementById('select-all-cb');
       if (selectAllCb) selectAllCb.checked = false;
 
+      LOADED_PASSES = passes;
+      if (passes.length) EXTRA_PHONES_SUPPORTED = 'extra_phones' in passes[0];
       if (!passes.length) { c.innerHTML = '<div class="empty-state">No passes for this event yet.</div>'; return; }
 
       c.innerHTML = '<div class="item-list">' + passes.map(p => `
@@ -820,7 +831,7 @@
             ${canDelete ? `<input type="checkbox" id="cb-${p.id}" data-pass-id="${p.id}" onchange="togglePassSelect('${p.id}', this.checked)" style="width:16px;height:16px;flex-shrink:0;accent-color:var(--saffron);cursor:pointer" />` : ''}
             <div class="item-info">
               <div class="item-name">${escapeHtml(p.guest_name)}</div>
-              <div class="item-sub">${p.phone ? '📞 ' + escapeHtml(p.phone) : '<span style="color:#dc2626">⚠ No phone — invite lookup disabled</span>'}</div>
+              <div class="item-sub">${p.phone ? '📞 ' + [p.phone, ...(p.extra_phones || [])].map(escapeHtml).join(' · ') : '<span style="color:#dc2626">⚠ No phone — invite lookup disabled</span>'}</div>
               <a class="item-link" href="https://screvents.com/invite" target="_blank">screvents.com/invite ↗ (share this)</a>
               <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank" style="opacity:0.6">direct preview: /vip/${p.id} ↗</a>
             </div>
@@ -831,7 +842,7 @@
           <div id="pass-edit-${p.id}" style="display:none;background:var(--cream);border-radius:10px;padding:12px">
             <div class="form-row">
               <div class="form-group" style="flex:2;min-width:160px"><label>Guest Name</label><input type="text" id="pass-edit-name-${p.id}" value="${escapeHtml(p.guest_name)}" /></div>
-              <div class="form-group"><label>Phone Number (10 digits)</label><input type="tel" id="pass-edit-phone-${p.id}" value="${escapeHtml(toUsPhoneDigits(p.phone || ''))}" placeholder="5705551234" inputmode="numeric" autocomplete="off" data-us-phone /></div>
+              <div class="form-group" style="flex:1;min-width:230px"><label>Phone Number(s) — 10 digits</label>${phoneListHtml('pass-edit-phones-' + p.id, passNumbers(p), p.id)}</div>
             </div>
             <div style="display:flex;gap:8px;margin-top:10px">
               <button onclick="savePass('${p.id}')" style="padding:8px 18px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
@@ -915,20 +926,102 @@
       if (!el || !el.matches || !el.matches('input[data-us-phone]')) return;
       const clean = toUsPhoneDigits(el.value);
       if (clean !== el.value) el.value = clean;   // leave the caret alone otherwise
+      const list = el.closest('.phone-list');
+      if (list) syncPhoneList(list.id);
     });
+
+    // ── Several numbers on one pass ────────────────────────────────────────
+    // e.g. a husband and wife when it is not known which will come: either
+    // number finds the pass on /invite. The first number is the pass's main
+    // phone; the rest are its extra_phones. No number may be on two passes in
+    // the same event — warned about live here, and enforced by the server.
+    const MAX_PHONES = 4;
+    let LOADED_PASSES = [];              // the selected event's passes, for the live warnings
+    let EXTRA_PHONES_SUPPORTED = true;   // false until the extra-phones SQL has been run
+
+    function phoneRowHtml(value, removable) {
+      return '<div class="phone-row"><input type="tel" value="' + escapeHtml(value || '') + '" placeholder="5705551234" inputmode="numeric" autocomplete="off" data-us-phone aria-label="Phone number" />'
+        + (removable ? '<button type="button" class="phone-remove" onclick="removePhoneRow(this)" aria-label="Remove this number">×</button>' : '')
+        + '</div>';
+    }
+    // excludePassId: the pass being edited, so its own numbers are not "taken".
+    function phoneListHtml(id, numbers, excludePassId) {
+      const nums = (numbers && numbers.length) ? numbers : [''];
+      return '<div class="phone-list" id="' + id + '" data-exclude="' + escapeHtml(excludePassId || '') + '">'
+        + nums.map((n, i) => phoneRowHtml(n, i > 0)).join('') + '</div>'
+        + '<button type="button" class="phone-add" id="' + id + '-add" onclick="addPhoneRow(\'' + id + '\')"' + (nums.length >= MAX_PHONES ? ' hidden' : '') + '>+ Add another number</button>'
+        + '<div class="phone-warn" id="' + id + '-warn" hidden></div>';
+    }
+    function addPhoneRow(id) {
+      const list = document.getElementById(id);
+      if (list.querySelectorAll('.phone-row').length >= MAX_PHONES) return;
+      list.insertAdjacentHTML('beforeend', phoneRowHtml('', true));
+      list.lastElementChild.querySelector('input').focus();
+      syncPhoneList(id);
+    }
+    function removePhoneRow(btn) {
+      const list = btn.closest('.phone-list');
+      btn.closest('.phone-row').remove();
+      syncPhoneList(list.id);
+    }
+    function readPhoneList(id) {
+      return [...document.getElementById(id).querySelectorAll('input')].map((i) => toUsPhoneDigits(i.value)).filter(Boolean);
+    }
+    function passNumbers(p) {
+      return [toUsPhoneDigits(p.phone_normalized || p.phone || ''), ...(p.extra_phones || [])].filter(Boolean);
+    }
+    // Problems with a list: a number entered twice, or already on another pass
+    // in this event. Incomplete numbers are only reported when asked (on save),
+    // so the warning does not flash while someone is still typing.
+    function phoneListProblems(id, includeIncomplete) {
+      const list = document.getElementById(id);
+      const exclude = list.dataset.exclude || '';
+      const problems = [], seen = new Set();
+      for (const n of readPhoneList(id)) {
+        if (n.length !== 10) { if (includeIncomplete) problems.push(n + ' is not 10 digits.'); continue; }
+        if (seen.has(n)) { problems.push(n + ' is entered twice.'); continue; }
+        seen.add(n);
+        const other = LOADED_PASSES.find((p) => p.id !== exclude && passNumbers(p).includes(n));
+        if (other) problems.push(n + ' is already on ' + other.guest_name + "'s pass for this event. Two people can't share a number.");
+      }
+      return problems;
+    }
+    function syncPhoneList(id) {
+      const list = document.getElementById(id);
+      if (!list) return;
+      const add = document.getElementById(id + '-add');
+      if (add) add.hidden = list.querySelectorAll('.phone-row').length >= MAX_PHONES;
+      const warn = document.getElementById(id + '-warn');
+      const problems = phoneListProblems(id, false);
+      warn.hidden = !problems.length;
+      warn.innerHTML = problems.map((p) => '⚠ ' + escapeHtml(p)).join('<br>');
+    }
+    // Validates a list for saving. Returns the numbers, or null after telling
+    // the admin what is wrong.
+    function phonesForSave(id) {
+      const numbers = readPhoneList(id);
+      const problems = phoneListProblems(id, true);
+      if (problems.length) { syncPhoneList(id); alert(problems.join('\n')); return null; }
+      return numbers;
+    }
+    function resetNewPhones() {
+      document.getElementById('new-phones-wrap').innerHTML = phoneListHtml('new-phones', []);
+    }
 
     async function createPass() {
       const guest_name = document.getElementById('new-guest').value.trim();
-      const phone = toUsPhoneDigits(document.getElementById('new-phone').value);
       const sucEl = document.getElementById('pass-success');
       if (!guest_name || !selectedEventId) return;
-      if (!phone) { alert('Phone number is required so guests can look up their invitation.'); return; }
-      if (phone.length !== 10) { alert('Phone number must be 10 digits, numbers only.'); return; }
-      const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ guest_name, phone, event_id: selectedEventId }) });
+      const numbers = phonesForSave('new-phones');
+      if (!numbers) return;
+      if (!numbers.length) { alert('Phone number is required so guests can look up their invitation.'); return; }
+      const payload = { guest_name, phone: numbers[0], event_id: selectedEventId };
+      if (numbers.length > 1) payload.extra_phones = numbers.slice(1);
+      const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Failed to create pass'); return; }
       document.getElementById('new-guest').value = '';
-      document.getElementById('new-phone').value = '';
+      resetNewPhones();
       sucEl.innerHTML = `✅ Pass created! Share <a href="https://screvents.com/invite" target="_blank">screvents.com/invite</a> with the guest — they'll look it up by name + phone.`;
       sucEl.style.display = 'block';
       setTimeout(() => sucEl.style.display = 'none', 10000);
@@ -959,11 +1052,15 @@
 
     async function savePass(id) {
       const guest_name = document.getElementById('pass-edit-name-' + id).value.trim();
-      const phone = toUsPhoneDigits(document.getElementById('pass-edit-phone-' + id).value);
       if (!guest_name) return;
-      if (phone && phone.length !== 10) { alert('Phone number must be 10 digits, numbers only.'); return; }
+      const numbers = phonesForSave('pass-edit-phones-' + id);
+      if (!numbers) return;
       const body = { id, guest_name };
-      if (phone) body.phone = phone;
+      if (numbers.length) {
+        body.phone = numbers[0];
+        // Always sent once the column exists, so removing extras removes them.
+        if (EXTRA_PHONES_SUPPORTED || numbers.length > 1) body.extra_phones = numbers.slice(1);
+      }
       const res = await fetch(PASSES_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) });
       if (res.ok) loadPasses();
       else { const d = await res.json(); alert(d.error || 'Failed to save'); }
@@ -973,7 +1070,7 @@
     let parsedRows = [];
 
     function downloadTemplate() {
-      const csv = 'Name,Phone,Email,Telegram\nJohn Doe,5705551234,,\n';
+      const csv = 'Name,Phone,Email,Telegram\nJohn Doe,5705551234,,\nRaj & Priya Shah,"2725550199, 2725550188",,\n';
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -1009,21 +1106,54 @@
           if (!nameKey)  { showUploadError('Could not find a "Name" column. Please use the template.'); return; }
           if (!phoneKey) { showUploadError('Could not find a "Phone" column. Phone is required so guests can look up their invite.'); return; }
 
-          parsedRows = data.map(row => {
+          parsedRows = data.map((row, i) => {
             const name  = (row[nameKey]  || '').toString().trim();
             const phone = (row[phoneKey] || '').toString().trim();
-            const phoneDigits = phone.replace(/\D+/g, '');
-            const normalized = (phoneDigits.length === 11 && phoneDigits.startsWith('1')) ? phoneDigits.slice(1) : phoneDigits;
-            const phoneValid = normalized.length === 10;
+            // One cell can hold several numbers for one pass — "5705551234,
+            // 2725550199" — separated by , ; / & | or "and". Each is cleaned
+            // of formatting and a leading +1, as before.
+            const numbers = phone.split(/[,;\/&|\n]+|\s+and\s+/i).map((x) => x.trim()).filter(Boolean).map((x) => {
+              const d = x.replace(/\D+/g, '');
+              return (d.length === 11 && d.startsWith('1')) ? d.slice(1) : d;
+            });
+            let issue = !name ? 'missing name'
+              : !numbers.length ? 'missing phone'
+              : numbers.some((n) => n.length !== 10) ? 'each phone must be 10 digits'
+              : numbers.length > MAX_PHONES ? 'at most ' + MAX_PHONES + ' numbers per pass'
+              : new Set(numbers).size !== numbers.length ? 'the same number is in this row twice'
+              : '';
             return {
+              sheetRow: i + 2,          // row number as the spreadsheet shows it (row 1 = headers)
               name,
               phone,
+              numbers,
               email:    (row['Email'] || row['email'] || '').toString().trim(),
               telegram: (row['Telegram'] || row['telegram'] || '').toString().trim(),
-              valid:    !!name && phoneValid,
-              issue:    !name ? 'missing name' : (!phoneValid ? 'invalid phone' : '')
+              valid:    !issue,
+              issue
             };
           });
+
+          // Two people can't share a number: not two rows of this file, and not
+          // a row and a pass that already exists for this event. Both rows of a
+          // clash are held back, since there is no telling which one is right.
+          const owner = new Map();
+          for (const r of parsedRows) {
+            if (!r.valid) continue;
+            const existing = LOADED_PASSES.find((p) => passNumbers(p).some((n) => r.numbers.includes(n)));
+            if (existing) {
+              const n = passNumbers(existing).find((x) => r.numbers.includes(x));
+              r.valid = false; r.issue = n + ' is already on ' + existing.guest_name + "'s pass for this event";
+              continue;
+            }
+            for (const n of r.numbers) {
+              const o = owner.get(n);
+              if (o) {
+                o.valid = false; o.issue = 'shares ' + n + ' with row ' + r.sheetRow + ' (' + r.name + ')';
+                r.valid = false; r.issue = 'shares ' + n + ' with row ' + o.sheetRow + ' (' + o.name + ')';
+              } else owner.set(n, r);
+            }
+          }
 
           renderUploadPreview();
         } catch(err) {
@@ -1048,11 +1178,11 @@
         </tr></thead>
         <tbody>
           ${parsedRows.map(r => `
-            <tr class="${r.valid ? '' : 'invalid'}" ${r.issue ? `title="${r.issue}"` : ''}>
-              <td>${r.name || '(empty)'}</td>
-              <td>${r.phone || '<em style="color:#dc2626">missing</em>'}</td>
-              <td>${r.email || '—'}</td>
-              <td>${r.telegram || '—'}</td>
+            <tr class="${r.valid ? '' : 'invalid'}" ${r.issue ? `title="${escapeHtml(r.issue)}"` : ''}>
+              <td>${escapeHtml(r.name) || '(empty)'}</td>
+              <td>${r.numbers.length ? r.numbers.map(escapeHtml).join(' · ') : '<em style="color:#dc2626">missing</em>'}${r.issue ? `<div style="color:#dc2626;font-size:11px;margin-top:2px">⚠ ${escapeHtml(r.issue)}</div>` : ''}</td>
+              <td>${escapeHtml(r.email) || '—'}</td>
+              <td>${escapeHtml(r.telegram) || '—'}</td>
             </tr>`).join('')}
         </tbody>`;
 
@@ -1076,7 +1206,9 @@
     }
 
     async function importPasses() {
-      const guests = parsedRows.filter(r => r.valid).map(r => ({ name: r.name, phone: r.phone }));
+      const guests = parsedRows.filter(r => r.valid).map(r => ({
+        name: r.name, phone: r.numbers[0], ...(r.numbers.length > 1 ? { extra_phones: r.numbers.slice(1) } : {})
+      }));
       if (!guests.length || !selectedEventId) return;
 
       const btn = document.getElementById('import-btn');

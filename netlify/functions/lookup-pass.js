@@ -164,7 +164,7 @@ exports.handler = async (event) => {
   }
 
   // Pull every pass matching the phone (could span multiple events).
-  const { data: matches, error } = await supabase
+  const { data: mainMatches, error } = await supabase
     .from('vip_passes')
     .select('id, guest_name, event_id, created_at')
     .eq('phone_normalized', phone_normalized)
@@ -173,6 +173,17 @@ exports.handler = async (event) => {
   if (error) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Lookup failed' }) };
   }
+
+  // A pass can carry extra numbers (a couple who may each come). Deliberately
+  // a SEPARATE query whose failure is ignored: before the extra_phones column
+  // exists it errors, and the main-number lookup above must keep working.
+  const { data: extraMatches, error: extraErr } = await supabase
+    .from('vip_passes')
+    .select('id, guest_name, event_id, created_at')
+    .contains('extra_phones', [phone_normalized]);
+  const byId = new Map();
+  for (const p of [...(mainMatches || []), ...(!extraErr && extraMatches ? extraMatches : [])]) byId.set(p.id, p);
+  const matches = [...byId.values()].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 
   const verified = matches && matches.find(p => namesMatch(name, p.guest_name));
 
