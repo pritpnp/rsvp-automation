@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- The pass is a fixed light design. Opt out of Android Chrome / Samsung
+       Internet "auto dark" page inversion: it would turn the footer's black
+       text black-on-black and recolour the card a volunteer has to recognise. -->
+  <meta name="color-scheme" content="only light" />
+  <meta name="theme-color" content="#FDF6EC" />
+  <!-- Stop iOS turning a long pass ID into a tappable phone number. -->
+  <meta name="format-detection" content="telephone=no" />
   <title>VIP Pass — BAPS Scranton</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -10,6 +17,7 @@
   <link rel="icon" type="image/png" href="/images/tab-logo.png" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
 
     :root {
       --saffron: #E8650A;
@@ -19,17 +27,28 @@
       --brown: #5C2D0A;
       --brown-mid: #8B4513;
       --text-muted: #8B6040;
+      /* Card side padding. The ticket notch bleeds out by exactly this much,
+         so both read the same variable and can never drift apart. */
+      --pad-x: clamp(20px, 6vw, 32px);
     }
+
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
     body {
       font-family: 'DM Sans', sans-serif;
       background: var(--cream);
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      /* Clear the notch / Dynamic Island and the home indicator. */
+      padding:
+        max(20px, env(safe-area-inset-top))
+        max(16px, env(safe-area-inset-right))
+        max(24px, env(safe-area-inset-bottom))
+        max(16px, env(safe-area-inset-left));
     }
 
     .top-border {
@@ -67,10 +86,11 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
+
     .pass-card {
       background: linear-gradient(160deg, #3D1F0A 0%, #6B2D0A 50%, #3D1F0A 100%);
       border-radius: 24px;
-      padding: 40px 32px;
+      padding: 36px var(--pad-x) 28px;
       position: relative;
       overflow: hidden;
       box-shadow: 0 24px 64px rgba(92,45,10,0.35), 0 0 0 1px rgba(245,200,66,0.2);
@@ -98,18 +118,18 @@
 
     .pass-header {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
       position: relative;
       z-index: 1;
     }
 
-    .pass-ornament {
-      font-size: 20px;
-      letter-spacing: 8px;
-      color: var(--gold-light);
-      opacity: 0.6;
+    /* Header artwork (VIP pass only). It takes the place of the old ✦ ✦ ✦
+       ornament, at 80% of the width the three stars spanned (98px -> 78px). */
+    .pass-art-header {
       display: block;
-      margin-bottom: 12px;
+      width: 78px;
+      height: auto;
+      margin: 0 auto 12px;
     }
 
     .pass-org {
@@ -172,9 +192,10 @@
       color: #fff;
       text-align: center;
       line-height: 1.1;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
       position: relative;
       z-index: 1;
+      overflow-wrap: anywhere;
     }
 
     .pass-event-box {
@@ -207,7 +228,7 @@
       display: flex;
       align-items: center;
       gap: 0;
-      margin: 0 -32px;
+      margin: 0 calc(-1 * var(--pad-x));
       position: relative;
       z-index: 1;
     }
@@ -223,21 +244,105 @@
       flex-shrink: 0;
     }
 
+    /* What the guest should do on arrival — on the ticket itself, because this
+       is the part a parking volunteer looks at. */
+    .pass-instruction {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 22px;
+      padding: 14px 16px;
+      background: rgba(245,200,66,0.12);
+      border: 1px solid rgba(245,200,66,0.35);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 15px;
+      line-height: 1.4;
+      text-align: left;
+      position: relative;
+      z-index: 1;
+    }
+    .pass-instruction svg {
+      flex: none;
+      width: 28px; height: 28px;
+      color: var(--gold-light);
+    }
+    .pass-instruction strong { color: var(--gold-light); font-weight: 500; }
+
     .pass-id {
       font-size: 10px;
       color: rgba(255,255,255,0.25);
       text-align: center;
       letter-spacing: 0.15em;
-      margin-top: 20px;
+      margin-top: 18px;
       font-family: monospace;
       position: relative;
       z-index: 1;
+      overflow-wrap: anywhere;
     }
 
-    /* Footer */
+    /* VIP parking directions */
+    .parking {
+      margin-top: 16px;
+      background: #fff;
+      border: 1px solid rgba(92,45,10,0.12);
+      border-radius: 18px;
+      padding: 18px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(92,45,10,0.08);
+    }
+    .parking-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--brown);
+    }
+    .parking-note {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    .map-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .map-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 48px;           /* comfortable thumb target on both platforms */
+      padding: 12px 10px;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.1s ease;
+    }
+    .map-btn svg { width: 18px; height: 18px; flex: none; }
+    .map-btn.primary { background: var(--brown); color: #fff; border: 1.5px solid var(--brown); }
+    .map-btn.secondary { background: transparent; color: var(--brown); border: 1.5px solid rgba(92,45,10,0.35); }
+    .map-btn:active { transform: scale(0.98); }
+    .map-btn:focus-visible { outline: 3px solid var(--saffron); outline-offset: 2px; }
+    @media (max-width: 340px) { .map-buttons { grid-template-columns: 1fr; } }
+
+    /* Footer artwork (VIP pass only). Black text, so it must sit on the light
+       page, never on the dark card. */
+    .pass-art-footer {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin-top: 22px;
+    }
+
     .pass-footer {
       text-align: center;
-      margin-top: 24px;
+      margin-top: 8px;
       font-size: 11px;
       color: var(--text-muted);
       letter-spacing: 0.08em;
@@ -252,6 +357,11 @@
     .error-box .icon { font-size: 48px; margin-bottom: 16px; }
     .error-box h2 { font-family: 'Cormorant Garamond', serif; font-size: 26px; color: var(--brown); margin-bottom: 8px; }
     .error-box p { font-size: 14px; color: var(--text-muted); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pass-wrap { animation: none; }
+      .map-btn { transition: none; }
+    }
   </style>
 </head>
 <body>
@@ -265,7 +375,8 @@
   <div class="pass-wrap" id="pass-wrap">
     <div class="pass-card">
       <div class="pass-header">
-        <span class="pass-ornament">✦ ✦ ✦</span>
+        <img class="pass-art-header" src="/images/APM-1.png" width="497" height="332"
+             alt="Akshar Purushottam Maharaj" decoding="async" />
         <div class="pass-org">BAPS Swaminarayan Sanstha</div>
         <div class="pass-title">VIP Invitation</div>
       </div>
@@ -286,8 +397,40 @@
         <div class="notch-circle"></div>
       </div>
 
+      <div class="pass-instruction">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 17h14M6.5 17v2M17.5 17v2M4 17v-4l2-5.5A2 2 0 0 1 7.9 6h8.2a2 2 0 0 1 1.9 1.5L20 13v4"/>
+          <path d="M4 13h16"/><circle cx="7.5" cy="15" r="0.6" fill="currentColor"/><circle cx="16.5" cy="15" r="0.6" fill="currentColor"/>
+        </svg>
+        <span>Please show this pass to a volunteer at the <strong>VIP parking lot</strong>.</span>
+      </div>
+
       <div class="pass-id" id="pass-id">—</div>
     </div>
+
+    <div class="parking" id="parking" hidden>
+      <div class="parking-title">VIP Parking</div>
+      <div class="parking-note" id="parking-note" hidden></div>
+      <div class="map-buttons" id="map-buttons">
+        <a class="map-btn" id="map-apple" target="_blank" rel="noopener"
+           aria-label="Directions to VIP parking in Apple Maps">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+          Apple Maps
+        </a>
+        <a class="map-btn" id="map-google" target="_blank" rel="noopener"
+           aria-label="Directions to VIP parking in Google Maps">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+          Google Maps
+        </a>
+      </div>
+    </div>
+
+    <!-- vip-footer.png is images/Standard Footer-Black.png resized from 2850px to
+         1260px wide (3x the widest it is shown here): 152 KB instead of 543 KB,
+         which matters on a phone in a parking lot. -->
+    <img class="pass-art-footer" src="/images/vip-footer.png" width="1260" height="265"
+         alt="Brahmaswarup Pramukh Swami Maharaj and Pragat Brahmaswarup Mahant Swami Maharaj — BAPS Swaminarayan Sanstha"
+         decoding="async" />
     <div class="pass-footer">screvents.com &nbsp;·&nbsp; BAPS Scranton Mandir</div>
   </div>
 
@@ -298,6 +441,44 @@
   </div>
 
   <script>
+    // ── VIP parking location ──────────────────────────────────────────────
+    // Coordinates are best: they drop the pin on the lot itself, which an
+    // address cannot do. Use an address only if there are no coordinates.
+    // With neither set, the parking panel stays hidden.
+    const VIP_PARKING = {
+      lat: null,          // e.g. 41.40123
+      lng: null,          // e.g. -75.66543
+      address: '',        // used only when lat/lng are not set
+      note: '',           // optional line under "VIP Parking", e.g. "Rear lot — enter from Main St"
+    };
+
+    function setupParking() {
+      const P = VIP_PARKING;
+      const hasCoords = Number.isFinite(P.lat) && Number.isFinite(P.lng);
+      const address = (P.address || '').trim();
+      if (!hasCoords && !address) return;
+      // Coordinates are URL-safe as-is; an address must be encoded.
+      const dest = hasCoords ? P.lat + ',' + P.lng : encodeURIComponent(address);
+      // Driving directions from wherever the guest is now. Both are universal
+      // links: they open the installed app on iPhone and Android, and the web
+      // map otherwise.
+      document.getElementById('map-apple').href  = 'https://maps.apple.com/?daddr=' + dest + '&dirflg=d';
+      document.getElementById('map-google').href = 'https://www.google.com/maps/dir/?api=1&destination=' + dest + '&travelmode=driving';
+
+      const note = (P.note || '').trim() || (hasCoords ? '' : address);
+      if (note) { const n = document.getElementById('parking-note'); n.textContent = note; n.hidden = false; }
+
+      // Lead with the phone's own maps app; keep the other one available.
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+      const apple = document.getElementById('map-apple'), google = document.getElementById('map-google');
+      const [first, second] = isIOS ? [apple, google] : [google, apple];
+      first.classList.add('primary'); second.classList.add('secondary');
+      document.getElementById('map-buttons').prepend(first);
+
+      document.getElementById('parking').hidden = false;
+    }
+
     (async function() {
       const parts = window.location.pathname.split('/').filter(Boolean);
       const id = parts[parts.length - 1];
@@ -317,6 +498,7 @@
         document.getElementById('event-name').textContent = pass.event_name;
         document.getElementById('event-date').textContent = pass.event_date;
         document.getElementById('pass-id').textContent = pass.id.toUpperCase();
+        setupParking();
 
         document.getElementById('loader').style.display = 'none';
         document.getElementById('pass-wrap').style.display = 'block';
