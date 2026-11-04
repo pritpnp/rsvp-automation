@@ -15,20 +15,70 @@ function normalizePhone(p) {
   return digits;
 }
 
+// ── Name matching ─────────────────────────────────────────────────────────
+// The phone number must match EXACTLY (see the query below); that is what
+// actually identifies the guest. The name is a sanity check, and it tolerates
+// misspellings: a guest whose pass says "Rajesh" gets in typing "Ragesh" or
+// "Rajish", as long as the name is at least NAME_MATCH_MIN similar.
+const NAME_MATCH_MIN = 0.6;
+
+// Words that say nothing about WHO someone is. Dropped before comparing, so a
+// pass stored as "Mr. & Mrs. Patel" or "Patel Family" still matches "Rajesh
+// Patel" on the surname.
+const NAME_STOPWORDS = new Set(['mr', 'mrs', 'ms', 'miss', 'dr', 'shri', 'shree', 'sri', 'smt', 'and', 'family']);
+
 function normalizeName(n) {
-  return String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  // Letters only (any script): "&", ".", "," and digits become spaces.
+  return String(n || '').toLowerCase().replace(/[^\p{L}\p{M}\s]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
+}
+function nameTokens(n) {
+  return normalizeName(n).split(' ').filter((t) => t.length >= 2 && !NAME_STOPWORDS.has(t));
 }
 
-// Loose name match: handles nicknames, "First Last" vs "First", etc.
+function levenshtein(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+// How alike two single words are, 0..1. One word starting with the other
+// counts as a full match — "Rajesh" for "Rajeshbhai", "Smita" for "Smitaben" —
+// once the shorter is 3+ letters. Otherwise 1 minus the share of letters that
+// had to change: "ragesh" vs "rajesh" = 1 - 1/6 = 0.83.
+function wordSimilarity(a, b) {
+  if (a === b) return 1;
+  const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+  if (s.length >= 3 && l.startsWith(s)) return 1;
+  return 1 - levenshtein(a, b) / l.length;
+}
+
+// For each word of `from`, its best match among the words of `to`, averaged.
+function directionalScore(from, to) {
+  if (!from.length || !to.length) return 0;
+  return from.reduce((sum, w) => sum + Math.max(...to.map((t) => wordSimilarity(w, t))), 0) / from.length;
+}
+
+// 0..1. Taken in whichever direction scores higher, so typing LESS than the
+// pass holds ("Rajesh" for "Rajesh Patel") or MORE ("Rajesh Patel" for a pass
+// stored as just "Rajesh") are both full matches, while a different surname
+// ("Rajesh Kumar" for "Rajesh Patel") scores 0.5 and is refused.
+function nameScore(entered, stored) {
+  const a = nameTokens(entered), b = nameTokens(stored);
+  if (a.length && b.length) return Math.max(directionalScore(a, b), directionalScore(b, a));
+  // Nothing left after dropping stopwords: compare the whole strings.
+  const x = normalizeName(entered).replace(/ /g, ''), y = normalizeName(stored).replace(/ /g, '');
+  if (!x || !y) return 0;
+  return 1 - levenshtein(x, y) / Math.max(x.length, y.length);
+}
+
 function namesMatch(entered, stored) {
-  const a = normalizeName(entered);
-  const b = normalizeName(stored);
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
-  const aTokens = a.split(' ').filter(t => t.length >= 2);
-  const bTokens = b.split(' ').filter(t => t.length >= 2);
-  return aTokens.some(t => bTokens.includes(t));
+  return nameScore(entered, stored) >= NAME_MATCH_MIN;
 }
 
 function getClientIp(event) {
