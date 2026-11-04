@@ -282,7 +282,13 @@
     }
 
     /* VIP parking directions */
+    /* position + z-index on this and on the footer below: the card is a
+       positioned element, and browsers paint positioned elements AFTER plain
+       blocks, so the card's deep drop shadow was drawn on top of the panel's
+       white background. Raising these puts the shadow behind them. */
     .parking {
+      position: relative;
+      z-index: 1;
       margin-top: 16px;
       background: #fff;
       border: 1px solid rgba(92,45,10,0.12);
@@ -334,6 +340,8 @@
     /* Footer artwork (VIP pass only). Black text, so it must sit on the light
        page, never on the dark card. */
     .pass-art-footer {
+      position: relative;
+      z-index: 1;
       display: block;
       width: 80%;
       height: auto;
@@ -341,6 +349,8 @@
     }
 
     .pass-footer {
+      position: relative;
+      z-index: 1;
       text-align: center;
       margin-top: 8px;
       font-size: 11px;
