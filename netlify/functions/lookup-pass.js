@@ -77,8 +77,26 @@ function nameScore(entered, stored) {
   return 1 - levenshtein(x, y) / Math.max(x.length, y.length);
 }
 
+// The rule this replaced, kept VERBATIM and OR-ed in, so every name it
+// accepted is still accepted by construction. It matters most for couples and
+// families sharing a pass: a spouse typing their own name ("Urmi Patel") finds
+// a pass in their partner's name ("Bhavin Patel") through the shared surname.
+// The similarity score alone puts that at 58%, because the two first names
+// share almost no letters.
+function legacyNamesMatch(entered, stored) {
+  const norm = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const a = norm(entered);
+  const b = norm(stored);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const aTokens = a.split(' ').filter(t => t.length >= 2);
+  const bTokens = b.split(' ').filter(t => t.length >= 2);
+  return aTokens.some(t => bTokens.includes(t));
+}
+
 function namesMatch(entered, stored) {
-  return nameScore(entered, stored) >= NAME_MATCH_MIN;
+  return legacyNamesMatch(entered, stored) || nameScore(entered, stored) >= NAME_MATCH_MIN;
 }
 
 function getClientIp(event) {
