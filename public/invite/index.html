@@ -247,6 +247,19 @@
       if (clean !== phoneEl.value) phoneEl.value = clean;
     });
 
+    const BTN_LABEL = 'View My Invitation →';
+    function resetButton() {
+      btn.disabled = false;
+      btn.textContent = BTN_LABEL;
+    }
+    // Pressing Back from a pass restores this page from the browser's
+    // back/forward cache exactly as it was left — mid-lookup, button disabled,
+    // "Looking up..." — without re-running this script. Reset it on every
+    // such return so another name can be looked up without a refresh.
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) { resetButton(); clearError(); }
+    });
+
     function showError(msg) {
       errEl.textContent = msg;
       errEl.style.display = 'block';
@@ -285,16 +298,14 @@
 
         if (!res.ok || !data.id) {
           showError(data.error || "We couldn't find an invitation for that name and phone. Please check and try again.");
-          btn.disabled = false;
-          btn.textContent = 'View My Invitation →';
+          resetButton();
           return;
         }
 
         window.location.href = '/vip/' + data.id;
       } catch (err) {
         showError('Something went wrong. Please try again in a moment.');
-        btn.disabled = false;
-        btn.textContent = 'View My Invitation →';
+        resetButton();
       }
     });
   </script>
