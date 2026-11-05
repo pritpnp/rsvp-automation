@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="only light" />
+  <meta name="theme-color" content="#FDF6EC" />
+  <meta name="robots" content="noindex" />
+  <title>VIP Check-In — BAPS Scranton</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="/images/tab-logo.png" />
+  <!-- Volunteer scan page. Volunteers are added by the superadmin (admin portal,
+       Volunteers tab); everything here talks to netlify/functions/volunteer-scan.js.
+       QR decoding: jsQR (/lib/jsQR.js), loaded only on this page. -->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+
+    :root {
+      --saffron: #E8650A;
+      --gold: #C8860A;
+      --gold-light: #F5C842;
+      --cream: #FDF6EC;
+      --cream-dark: #F5E6CC;
+      --brown: #5C2D0A;
+      --text-muted: #8B6040;
+      --green: #166534; --green-bg: #DCFCE7;
+      --amber: #92400E; --amber-bg: #FEF3C7;
+      --red: #991B1B;   --red-bg: #FEE2E2;
+    }
+
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      color: var(--brown);
+      min-height: 100vh; min-height: 100dvh;
+      padding:
+        max(20px, env(safe-area-inset-top))
+        max(16px, env(safe-area-inset-right))
+        max(24px, env(safe-area-inset-bottom))
+        max(16px, env(safe-area-inset-left));
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .top-border { position: fixed; top: 0; left: 0; right: 0; height: 4px; z-index: 5;
+      background: linear-gradient(90deg, var(--brown), var(--saffron), var(--gold-light), var(--saffron), var(--brown)); }
+
+    .wrap { width: 100%; max-width: 440px; }
+
+    .head { text-align: center; margin: 8px 0 18px; }
+    .org { font-size: 10px; font-weight: 500; letter-spacing: 0.25em; text-transform: uppercase; color: var(--text-muted); }
+    h1 { font-family: 'Cormorant Garamond', serif; font-size: 32px; font-weight: 700; line-height: 1.1; margin-top: 4px; }
+
+    .card { background: #fff; border: 1px solid rgba(92,45,10,0.10); border-radius: 18px; padding: 20px;
+            box-shadow: 0 10px 30px rgba(92,45,10,0.08); }
+
+    label { display: block; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--text-muted); margin: 0 0 6px; }
+    input[type=text], input[type=password] {
+      width: 100%; font: inherit; font-size: 17px; padding: 13px 14px; margin-bottom: 14px;
+      border: 1.5px solid var(--cream-dark); border-radius: 12px; background: var(--cream); color: var(--brown);
+    }
+    input:focus { outline: none; border-color: var(--gold); }
+
+    .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px;
+           border: none; border-radius: 14px; font: inherit; font-size: 17px; font-weight: 500; cursor: pointer;
+           -webkit-tap-highlight-color: transparent; text-decoration: none; }
+    .btn:active { transform: scale(0.985); }
+    .btn:disabled { opacity: 0.6; }
+    .btn-primary { background: linear-gradient(135deg, var(--saffron), var(--gold)); color: #fff; }
+    .btn-go      { background: #15803D; color: #fff; font-size: 20px; min-height: 60px; }
+    .btn-ghost   { background: transparent; color: var(--brown); border: 1.5px solid rgba(92,45,10,0.3); }
+    .btn + .btn  { margin-top: 10px; }
+    .btn:focus-visible { outline: 3px solid var(--saffron); outline-offset: 2px; }
+
+    .msg { border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.4; margin-top: 12px; }
+    .msg.err  { background: var(--red-bg); color: var(--red); }
+    .msg.info { background: var(--cream); color: var(--text-muted); }
+
+    .bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px;
+           color: var(--text-muted); margin-bottom: 12px; }
+    .bar button { background: none; border: none; color: var(--gold); font: inherit; font-size: 13px; font-weight: 500;
+                  cursor: pointer; padding: 8px 0 8px 8px; }
+
+    /* Camera */
+    .viewer { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 18px; overflow: hidden;
+              background: #1d1006; box-shadow: 0 10px 30px rgba(92,45,10,0.18); }
+    .viewer video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .frame { position: absolute; inset: 16%; pointer-events: none; }
+    .frame i { position: absolute; width: 34px; height: 34px; border: 4px solid var(--gold-light); }
+    .frame i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 12px; }
+    .frame i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 12px; }
+    .frame i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 12px; }
+    .frame i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 12px; }
+    .viewer-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                  padding: 24px; text-align: center; color: rgba(255,255,255,0.85); font-size: 15px; line-height: 1.45; }
+    .hint { text-align: center; font-size: 15px; color: var(--brown); margin: 14px 0; line-height: 1.4; }
+    .tip  { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 14px; line-height: 1.4; }
+
+    /* Result */
+    .badge { display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 14px;
+             padding: 14px; font-size: 19px; font-weight: 500; text-align: center; }
+    .badge svg { width: 26px; height: 26px; flex: none; }
+    .badge.ok   { background: var(--green-bg); color: var(--green); }
+    .badge.warn { background: var(--amber-bg); color: var(--amber); }
+    .badge.bad  { background: var(--red-bg);   color: var(--red); }
+    .guest { font-family: 'Cormorant Garamond', serif; font-size: clamp(32px, 9vw, 42px); font-weight: 700;
+             text-align: center; line-height: 1.1; margin: 18px 0 6px; overflow-wrap: anywhere; }
+    .event { text-align: center; font-size: 16px; color: var(--brown); }
+    .when  { text-align: center; font-size: 14px; color: var(--text-muted); margin-top: 2px; }
+    .when span { white-space: nowrap; }
+    .note  { margin-top: 16px; font-size: 15px; line-height: 1.45; text-align: center; color: var(--amber); }
+    .actions { margin-top: 20px; }
+    .loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 28px 0; color: var(--text-muted); }
+    .spinner { width: 26px; height: 26px; border: 3px solid rgba(200,134,10,0.2); border-top-color: var(--gold);
+               border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+  </style>
+</head>
+<body>
+  <div class="top-border"></div>
+  <div class="wrap">
+    <div class="head">
+      <div class="org">BAPS Swaminarayan Sanstha</div>
+      <h1>VIP Check-In</h1>
+    </div>
+
+    <!-- ── Sign in ── -->
+    <section id="login-view" hidden>
+      <form class="card" id="login-form" autocomplete="on">
+        <label for="username">Username</label>
+        <input type="text" id="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required />
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" required />
+        <button class="btn btn-primary" id="login-btn" type="submit">Sign In</button>
+        <div class="msg err" id="login-error" hidden></div>
+      </form>
+      <p class="tip">Volunteer accounts are set up by the admin.</p>
+    </section>
+
+    <!-- ── Scanner ── -->
+    <section id="scan-view" hidden>
+      <div class="bar"><span id="who"></span><button type="button" id="logout-btn">Sign out</button></div>
+      <div class="viewer">
+        <video id="video" playsinline muted autoplay></video>
+        <div class="frame" id="frame" hidden><i></i><i></i><i></i><i></i></div>
+        <div class="viewer-msg" id="viewer-msg">Starting camera…</div>
+      </div>
+      <p class="hint">Point the camera at the QR code on the guest's pass.</p>
+      <label class="btn btn-ghost" for="photo-input" style="text-transform:none;letter-spacing:0;font-size:17px;color:var(--brown);margin:0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        Take a photo instead
+      </label>
+      <input type="file" id="photo-input" class="visually-hidden" accept="image/*" capture="environment" tabindex="-1" />
+      <div class="msg err" id="scan-error" hidden></div>
+      <p class="tip">Won't scan? Ask the guest to turn their screen brightness up.</p>
+    </section>
+
+    <!-- ── Result ── -->
+    <section id="result-view" hidden>
+      <div class="card" id="result-card"></div>
+    </section>
+  </div>
+
+  <canvas id="canvas" hidden></canvas>
+  <script src="/lib/jsQR.js"></script>
+  <script>
+    const API = '/.netlify/functions/volunteer-scan';
+    const TOKEN_KEY = 'volunteer_token', USER_KEY = 'volunteer_username';
+    const TZ = 'America/New_York';
+    const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+    const $ = (id) => document.getElementById(id);
+    const views = ['login-view', 'scan-view', 'result-view'];
+    function show(view) { views.forEach(v => $(v).hidden = v !== view); window.scrollTo(0, 0); }
+
+    let token = localStorage.getItem(TOKEN_KEY) || '';
+
+    async function api(path, opts = {}) {
+      const res = await fetch(API + path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', 'x-volunteer-token': token, ...(opts.headers || {}) }
+      });
+      let data = {};
+      try { data = await res.json(); } catch (e) {}
+      if (res.status === 401 && path !== '/login') { signedOut('Your sign-in has expired. Please sign in again.'); throw new Error('signed out'); }
+      if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+      return data;
+    }
+
+    // ── Sign in / out ────────────────────────────────────────────────────
+    function signedOut(message) {
+      stopCamera();
+      token = '';
+      localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY);
+      const e = $('login-error');
+      e.textContent = message || ''; e.hidden = !message;
+      show('login-view');
+    }
+
+    $('login-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const btn = $('login-btn'), err = $('login-error');
+      err.hidden = true; btn.disabled = true; btn.textContent = 'Signing in…';
+      try {
+        const d = await api('/login', { method: 'POST', body: JSON.stringify({ username: $('username').value, password: $('password').value }) });
+        token = d.token;
+        localStorage.setItem(TOKEN_KEY, d.token); localStorage.setItem(USER_KEY, d.username);
+        $('password').value = '';
+        startScanning();
+      } catch (e) {
+        err.textContent = e.message; err.hidden = false;
+      } finally {
+        btn.disabled = false; btn.textContent = 'Sign In';
+      }
+    });
+
+    $('logout-btn').addEventListener('click', async () => {
+      api('/logout', { method: 'POST' }).catch(() => {});
+      signedOut('');
+    });
+
+    // ── Camera ───────────────────────────────────────────────────────────
+    const video = $('video'), canvas = $('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let stream = null, scanning = false, rafId = 0, lastTick = 0, wakeLock = null;
+
+    function viewerMessage(text) { const m = $('viewer-msg'); m.textContent = text || ''; m.hidden = !text; $('frame').hidden = !!text; }
+
+    async function startCamera() {
+      if (stream) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        viewerMessage('This browser can\'t open the camera here. Use "Take a photo instead" below.');
+        return;
+      }
+      viewerMessage('Starting camera…');
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+      } catch (e) {
+        stream = null;
+        viewerMessage(e && e.name === 'NotAllowedError'
+          ? 'Camera access is blocked. Allow the camera for screvents.com in your browser settings, or use "Take a photo instead" below.'
+          : 'Could not open the camera. Use "Take a photo instead" below.');
+        return;
+      }
+      if ($('scan-view').hidden) { stopCamera(); return; }   // left the screen while asking
+      video.srcObject = stream;
+      try { await video.play(); } catch (e) {}
+      viewerMessage('');
+      scanning = true;
+      lastTick = 0;
+      rafId = requestAnimationFrame(tick);
+      try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+    }
+
+    function stopCamera() {
+      scanning = false;
+      cancelAnimationFrame(rafId);
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      video.srcObject = null;
+      if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+    }
+
+    // Decode a frame about 6 times a second, from a copy at most 720px on its
+    // long side: plenty for a QR code filling part of the view, and light on
+    // an older phone.
+    function tick(now) {
+      if (!scanning) return;
+      rafId = requestAnimationFrame(tick);
+      if (now - lastTick < 160 || video.readyState < 2 || !video.videoWidth) return;
+      lastTick = now;
+      const text = decode(video, video.videoWidth, video.videoHeight, 720, 'dontInvert');
+      if (text) found(text);
+    }
+
+    function decode(source, w, h, maxSide, inversion) {
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      canvas.width = Math.max(1, Math.round(w * scale));
+      canvas.height = Math.max(1, Math.round(h * scale));
+      ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = window.jsQR ? jsQR(img.data, img.width, img.height, { inversionAttempts: inversion }) : null;
+      return code && code.data ? code.data : '';
+    }
+
+    // ── Photo fallback ───────────────────────────────────────────────────
+    async function loadImage(file) {
+      if (window.createImageBitmap) {
+        try { return await createImageBitmap(file); } catch (e) {}
+      }
+      return await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Could not read that photo.'));
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    // A phone photo is large and the code may fill only part of it, so try a
+    // few sizes, most detailed first.
+    async function decodeFile(file) {
+      const img = await loadImage(file);
+      const w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
+      for (const side of [1600, 1000, 640]) {
+        const text = decode(img, w, h, side, 'attemptBoth');
+        if (text) return text;
+      }
+      return '';
+    }
+
+    $('photo-input').addEventListener('change', async (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      ev.target.value = '';
+      if (!file) return;
+      $('scan-error').hidden = true;
+      stopCamera();
+      viewerMessage('Reading photo…');
+      try {
+        const text = await decodeFile(file);
+        if (text) { found(text); return; }
+        const e = $('scan-error');
+        e.textContent = 'No QR code found in that photo. Try again closer, with the whole code in the picture.';
+        e.hidden = false;
+      } catch (e) {
+        const el = $('scan-error'); el.textContent = e.message || 'Could not read that photo.'; el.hidden = false;
+      }
+      startCamera();
+    });
+
+    // ── Result ───────────────────────────────────────────────────────────
+    function found(text) {
+      stopCamera();
+      if (navigator.vibrate) navigator.vibrate(80);
+      const m = String(text).match(UUID_RE);
+      if (!m) { renderError('Not a VIP pass', 'That QR code isn\'t from a VIP pass.'); return; }
+      lookup(m[0].toLowerCase());
+    }
+
+    const ICON_OK   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>';
+    const ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/><circle cx="12" cy="18" r="0.6" fill="currentColor"/></svg>';
+    const ICON_BAD  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7"/></svg>';
+
+    function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+    // text, plus an optional time that must not wrap ("5:50 PM").
+    function badge(kind, icon, text, time) {
+      const b = el('div', 'badge ' + kind); b.innerHTML = icon;
+      const t = el('span', '', text);
+      if (time) { t.appendChild(document.createTextNode(' ')); const n = el('span', '', time); n.style.whiteSpace = 'nowrap'; t.appendChild(n); }
+      b.appendChild(t);
+      return b;
+    }
+    function button(cls, text, onClick) { const b = el('button', 'btn ' + cls, text); b.type = 'button'; b.addEventListener('click', onClick); return b; }
+    function scanNextButton(label) { return button('btn-primary', label || 'Scan next pass', startScanning); }
+
+    function formatClock(iso) {
+      try { return new Date(iso).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }); }
+      catch (e) { return ''; }
+    }
+    // Same tidy-up as the pass page: "11 am" -> "11:00 AM"; anything else as typed.
+    function formatTime(raw) {
+      const t = String(raw || '').trim();
+      const m = t.match(/^(\d{1,2})(?:[:.](\d{2}))?\s*([ap])\.?\s*m\.?$/i);
+      if (!m || +m[1] < 1 || +m[1] > 12 || (m[2] && +m[2] > 59)) return t;
+      return (+m[1]) + ':' + (m[2] || '00') + ' ' + m[3].toUpperCase() + 'M';
+    }
+
+    function passDetails(p) {
+      const frag = document.createDocumentFragment();
+      frag.appendChild(el('div', 'guest', p.guest_name || '—'));
+      frag.appendChild(el('div', 'event', p.event_name || ''));
+      const when = el('div', 'when');
+      const start = formatTime(p.event_time && p.event_time.start);
+      const end = formatTime(p.event_time && p.event_time.end);
+      const time = start ? (end ? start + ' – ' + end : start) : '';
+      if (p.event_date) when.appendChild(el('span', '', p.event_date));
+      if (p.event_date && time) when.appendChild(document.createTextNode(' · '));
+      if (time) when.appendChild(el('span', '', time));
+      frag.appendChild(when);
+      return frag;
+    }
+
+    function renderCard(nodes) {
+      const c = $('result-card');
+      c.textContent = '';
+      nodes.forEach(n => n && c.appendChild(n));
+      show('result-view');
+    }
+
+    function renderLoading(text) {
+      const l = el('div', 'loading'); l.appendChild(el('div', 'spinner')); l.appendChild(el('span', '', text));
+      renderCard([l]);
+    }
+
+    function renderError(title, message) {
+      const actions = el('div', 'actions'); actions.appendChild(scanNextButton('Scan again'));
+      renderCard([badge('bad', ICON_BAD, title), el('p', 'note', message), actions]);
+      $('result-card').querySelector('.note').style.color = 'var(--red)';
+    }
+
+    function renderAlreadyArrived(p) {
+      const by = p.checked_in_by ? ' by ' + p.checked_in_by : '';
+      const actions = el('div', 'actions'); actions.appendChild(scanNextButton());
+      renderCard([
+        badge('warn', ICON_WARN, 'Already arrived at', formatClock(p.checked_in_at)),
+        passDetails(p),
+        el('p', 'note', 'Checked in earlier' + by + '. That\'s fine if they came in more than one car. Let them through.'),
+        actions
+      ]);
+    }
+
+    function renderValid(p) {
+      const actions = el('div', 'actions');
+      actions.appendChild(button('btn-go', 'Check In', () => checkIn(p)));
+      actions.appendChild(button('btn-ghost', 'Cancel', startScanning));
+      renderCard([badge('ok', ICON_OK, 'Valid VIP pass'), passDetails(p), actions]);
+    }
+
+    function renderCheckedIn(p, notified) {
+      const actions = el('div', 'actions'); actions.appendChild(scanNextButton());
+      renderCard([
+        badge('ok', ICON_OK, 'Checked in at', formatClock(p.checked_in_at)),
+        passDetails(p),
+        el('p', 'note', notified
+          ? 'The team has been told they\'ve arrived.'
+          : 'Checked in, but the Telegram message could not be sent. Please let the team know.'),
+        actions
+      ]);
+      $('result-card').querySelector('.note').style.color = notified ? 'var(--green)' : 'var(--amber)';
+    }
+
+    async function lookup(id) {
+      renderLoading('Checking pass…');
+      try {
+        const p = await api('/pass?id=' + encodeURIComponent(id));
+        if (p.checked_in_at) renderAlreadyArrived(p); else renderValid(p);
+      } catch (e) {
+        if (e.message !== 'signed out') renderError('Not a valid VIP pass', e.message);
+      }
+    }
+
+    async function checkIn(p) {
+      renderLoading('Checking in ' + (p.guest_name || '') + '…');
+      try {
+        const d = await api('/checkin', { method: 'POST', body: JSON.stringify({ id: p.id }) });
+        if (d.first) renderCheckedIn(d.pass, d.notified); else renderAlreadyArrived(d.pass);
+      } catch (e) {
+        if (e.message !== 'signed out') renderError('Could not check in', e.message);
+      }
+    }
+
+    function startScanning() {
+      $('scan-error').hidden = true;
+      $('who').textContent = 'Signed in as ' + (localStorage.getItem(USER_KEY) || '');
+      show('scan-view');
+      startCamera();
+    }
+
+    // Free the camera while the phone is locked or the tab is in the background.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopCamera();
+      else if (!$('scan-view').hidden) startCamera();
+    });
+
+    // ── Start ────────────────────────────────────────────────────────────
+    (async function init() {
+      if (!token) { show('login-view'); return; }
+      try {
+        const d = await api('/verify');
+        localStorage.setItem(USER_KEY, d.username);
+        startScanning();
+      } catch (e) {
+        if (e.message !== 'signed out') startScanning();
+      }
+    })();
+  </script>
+</body>
+</html>

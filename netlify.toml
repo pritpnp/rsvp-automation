@@ -69,6 +69,12 @@
   to = "/invite/index.html"
   status = 200
 
+# Volunteer VIP check-in (QR scanner).
+[[redirects]]
+  from = "/scan"
+  to = "/scan/index.html"
+  status = 200
+
 [[redirects]]
   from = "/admin/*"
   to = "/admin/index.html"

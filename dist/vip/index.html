@@ -11,6 +11,21 @@
   <!-- Stop iOS turning a long pass ID into a tappable phone number. -->
   <meta name="format-detection" content="telephone=no" />
   <title>VIP Pass — BAPS Scranton</title>
+  <!-- Link preview (iMessage, WhatsApp, etc.). Image source: tools/vip-og-template.html -->
+  <meta name="description" content="Your personal VIP pass. Please show it to a volunteer at the VIP parking lot." />
+  <meta property="og:title" content="Your VIP Pass — BAPS Scranton" />
+  <meta property="og:description" content="Your personal VIP pass. Please show it to a volunteer at the VIP parking lot." />
+  <meta property="og:image" content="https://screvents.com/images/vip-og.jpg?v=1" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:alt" content="VIP Invitation — BAPS Swaminarayan Sanstha, Scranton" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="SCREvents" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Your VIP Pass — BAPS Scranton" />
+  <meta name="twitter:description" content="Your personal VIP pass. Please show it to a volunteer at the VIP parking lot." />
+  <meta name="twitter:image" content="https://screvents.com/images/vip-og.jpg?v=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
@@ -222,6 +237,9 @@
       color: rgba(255,255,255,0.7);
       font-weight: 400;
     }
+    /* Date and time each stay whole; a narrow phone wraps at the " · " between
+       them rather than splitting "11:00 AM" across two lines. */
+    .pass-event-date span { white-space: nowrap; }
 
     /* Ticket notch effect */
     .pass-notch {
@@ -268,6 +286,21 @@
       color: var(--gold-light);
     }
     .pass-instruction strong { color: var(--gold-light); font-weight: 500; }
+
+    /* QR code the parking volunteer scans at /scan. It encodes this pass's own
+       link, so a phone's ordinary camera app opens the pass too. Black on a
+       white tile with a quiet margin, whatever the card colour. */
+    .pass-qr {
+      position: relative;
+      z-index: 1;
+      width: min(196px, 62%);
+      margin: 18px auto 0;
+      padding: 8px;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 0 0 1px rgba(245,200,66,0.35);
+    }
+    .pass-qr svg { display: block; width: 100%; height: auto; shape-rendering: crispEdges; }
 
     .pass-id {
       font-size: 10px;
@@ -416,6 +449,8 @@
         <span>Please show this pass to a volunteer at the <strong>VIP parking lot</strong>.</span>
       </div>
 
+      <div class="pass-qr" id="pass-qr" hidden></div>
+
       <div class="pass-id" id="pass-id">—</div>
     </div>
 
@@ -451,7 +486,22 @@
     <p>This VIP pass link is invalid or has been removed.</p>
   </div>
 
+  <script src="/lib/qrcode.js"></script>
   <script>
+    // ── QR code ────────────────────────────────────────────────────────────
+    // If the library failed to load, the pass still shows — just without it.
+    function drawQr(id) {
+      if (typeof qrcode !== 'function') return;
+      try {
+        const qr = qrcode(0, 'M');
+        qr.addData(window.location.origin + '/vip/' + id);
+        qr.make();
+        const box = document.getElementById('pass-qr');
+        box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 8, scalable: true, title: 'QR code for this VIP pass' });
+        box.hidden = false;
+      } catch (e) {}
+    }
+
     // ── VIP parking ────────────────────────────────────────────────────────
     // Set per event in the admin portal (Create Event / Edit) and returned by
     // get-pass as { location, note }, or null when the event has none — in
@@ -496,6 +546,28 @@
       document.getElementById('parking').hidden = false;
     }
 
+    // ── Event time ─────────────────────────────────────────────────────────
+    // Typed free-form in the admin portal ("11 am", "11:00am", "6:00 pm").
+    // Tidy the common shapes to "11:00 AM"; anything else is shown as typed.
+    function formatTime(raw) {
+      const t = String(raw || '').trim();
+      const m = t.match(/^(\d{1,2})(?:[:.](\d{2}))?\s*([ap])\.?\s*m\.?$/i);
+      if (!m || +m[1] < 1 || +m[1] > 12 || (m[2] && +m[2] > 59)) return t;
+      return (+m[1]) + ':' + (m[2] || '00') + ' ' + m[3].toUpperCase() + 'M';
+    }
+    function showEventDate(dateText, eventTime) {
+      const el = document.getElementById('event-date');
+      el.textContent = '';
+      const add = (text) => { const s = document.createElement('span'); s.textContent = text; el.appendChild(s); };
+      const start = formatTime(eventTime && eventTime.start);
+      const end   = formatTime(eventTime && eventTime.end);
+      const time  = start ? (end ? start + ' – ' + end : start) : '';
+      if (dateText) add(dateText);
+      if (dateText && time) el.appendChild(document.createTextNode(' · '));
+      if (time) add(time);
+      if (!dateText && !time) el.textContent = '—';
+    }
+
     (async function() {
       const parts = window.location.pathname.split('/').filter(Boolean);
       const id = parts[parts.length - 1];
@@ -513,8 +585,9 @@
 
         document.getElementById('guest-name').textContent = pass.guest_name;
         document.getElementById('event-name').textContent = pass.event_name;
-        document.getElementById('event-date').textContent = pass.event_date;
+        showEventDate(pass.event_date, pass.event_time);
         document.getElementById('pass-id').textContent = pass.id.toUpperCase();
+        drawQr(pass.id);
         setupParking(pass.parking);
 
         document.getElementById('loader').style.display = 'none';

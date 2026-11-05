@@ -357,6 +357,30 @@
         </div>
       </div>
 
+      <!-- ── Volunteers ── -->
+      <div class="tab-panel" id="tab-volunteers">
+        <div class="card">
+          <h2>Add Volunteer</h2>
+          <p style="font-size:13px;color:var(--text-muted);line-height:1.5;margin:-4px 0 14px">
+            Volunteers sign in on their phone at
+            <a href="/scan" target="_blank" style="color:var(--gold);font-weight:500;text-decoration:none">screvents.com/scan</a>
+            to scan VIP passes at the parking lot. When a guest is checked in, the admin Telegram group is told they've arrived.
+            Volunteers can't see anything else.
+          </p>
+          <div class="form-row">
+            <div class="form-group"><label>Username</label><input type="text" id="new-volunteer-username" placeholder="e.g. ravi" autocapitalize="none" autocomplete="off" /></div>
+            <div class="form-group"><label>Password</label><input type="password" id="new-volunteer-password" placeholder="At least 4 characters" autocomplete="new-password" /></div>
+          </div>
+          <button class="btn-create" onclick="createVolunteer()">Add Volunteer →</button>
+          <div id="volunteer-error" style="display:none;margin-top:10px;padding:10px 14px;background:#fef2f2;border-radius:10px;font-size:13px;color:#991b1b"></div>
+          <div id="volunteer-success" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border-radius:10px;font-size:13px;color:#166534"></div>
+        </div>
+        <div class="card">
+          <h2>Volunteers</h2>
+          <div id="volunteers-container"><div class="spinner"></div></div>
+        </div>
+      </div>
+
       <!-- ── Events ── -->
       <div class="tab-panel" id="tab-events">
 
@@ -560,6 +584,7 @@
     const AUTH_API              = '/.netlify/functions/manager-auth';
     const EVENTS_API            = '/.netlify/functions/superadmin-events';
     const MANAGERS_API          = '/.netlify/functions/superadmin-managers';
+    const VOLUNTEERS_API        = '/.netlify/functions/superadmin-volunteers';
     const UPDATE_EVENT_NAME_API = '/.netlify/functions/update-event-name';
     const TRIGGER_REDEPLOY_API  = '/.netlify/functions/trigger-redeploy';
     const REFRESH_FLYERS_API    = '/.netlify/functions/refresh-flyers';
@@ -608,6 +633,7 @@
       if (permissions.view_rsvps || isSuperadmin) tabsHtml += _tab('archive', '📦 Archive');
       if (isSuperadmin) {
         tabsHtml += _tab('managers', '👤 Managers');
+        tabsHtml += _tab('volunteers', '🙋 Volunteers');
         tabsHtml += _tab('events', '📅 Events');
         tabsHtml += _tab('flyers', '🖼 Flyers');
         tabsHtml += _tab('audit', '📜 Audit Log');
@@ -678,6 +704,7 @@
       if (tab === 'rsvps')   loadRsvps();
       if (tab === 'archive') loadArchive();
       if (tab === 'audit')   loadAuditLog();
+      if (tab === 'volunteers') loadVolunteers();
     }
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
@@ -831,6 +858,7 @@
             ${canDelete ? `<input type="checkbox" id="cb-${p.id}" data-pass-id="${p.id}" onchange="togglePassSelect('${p.id}', this.checked)" style="width:16px;height:16px;flex-shrink:0;accent-color:var(--saffron);cursor:pointer" />` : ''}
             <div class="item-info">
               <div class="item-name">${escapeHtml(p.guest_name)}</div>
+              ${p.checked_in_at ? `<div class="item-sub" style="color:#166534;font-weight:500">✅ Arrived ${escapeHtml(arrivalTime(p.checked_in_at))}${p.checked_in_by ? ' · checked in by ' + escapeHtml(p.checked_in_by) : ''}</div>` : ''}
               <div class="item-sub">${p.phone ? '📞 ' + [p.phone, ...(p.extra_phones || [])].map(escapeHtml).join(' · ') : '<span style="color:#dc2626">⚠ No phone — invite lookup disabled</span>'}</div>
               <a class="item-link" href="https://screvents.com/invite" target="_blank">screvents.com/invite ↗ (share this)</a>
               <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank" style="opacity:0.6">direct preview: /vip/${p.id} ↗</a>
@@ -1761,6 +1789,112 @@
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
       loadManagers();
+    }
+
+    // ── Volunteers ─────────────────────────────────────────────────────────
+    // Accounts for the /scan check-in page. Separate from managers; a
+    // volunteer can only look up and check in VIP passes.
+    async function loadVolunteers() {
+      const c = document.getElementById('volunteers-container');
+      try {
+        const res = await fetch(VOLUNTEERS_API, { headers: { 'x-manager-token': sessionToken } });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { c.innerHTML = '<div class="empty-state">' + escapeHtml(data.error || 'Could not load volunteers. Try refreshing or signing out and back in.') + '</div>'; return; }
+        renderVolunteers(data);
+      } catch (e) {
+        c.innerHTML = '<div class="empty-state">Could not load volunteers. Try refreshing or signing out and back in.</div>';
+      }
+    }
+
+    function renderVolunteers(list) {
+      const c = document.getElementById('volunteers-container');
+      if (!list.length) { c.innerHTML = '<div class="empty-state">No volunteers yet. Add one above.</div>'; return; }
+      c.innerHTML = '<div class="item-list">' + list.map(v => `
+        <div class="item" id="vol-${v.id}" style="flex-direction:column;align-items:stretch;gap:10px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="item-info">
+              <div class="item-name">${escapeHtml(v.username)}</div>
+              <div class="item-sub">Added ${new Date(v.created_at).toLocaleDateString()}</div>
+            </div>
+            <button onclick="toggleVolunteerPassword('${v.id}')" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0">New password</button>
+            <button class="btn-delete" onclick="deleteVolunteer('${v.id}')">Remove</button>
+          </div>
+          <div id="vol-pw-${v.id}" style="display:none;background:var(--cream);border-radius:10px;padding:14px">
+            <div class="form-row">
+              <div class="form-group"><label>New Password</label><input type="password" id="vol-pw-input-${v.id}" placeholder="At least 4 characters" autocomplete="new-password" /></div>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:8px">Saving signs ${escapeHtml(v.username)} out on every phone.</div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button onclick="saveVolunteerPassword('${v.id}')" style="padding:8px 20px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
+              <button onclick="toggleVolunteerPassword('${v.id}')" style="padding:8px 16px;background:none;border:1px solid var(--cream-dark);color:var(--text-muted);border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">Cancel</button>
+            </div>
+            <div id="vol-pw-err-${v.id}" style="display:none;margin-top:8px;color:#991b1b;font-size:12px"></div>
+          </div>
+        </div>`).join('') + '</div>';
+    }
+
+    async function createVolunteer() {
+      const username = document.getElementById('new-volunteer-username').value.trim();
+      const password = document.getElementById('new-volunteer-password').value;
+      const errEl = document.getElementById('volunteer-error');
+      const sucEl = document.getElementById('volunteer-success');
+      errEl.style.display = 'none';
+      if (!username || !password) { errEl.textContent = 'Please fill in both fields'; errEl.style.display = 'block'; return; }
+      try {
+        const res = await fetch(VOLUNTEERS_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ username, password }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { errEl.textContent = data.error || 'Could not add volunteer'; errEl.style.display = 'block'; return; }
+        ['new-volunteer-username', 'new-volunteer-password'].forEach(id => document.getElementById(id).value = '');
+        sucEl.textContent = `✅ Volunteer "${data.username}" added. They sign in at screvents.com/scan.`;
+        sucEl.style.display = 'block';
+        setTimeout(() => sucEl.style.display = 'none', 8000);
+        loadVolunteers();
+      } catch (e) {
+        errEl.textContent = 'Network error — could not add volunteer. Please try again.'; errEl.style.display = 'block';
+      }
+    }
+
+    async function deleteVolunteer(id) {
+      const username = document.querySelector('#vol-' + id + ' .item-name')?.textContent || 'this volunteer';
+      if (!confirm('Remove volunteer "' + username + '"? They will be signed out right away.')) return;
+      try {
+        const res = await fetch(VOLUNTEERS_API, { method: 'DELETE', headers: authHeaders(), body: JSON.stringify({ id }) });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          alert(d.error || 'Failed to remove volunteer');
+          return;
+        }
+        document.getElementById('vol-' + id)?.remove();
+        if (!document.querySelector('#volunteers-container .item')) loadVolunteers();
+      } catch (e) {
+        alert('Network error — could not remove volunteer. Please try again.');
+      }
+    }
+
+    function toggleVolunteerPassword(id) {
+      const el = document.getElementById('vol-pw-' + id);
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function saveVolunteerPassword(id) {
+      const password = document.getElementById('vol-pw-input-' + id).value;
+      const errEl = document.getElementById('vol-pw-err-' + id);
+      errEl.style.display = 'none';
+      if (!password) { errEl.textContent = 'Enter a new password'; errEl.style.display = 'block'; return; }
+      try {
+        const res = await fetch(VOLUNTEERS_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id, password }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { errEl.textContent = data.error || 'Could not save'; errEl.style.display = 'block'; return; }
+        loadVolunteers();
+      } catch (e) {
+        errEl.textContent = 'Network error — please try again.'; errEl.style.display = 'block';
+      }
+    }
+
+    // Check-in time on the pass list, in the event's local time.
+    function arrivalTime(iso) {
+      try { return new Date(iso).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }); }
+      catch (e) { return ''; }
     }
 
     // ── VIP Pass Events ────────────────────────────────────────────────────

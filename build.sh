@@ -39,6 +39,10 @@ cp public/flyer-builder/flyer-render.js dist/flyer-builder/flyer-render.js
 # is versioned next to the pages it protects; Netlify reads it from dist/.
 cp public/_headers dist/_headers
 
+# Third-party browser libraries (QR code drawing on /vip, reading on /scan).
+mkdir -p dist/lib
+cp -r public/lib/. dist/lib/
+
 # Deployed pages. vetter.html / og-vetter.html are deliberately NOT copied —
 # they are unauthenticated local tuning tools ("Local tool — not deployed").
 cp public/flyer-builder/index.html dist/flyer-builder/index.html

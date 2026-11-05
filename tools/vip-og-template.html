@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!--
+  Source for images/vip-og.jpg — the link-preview card shown when a
+  screvents.com/invite or /vip/<id> link is shared (iMessage, WhatsApp, etc.).
+  Local tool, not deployed. To re-render after editing, from the repo root:
+
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+      --hide-scrollbars --window-size=1200,630 --force-device-scale-factor=2 \
+      --virtual-time-budget=8000 --screenshot=/tmp/vip-og@2x.png \
+      "file://$PWD/tools/vip-og-template.html"
+    sips -Z 1200 -s format jpeg -s formatOptions 86 /tmp/vip-og@2x.png --out images/vip-og.jpg
+    cp images/vip-og.jpg dist/images/vip-og.jpg
+
+  Then bump the ?v= on the og:image / twitter:image tags in public/invite and
+  public/vip (and their dist/ copies) so chat apps fetch the new image.
+  Keep the JPEG well under 300 KB: WhatsApp drops larger preview images.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VIP OG card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: #FDF6EC; }
+  body { position: relative; font-family: 'DM Sans', sans-serif; }
+
+  .bar { position: absolute; top: 0; left: 0; right: 0; height: 10px;
+         background: linear-gradient(90deg, #5C2D0A, #E8650A, #F5C842, #E8650A, #5C2D0A); }
+
+  /* The ticket: same colours, gold inset line and notches as the VIP pass. */
+  .card {
+    position: absolute; left: 44px; right: 44px; top: 44px; bottom: 34px;
+    border-radius: 34px; overflow: hidden;
+    background: linear-gradient(160deg, #3D1F0A 0%, #6B2D0A 50%, #3D1F0A 100%);
+    box-shadow: 0 18px 44px rgba(92,45,10,0.30), 0 0 0 1.5px rgba(245,200,66,0.25);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+  }
+  .card::before { content: ''; position: absolute; inset: 14px; border-radius: 24px;
+                  border: 1.5px solid rgba(245,200,66,0.32); }
+  .card::after  { content: ''; position: absolute; top: -50%; left: -30%; width: 160%; height: 200%;
+                  background: radial-gradient(ellipse at 30% 25%, rgba(245,200,66,0.10) 0%, transparent 55%); }
+  .notch { position: absolute; top: 50%; width: 56px; height: 56px; margin-top: -28px;
+           border-radius: 50%; background: #FDF6EC; z-index: 2; }
+  .notch.l { left: -28px; } .notch.r { right: -28px; }
+
+  .content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+  .art   { width: 168px; height: auto; margin-bottom: 18px; }
+  .org   { font-size: 21px; font-weight: 500; letter-spacing: 0.32em; text-transform: uppercase;
+           color: rgba(245,200,66,0.72); margin-bottom: 6px; }
+  .title { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 124px; line-height: 1.02;
+           color: #F5C842; letter-spacing: 0.01em; }
+  .divider { display: flex; align-items: center; gap: 16px; width: 520px; margin: 18px 0 18px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1.5px;
+           background: linear-gradient(90deg, transparent, rgba(245,200,66,0.55), transparent); }
+  .dot   { width: 9px; height: 9px; border-radius: 50%; background: #F5C842; opacity: 0.75; }
+  .sub   { font-size: 30px; color: rgba(255,255,255,0.86); }
+  .sub strong { color: #F5C842; font-weight: 500; }
+</style>
+</head>
+<body>
+  <div class="bar"></div>
+  <div class="card">
+    <div class="notch l"></div><div class="notch r"></div>
+    <div class="content">
+      <img class="art" src="../images/APM-1.png" alt="">
+      <div class="org">BAPS Swaminarayan Sanstha · Scranton</div>
+      <div class="title">VIP Invitation</div>
+      <div class="divider"><div class="dot"></div></div>
+      <div class="sub">Open your personal pass at <strong>screvents.com/invite</strong></div>
+    </div>
+  </div>
+</body>
+</html>

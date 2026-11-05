@@ -622,6 +622,8 @@ What the user sees: a single card titled something like **"Find My Invitation"**
 
 **Notable behavior:** no `localStorage`, no cookies set client-side. The redirect to `/vip/<id>` is a same-origin location change, not a fetch, so the new page gets a clean load.
 
+**Link preview:** `/invite` and every `/vip/<id>` carry Open Graph / Twitter tags pointing at `images/vip-og.jpg` (1200×630, the "VIP Invitation" ticket card), so a shared link shows that card in iMessage, WhatsApp, etc. The pass page's tags are generic — crawlers do not run the script, so no guest name ever appears in a preview. Source: `tools/vip-og-template.html` (re-render steps in its header comment; keep the JPEG under ~300 KB for WhatsApp and bump the `?v=` on the tags after changing it).
+
 ### VIP pass viewer — `/vip/<id>`
 
 - **File:** `public/vip/index.html` (deployed to `dist/vip/index.html`).
@@ -633,9 +635,28 @@ On load the inline script:
 
 1. Parses the last path segment as the pass id (`location.pathname.split('/').filter(Boolean).pop()`).
 2. Calls `GET /.netlify/functions/get-pass?id=<id>` (see `netlify/functions/get-pass.js`).
-3. On `200 { id, guest_name, event_name, event_date }` it hides the loader and fills the card. On any other status it shows the error card.
+3. On `200 { id, guest_name, event_name, event_date, event_time, parking }` it hides the loader and fills the card. On any other status it shows the error card.
+
+The date line also shows the event's **start time** (and end time, if set) — the free-text Start Time typed on the event in the admin portal, read live by `get-pass`, so a time set after passes went out still appears. Common shapes ("11 am", "11:00am") are tidied to "11:00 AM"; anything else is shown as typed.
+
+Each pass shows a **QR code** of its own link (`/vip/<id>`), drawn in the browser with `/lib/qrcode.js` (qrcode-generator, MIT). The parking volunteer scans it at `/scan`; a phone's ordinary camera app just opens the pass. If the library fails to load, the pass still renders without the code.
 
 **Auth state required:** none. The pass id is the bearer credential — anyone who has the link can view the pass. Ids are UUIDs and are only ever surfaced after a successful `/invite` lookup or after a superadmin shares one explicitly. There is no `localStorage` or cookie state.
+
+### Volunteer VIP check-in — `/scan`
+
+- **File:** `public/scan/index.html` (deployed to `dist/scan/index.html` by `scripts/automate.js`, like the other static pages). QR reading uses `/lib/jsQR.js` (jsQR 1.4.0, Apache-2.0), loaded only on this page. `public/lib/` is copied to `dist/lib/` by `build.sh`.
+- **Netlify routing:** `/scan` is 200-rewritten to `/scan/index.html` in `netlify.toml`.
+- **Who uses it:** volunteers at the VIP parking lot, on their phones. Volunteer accounts are added, given new passwords and removed by the superadmin in the admin portal's **Volunteers** tab (`superadmin-volunteers.js`). They are not managers and cannot open `/admin`.
+
+Flow: sign in (username + password; token kept in `localStorage` as `volunteer_token` for 24 hours) → live camera viewfinder (rear camera, decoded ~6×/second) with a **Take a photo instead** fallback for phones where live video is blocked → the result card:
+
+- **Valid VIP pass** — guest name, event, date · time, and a **Check In** button.
+- **Checked in** — records the arrival and posts to the admin Telegram group (see `volunteer-scan`). If Telegram fails the volunteer is told to let the team know.
+- **Already arrived at 10:42 AM** — the pass was checked in before (e.g. a second car). Informational only; the volunteer lets them through and no second message is sent.
+- **Not a VIP pass / not found** — any other QR code, or a deleted pass.
+
+The camera is released when the phone locks or the tab is hidden, and the screen is kept awake (Wake Lock API) while scanning where supported.
 
 ### Login — `/login`
 
@@ -1024,12 +1045,48 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
 - **HTTP method:** Any (no method gate). Implicitly used as GET via query string.
 - **Auth:** Public — pass id is the bearer credential. Only callers who already know the UUID (delivered by `/invite` after name/phone match) can fetch.
 - **Request:** Query param `id` (UUID).
-- **Response:** `200 { id, guest_name, event_name, event_date }`. `400 "Missing id"`. `404 "Pass not found"`.
+- **Response:** `200 { id, guest_name, event_name, event_date, event_time: { start, end }, parking }`. `event_time` and `parking` are read live from `events` in a separate query whose failure is ignored (retrying without the parking columns if those are missing), so the pass always loads. `400 "Missing id"`. `404 "Pass not found"`.
 - **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
 - **Supabase tables:** `vip_passes` (select).
 - **External APIs:** None.
 - **Called by:** `public/vip/index.html`.
 - **Notes:** Uses service-role key so the row is fetched server-side regardless of RLS. No `OPTIONS` handler — a preflight will fall through and 400 with `"Missing id"`.
+
+#### volunteer-scan
+
+- **File:** `netlify/functions/volunteer-scan.js`
+- **Purpose:** Everything behind `/scan`: volunteer sign-in, pass lookup and arrival check-in.
+- **Routes (by path suffix, like `manager-auth`):**
+  - `POST /login { username, password }` → `{ token, username }` (24-hour session in `volunteer_sessions`). `401` wrong username/password.
+  - `POST /logout` — deletes the session.
+  - `GET /verify` → `{ valid, username }`.
+  - `GET /pass?id=<uuid>` → `{ id, guest_name, event_name, event_date, event_time, checked_in_at, checked_in_by }`. No phone numbers. `400` not a pass id, `404` not found.
+  - `POST /checkin { id }` → `{ first, notified, pass }`.
+- **Auth:** `x-volunteer-token` header (everything except login/logout). Manager and superadmin tokens are NOT accepted, and volunteer tokens are not accepted anywhere else — the two session tables are separate on purpose (in `manager_sessions`, a null `manager_id` means superadmin).
+- **Check-in:** a single `UPDATE … WHERE id = ? AND checked_in_at IS NULL`, so only the first scan of a pass records `checked_in_at` / `checked_in_by`, even if two volunteers scan it at once. Only that first check-in posts to the admin group (`TELEGRAM_CHAT_ID`), HTML parse mode:
+
+  ```
+  ⭐ <b>VIP Ravi Patel has arrived at 10:42 AM</b>
+
+  <b>VIPs that have arrived (3 of 12):</b>
+  Anil Shah
+  Meera Desai
+  Ravi Patel
+  ```
+
+  The list is every checked-in pass for the same event in arrival order ("of 12" = passes for the event). Times are America/New_York. Over Telegram's 4096-character limit the oldest names are folded into "…and N earlier". The Telegram call is awaited (6 s timeout); a failure leaves the check-in in place and returns `notified: false`.
+- **Before the migration:** `503` with "ask the admin to run the volunteers SQL" (`scripts/migrations/2026-11-05-add-volunteers-and-checkins.sql`).
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- **Supabase tables:** `volunteers`, `volunteer_sessions`, `vip_passes`, `events` (start/end time), `audit_log` (`volunteer.login`, `pass.checkin`; actor shown as `<username> (volunteer)`).
+- **Called by:** `public/scan/index.html`.
+
+#### superadmin-volunteers
+
+- **File:** `netlify/functions/superadmin-volunteers.js`
+- **Purpose:** Superadmin CRUD for volunteer accounts (admin portal → Volunteers tab).
+- **HTTP method:** `GET` list (`id, username, created_at` — never the hash), `POST { username, password }`, `PATCH { id, username?, password? }`, `DELETE { id }`.
+- **Auth:** superadmin only — `x-admin-password` or a superadmin `x-manager-token`, same as `superadmin-managers`.
+- **Notes:** usernames are lower-cased and trimmed; passwords need 4+ characters (bcrypt-hashed). A new password, or removal, deletes that volunteer's sessions, signing them out on every phone at once. `503` with a setup message before the migration is run. Audited as `volunteer.create` / `volunteer.update` / `volunteer.delete`.
 
 #### admin-passes
 
@@ -1879,6 +1936,8 @@ The GitHub Actions scripts (`scripts/automate.js`, `scripts/cleanup-past-rsvps.j
 | `event_name` | `text` | Denormalized at creation time so the public `/vip/<id>` page can render without a join. |
 | `event_date` | `text` | `'YYYY-MM-DD'` or `'YYYY-MM-DD – YYYY-MM-DD'` depending on whether the event's start/end match. |
 | `created_at` | `timestamptz` | `ORDER BY created_at DESC`. |
+| `checked_in_at` | `timestamptz` null | First arrival, set by a volunteer at `/scan` (`volunteer-scan.js`). Never overwritten by a later scan. Shown as "✅ Arrived 10:42 AM" in the admin pass list. |
+| `checked_in_by` | `text` null | Volunteer username who checked them in. |
 
 **Read by.** `netlify/functions/admin-passes.js` (full select with `events(event_name, start_date)` embed, plus per-event dedup `SELECT phone_normalized WHERE event_id = ? AND phone_normalized IN (...)` and count `SELECT * count exact head true WHERE event_id = ?`); `netlify/functions/lookup-pass.js` (`SELECT id, guest_name, event_id, created_at WHERE phone_normalized = ? ORDER BY created_at DESC`); `netlify/functions/get-pass.js` (`SELECT id, guest_name, event_name, event_date WHERE id = ?`).
 
@@ -1892,6 +1951,32 @@ The GitHub Actions scripts (`scripts/automate.js`, `scripts/cleanup-past-rsvps.j
 - `(event_id, phone_normalized)` — per-event dedup `eq + in` filter.
 - `(event_id)` — list filter + count.
 - `(created_at DESC)` — admin list ordering.
+
+---
+
+### Table: `volunteers`
+
+**Purpose.** Accounts for the `/scan` check-in page, added by the superadmin. Kept apart from `managers` so a volunteer can never reach the admin portal. Created by `scripts/migrations/2026-11-05-add-volunteers-and-checkins.sql`.
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | `gen_random_uuid()` |
+| `username` | `text` unique | Lower-cased, trimmed. |
+| `password_hash` | `text` | bcrypt. |
+| `created_at` | `timestamptz` | |
+
+### Table: `volunteer_sessions`
+
+**Purpose.** 24-hour sign-in tokens for `/scan`. `volunteer_id` references `volunteers(id) on delete cascade`, so removing a volunteer signs them out. Deliberately not `manager_sessions`, where a null `manager_id` means superadmin.
+
+| column | type | notes |
+| --- | --- | --- |
+| `token` | `text` PK | 64 hex chars. |
+| `volunteer_id` | `uuid` FK → `volunteers.id` | |
+| `expires_at` | `timestamptz` | |
+| `created_at` | `timestamptz` | |
+
+Both tables: RLS on with no policies (service key only), like the rest of the schema.
 
 ---
 
