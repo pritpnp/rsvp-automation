@@ -313,6 +313,36 @@ exports.handler = async (event) => {
     let body;
     try { body = JSON.parse(event.body || '{}'); }
     catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+
+    // Arrivals are recorded by volunteers at /scan (volunteer-scan.js).
+    //   { event_id, reset_arrivals: true }  clears the whole event's list
+    //                                       (superadmin only), e.g. after testing.
+    //   { id, clear_arrival: true }         undoes one pass, e.g. a mistaken scan.
+    // A cleared pass checks in afresh, and its next scan messages the team again.
+    const NO_ARRIVAL = { checked_in_at: null, checked_in_by: null };
+    if (body.reset_arrivals) {
+      if (auth.role !== 'superadmin') {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only the superadmin can reset all arrivals' }) };
+      }
+      if (!body.event_id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing event_id' }) };
+      const { data, error } = await supabase
+        .from('vip_passes')
+        .update(NO_ARRIVAL)
+        .eq('event_id', body.event_id)
+        .not('checked_in_at', 'is', null)
+        .select('id');
+      if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: dbError(error) }) };
+      logAudit(supabase, event, { action: 'pass.arrivals_reset', target: String(body.event_id), details: { count: (data || []).length } });
+      return { statusCode: 200, headers, body: JSON.stringify({ cleared: (data || []).length }) };
+    }
+    if (body.clear_arrival) {
+      if (!body.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
+      const { data, error } = await supabase.from('vip_passes').update(NO_ARRIVAL).eq('id', body.id).select().single();
+      if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: dbError(error) }) };
+      logAudit(supabase, event, { action: 'pass.arrival_undo', target: body.id, details: { guest_name: data.guest_name } });
+      return { statusCode: 200, headers, body: JSON.stringify(data) };
+    }
+
     const { id, guest_name, phone, extra_phones } = body;
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
 

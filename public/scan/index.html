@@ -71,7 +71,6 @@
     .btn:active { transform: scale(0.985); }
     .btn:disabled { opacity: 0.6; }
     .btn-primary { background: linear-gradient(135deg, var(--saffron), var(--gold)); color: #fff; }
-    .btn-go      { background: #15803D; color: #fff; font-size: 20px; min-height: 60px; }
     .btn-ghost   { background: transparent; color: var(--brown); border: 1.5px solid rgba(92,45,10,0.3); }
     .btn + .btn  { margin-top: 10px; }
     .btn:focus-visible { outline: 3px solid var(--saffron); outline-offset: 2px; }
@@ -150,7 +149,7 @@
         <div class="frame" id="frame" hidden><i></i><i></i><i></i><i></i></div>
         <div class="viewer-msg" id="viewer-msg">Starting camera…</div>
       </div>
-      <p class="hint">Point the camera at the QR code on the guest's pass.</p>
+      <p class="hint">Point the camera at the QR code on the guest's pass. They're checked in as soon as it scans.</p>
       <label class="btn btn-ghost" for="photo-input" style="text-transform:none;letter-spacing:0;font-size:17px;color:var(--brown);margin:0">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
         Take a photo instead
@@ -188,7 +187,7 @@
       let data = {};
       try { data = await res.json(); } catch (e) {}
       if (res.status === 401 && path !== '/login') { signedOut('Your sign-in has expired. Please sign in again.'); throw new Error('signed out'); }
-      if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+      if (!res.ok) { const err = new Error(data.error || 'Something went wrong. Please try again.'); err.status = res.status; throw err; }
       return data;
     }
 
@@ -341,7 +340,7 @@
       if (navigator.vibrate) navigator.vibrate(80);
       const m = String(text).match(UUID_RE);
       if (!m) { renderError('Not a VIP pass', 'That QR code isn\'t from a VIP pass.'); return; }
-      lookup(m[0].toLowerCase());
+      checkIn(m[0].toLowerCase());
     }
 
     const ICON_OK   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>';
@@ -416,13 +415,6 @@
       ]);
     }
 
-    function renderValid(p) {
-      const actions = el('div', 'actions');
-      actions.appendChild(button('btn-go', 'Check In', () => checkIn(p)));
-      actions.appendChild(button('btn-ghost', 'Cancel', startScanning));
-      renderCard([badge('ok', ICON_OK, 'Valid VIP pass'), passDetails(p), actions]);
-    }
-
     function renderCheckedIn(p, notified) {
       const actions = el('div', 'actions'); actions.appendChild(scanNextButton());
       renderCard([
@@ -436,23 +428,18 @@
       $('result-card').querySelector('.note').style.color = notified ? 'var(--green)' : 'var(--amber)';
     }
 
-    async function lookup(id) {
-      renderLoading('Checking pass…');
+    // The server records only the FIRST arrival (and only then messages the
+    // team); a repeat scan comes back as "already arrived".
+    async function checkIn(id) {
+      renderLoading('Checking in…');
       try {
-        const p = await api('/pass?id=' + encodeURIComponent(id));
-        if (p.checked_in_at) renderAlreadyArrived(p); else renderValid(p);
-      } catch (e) {
-        if (e.message !== 'signed out') renderError('Not a valid VIP pass', e.message);
-      }
-    }
-
-    async function checkIn(p) {
-      renderLoading('Checking in ' + (p.guest_name || '') + '…');
-      try {
-        const d = await api('/checkin', { method: 'POST', body: JSON.stringify({ id: p.id }) });
+        const d = await api('/checkin', { method: 'POST', body: JSON.stringify({ id }) });
         if (d.first) renderCheckedIn(d.pass, d.notified); else renderAlreadyArrived(d.pass);
       } catch (e) {
-        if (e.message !== 'signed out') renderError('Could not check in', e.message);
+        if (e.message === 'signed out') return;
+        if (e.status === 404 || e.status === 400) renderError('Not a valid VIP pass', e.message);
+        else if (!e.status) renderError('Could not check in', 'No connection. Check your signal and scan again.');
+        else renderError('Could not check in', e.message);
       }
     }
 

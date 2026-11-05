@@ -287,20 +287,67 @@
     }
     .pass-instruction strong { color: var(--gold-light); font-weight: 500; }
 
-    /* QR code the parking volunteer scans at /scan. It encodes this pass's own
-       link, so a phone's ordinary camera app opens the pass too. Black on a
-       white tile with a quiet margin, whatever the card colour. */
-    .pass-qr {
+    /* QR card, below the parking panel: the code the parking volunteer scans
+       at /scan. Same dark-and-gold ticket look as the pass. The code encodes
+       this pass's own link, so a phone's ordinary camera app opens the pass
+       too. It stays black on white inside a gold frame, with a quiet margin,
+       so it scans reliably whatever surrounds it. position + z-index for the
+       same shadow-stacking reason as .parking. */
+    .qr-card {
       position: relative;
       z-index: 1;
-      width: min(196px, 62%);
-      margin: 18px auto 0;
-      padding: 8px;
+      overflow: hidden;
+      margin-top: 16px;
+      padding: 24px var(--pad-x) 22px;
+      border-radius: 22px;
+      text-align: center;
+      background: linear-gradient(160deg, #3D1F0A 0%, #6B2D0A 50%, #3D1F0A 100%);
+      box-shadow: 0 14px 36px rgba(92,45,10,0.28), 0 0 0 1px rgba(245,200,66,0.2);
+    }
+    .qr-card::before {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 16px;
+      border: 1px solid rgba(245,200,66,0.25);
+      pointer-events: none;
+    }
+    .qr-card::after {
+      content: '';
+      position: absolute;
+      top: -60%; left: -40%;
+      width: 180%; height: 220%;
+      background: radial-gradient(ellipse at 50% 35%, rgba(245,200,66,0.14) 0%, transparent 55%);
+      pointer-events: none;
+    }
+    .qr-card > * { position: relative; z-index: 1; }
+    .qr-card-title {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--gold-light);
+    }
+    .qr-frame {
+      width: min(224px, 70%);
+      margin: 16px auto 0;
+      padding: 4px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #F5C842 0%, #C8860A 45%, #F5C842 70%, #C8860A 100%);
+      box-shadow: 0 6px 22px rgba(0,0,0,0.35), 0 0 0 6px rgba(245,200,66,0.10);
+    }
+    .pass-qr {
+      padding: 10px;
       background: #fff;
       border-radius: 14px;
-      box-shadow: 0 0 0 1px rgba(245,200,66,0.35);
     }
     .pass-qr svg { display: block; width: 100%; height: auto; shape-rendering: crispEdges; }
+    .qr-card-note {
+      margin-top: 14px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: rgba(255,255,255,0.72);
+    }
 
     .pass-id {
       font-size: 10px;
@@ -448,8 +495,6 @@
         <span>Please show this pass to a volunteer at the <strong>VIP parking lot</strong>.</span>
       </div>
 
-      <div class="pass-qr" id="pass-qr" hidden></div>
-
       <div class="pass-id" id="pass-id">—</div>
     </div>
 
@@ -468,6 +513,12 @@
           Google Maps
         </a>
       </div>
+    </div>
+
+    <div class="qr-card" id="qr-card" hidden>
+      <div class="qr-card-title">VIP Parking Check-In</div>
+      <div class="qr-frame"><div class="pass-qr" id="pass-qr"></div></div>
+      <div class="qr-card-note">A volunteer will scan this code when you arrive.</div>
     </div>
 
     <!-- vip-footer.png is images/Standard Footer-Black.png resized from 2850px to
@@ -495,9 +546,9 @@
         const qr = qrcode(0, 'M');
         qr.addData(window.location.origin + '/vip/' + id);
         qr.make();
-        const box = document.getElementById('pass-qr');
-        box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 8, scalable: true, title: 'QR code for this VIP pass' });
-        box.hidden = false;
+        document.getElementById('pass-qr').innerHTML =
+          qr.createSvgTag({ cellSize: 4, margin: 8, scalable: true, title: 'QR code for this VIP pass' });
+        document.getElementById('qr-card').hidden = false;
       } catch (e) {}
     }
 

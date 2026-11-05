@@ -853,13 +853,13 @@
       if (passes.length) EXTRA_PHONES_SUPPORTED = 'extra_phones' in passes[0];
       if (!passes.length) { c.innerHTML = '<div class="empty-state">No passes for this event yet.</div>'; return; }
 
-      c.innerHTML = '<div class="item-list">' + passes.map(p => `
+      c.innerHTML = arrivalsBarHtml(passes) + '<div class="item-list">' + passes.map(p => `
         <div class="item" id="pass-${p.id}" style="flex-direction:column;align-items:stretch;gap:8px">
           <div style="display:flex;align-items:center;gap:12px">
             ${canDelete ? `<input type="checkbox" id="cb-${p.id}" data-pass-id="${p.id}" onchange="togglePassSelect('${p.id}', this.checked)" style="width:16px;height:16px;flex-shrink:0;accent-color:var(--saffron);cursor:pointer" />` : ''}
             <div class="item-info">
               <div class="item-name">${escapeHtml(p.guest_name)}</div>
-              ${p.checked_in_at ? `<div class="item-sub" style="color:#166534;font-weight:500">✅ Arrived ${escapeHtml(arrivalTime(p.checked_in_at))}${p.checked_in_by ? ' · checked in by ' + escapeHtml(p.checked_in_by) : ''}</div>` : ''}
+              ${p.checked_in_at ? `<div class="item-sub" style="color:#166534;font-weight:500">✅ Arrived ${escapeHtml(arrivalTime(p.checked_in_at))}${p.checked_in_by ? ' · checked in by ' + escapeHtml(p.checked_in_by) : ''}${canEdit ? ` <button onclick="undoArrival('${p.id}')" style="background:none;border:none;padding:0 0 0 6px;color:var(--gold);text-decoration:underline;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">Undo</button>` : ''}</div>` : ''}
               <div class="item-sub">${p.phone ? '📞 ' + [p.phone, ...(p.extra_phones || [])].map(escapeHtml).join(' · ') : '<span style="color:#dc2626">⚠ No phone — invite lookup disabled</span>'}</div>
               <a class="item-link" href="https://screvents.com/invite" target="_blank">screvents.com/invite ↗ (share this)</a>
               <a class="item-link" href="https://screvents.com/vip/${p.id}" target="_blank" style="opacity:0.6">direct preview: /vip/${p.id} ↗</a>
@@ -1889,6 +1889,44 @@
         loadVolunteers();
       } catch (e) {
         errEl.textContent = 'Network error — please try again.'; errEl.style.display = 'block';
+      }
+    }
+
+    // Arrivals (volunteer check-ins at /scan) for the selected event: a count,
+    // and for the superadmin a reset — e.g. to clear test check-ins before
+    // the real event. Hidden until the check-in columns exist.
+    function arrivalsBarHtml(passes) {
+      if (!passes.length || !('checked_in_at' in passes[0])) return '';
+      const arrived = passes.filter(p => p.checked_in_at).length;
+      const reset = arrived && sessionRole === 'superadmin'
+        ? '<button onclick="resetArrivals()" style="background:none;border:1px solid #fca5a5;color:#dc2626;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:\'DM Sans\',sans-serif;flex-shrink:0">↺ Reset all arrivals</button>'
+        : '';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 14px;margin-bottom:12px;background:#f0fdf4;border-radius:10px;font-size:13px;color:#166534">'
+        + '<span>✅ <strong>' + arrived + ' of ' + passes.length + '</strong> arrived</span>' + reset + '</div>';
+    }
+
+    async function undoArrival(id) {
+      const name = document.querySelector('#pass-' + id + ' .item-name')?.textContent || 'this guest';
+      if (!confirm('Mark ' + name + ' as not arrived?\n\nIf their pass is scanned again, they will be checked in and the team messaged again.')) return;
+      try {
+        const res = await fetch(PASSES_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id, clear_arrival: true }) });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Could not undo the arrival'); return; }
+        loadPasses();
+      } catch (e) {
+        alert('Network error — please try again.');
+      }
+    }
+
+    async function resetArrivals() {
+      if (!selectedEventId) return;
+      if (!confirm('Clear ALL arrivals for this event?\n\nUse this after testing. Everyone will show as not arrived, and the Telegram list starts again from the next scan. Messages already sent stay in Telegram.')) return;
+      try {
+        const res = await fetch(PASSES_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ event_id: selectedEventId, reset_arrivals: true }) });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { alert(d.error || 'Could not reset arrivals'); return; }
+        loadPasses();
+      } catch (e) {
+        alert('Network error — please try again.');
       }
     }
 

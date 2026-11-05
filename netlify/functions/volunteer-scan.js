@@ -69,13 +69,13 @@ function formatTime(iso) {
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // The admin group message, e.g.
-//   ⭐ VIP Ravi Patel has arrived at 10:42 AM          (bold)
+//   ⭐ Ravi Patel has arrived at 10:42 AM              (bold, name underlined)
 //
 //   VIPs that have arrived (3 of 12):                  (bold)
 //   Anil Shah
 //   Ravi Patel
 function arrivalMessage(guestName, arrivedAt, arrived, total) {
-  const head = `⭐ <b>VIP ${esc(guestName)} has arrived at ${esc(formatTime(arrivedAt))}</b>\n\n` +
+  const head = `⭐ <b><u>${esc(guestName)}</u> has arrived at ${esc(formatTime(arrivedAt))}</b>\n\n` +
                `<b>VIPs that have arrived (${arrived.length}${total ? ' of ' + total : ''}):</b>\n`;
   const names = arrived.map((a) => esc(a.guest_name));
   // Telegram rejects a message over 4096 characters; keep the newest arrivals
