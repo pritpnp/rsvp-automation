@@ -228,39 +228,65 @@
     const video = $('video'), canvas = $('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     let stream = null, scanning = false, rafId = 0, lastTick = 0, wakeLock = null;
+    // Opening the camera is slow (and may wait on a permission prompt). Every
+    // stopCamera() bumps camGen, so a start that was overtaken while it waited
+    // (phone locked, photo scanned, screen left) releases what it got instead
+    // of leaving a second camera running. `starting` stops two opens at once.
+    let camGen = 0, starting = false;
 
     function viewerMessage(text) { const m = $('viewer-msg'); m.textContent = text || ''; m.hidden = !text; $('frame').hidden = !!text; }
+    const wantCamera = () => !$('scan-view').hidden && !document.hidden;
 
     async function startCamera() {
-      if (stream) return;
+      if (stream || starting) return;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         viewerMessage('This browser can\'t open the camera here. Use "Take a photo instead" below.');
         return;
       }
+      const gen = camGen;
+      starting = true;
       viewerMessage('Starting camera…');
+      let s;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        s = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false
         });
       } catch (e) {
-        stream = null;
-        viewerMessage(e && e.name === 'NotAllowedError'
-          ? 'Camera access is blocked. Allow the camera for screvents.com in your browser settings, or use "Take a photo instead" below.'
-          : 'Could not open the camera. Use "Take a photo instead" below.');
+        if (gen === camGen) {
+          viewerMessage(e && e.name === 'NotAllowedError'
+            ? 'Camera access is blocked. Allow the camera for screvents.com in your browser settings, or use "Take a photo instead" below.'
+            : 'Could not open the camera. Use "Take a photo instead" below.');
+        }
+        return;
+      } finally {
+        starting = false;
+      }
+      if (gen !== camGen || !wantCamera()) {
+        s.getTracks().forEach(t => t.stop());
+        // Stopped while opening, but the scanner is showing again (e.g. the
+        // phone was unlocked): open it afresh.
+        if (wantCamera()) startCamera();
         return;
       }
-      if ($('scan-view').hidden) { stopCamera(); return; }   // left the screen while asking
-      video.srcObject = stream;
+      stream = s;
+      video.srcObject = s;
       try { await video.play(); } catch (e) {}
+      if (gen !== camGen) return;                 // stopCamera() already released it
       viewerMessage('');
       scanning = true;
       lastTick = 0;
       rafId = requestAnimationFrame(tick);
-      try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+      if ('wakeLock' in navigator) {
+        try {
+          const lock = await navigator.wakeLock.request('screen');
+          if (gen === camGen) wakeLock = lock; else lock.release().catch(() => {});
+        } catch (e) {}
+      }
     }
 
     function stopCamera() {
+      camGen++;
       scanning = false;
       cancelAnimationFrame(rafId);
       if (stream) stream.getTracks().forEach(t => t.stop());
