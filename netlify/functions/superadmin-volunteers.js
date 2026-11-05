@@ -26,6 +26,8 @@ function fail(error) {
 }
 
 function cleanUsername(u) { return String(u || '').toLowerCase().trim(); }
+const MIN_PASSWORD = 6;
+const MAX_USERNAME = 64;   // the sign-in page refuses longer names
 
 function parseBody(event) {
   try { return JSON.parse(event.body || '{}') || {}; } catch { return null; }
@@ -74,8 +76,11 @@ exports.handler = async (event) => {
     if (!username || !password) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please fill in both username and password' }) };
     }
-    if (password.length < 4) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Password must be at least 4 characters' }) };
+    if (username.length > MAX_USERNAME) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: `Username must be at most ${MAX_USERNAME} characters` }) };
+    }
+    if (password.length < MIN_PASSWORD) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: `Password must be at least ${MIN_PASSWORD} characters` }) };
     }
     const password_hash = await bcrypt.hash(password, 10);
     const { data, error } = await supabase
@@ -96,10 +101,13 @@ exports.handler = async (event) => {
     const updates = {};
     const username = cleanUsername(body.username);
     const password = String(body.password || '');
+    if (username.length > MAX_USERNAME) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: `Username must be at most ${MAX_USERNAME} characters` }) };
+    }
     if (username) updates.username = username;
     if (password) {
-      if (password.length < 4) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Password must be at least 4 characters' }) };
+      if (password.length < MIN_PASSWORD) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: `Password must be at least ${MIN_PASSWORD} characters` }) };
       }
       updates.password_hash = await bcrypt.hash(password, 10);
     }
@@ -113,7 +121,14 @@ exports.handler = async (event) => {
       .select('id, username, created_at')
       .single();
     if (error) return fail(error);
-    if (password) await supabase.from('volunteer_sessions').delete().eq('volunteer_id', id);
+    if (password) {
+      // Saving again re-hashes and re-deletes, so the message below is safe to act on.
+      const { error: delErr } = await supabase.from('volunteer_sessions').delete().eq('volunteer_id', id);
+      if (delErr) {
+        console.error('Volunteer sign-out after password change failed:', delErr.message);
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'The password was changed, but their phones could not be signed out. Please press Save again.' }) };
+      }
+    }
     logAudit(supabase, event, { action: 'volunteer.update', target: data.username, details: { password_changed: !!password } });
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   }
@@ -123,7 +138,8 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'DELETE') {
     const { id } = body;
     if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
-    await supabase.from('volunteer_sessions').delete().eq('volunteer_id', id);
+    const { error: delErr } = await supabase.from('volunteer_sessions').delete().eq('volunteer_id', id);
+    if (delErr && !isMissingTable(delErr)) return fail(delErr);
     const { error } = await supabase.from('volunteers').delete().eq('id', id);
     if (error) return fail(error);
     logAudit(supabase, event, { action: 'volunteer.delete', target: id });

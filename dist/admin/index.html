@@ -370,7 +370,7 @@
           </p>
           <div class="form-row">
             <div class="form-group"><label>Username</label><input type="text" id="new-volunteer-username" placeholder="e.g. ravi" autocapitalize="none" autocomplete="off" /></div>
-            <div class="form-group"><label>Password</label><input type="password" id="new-volunteer-password" placeholder="At least 4 characters" autocomplete="new-password" /></div>
+            <div class="form-group"><label>Password</label><input type="password" id="new-volunteer-password" placeholder="At least 6 characters" autocomplete="new-password" /></div>
           </div>
           <button class="btn-create" onclick="createVolunteer()">Add Volunteer →</button>
           <div id="volunteer-error" style="display:none;margin-top:10px;padding:10px 14px;background:#fef2f2;border-radius:10px;font-size:13px;color:#991b1b"></div>
@@ -594,7 +594,7 @@
 
     document.addEventListener('DOMContentLoaded', function() {
       if (!sessionToken) {
-        localStorage.clear();
+        clearAdminStorage();
         window.location.replace('/login');
       } else {
         fetch(AUTH_API + '/verify?token=' + sessionToken)
@@ -607,11 +607,11 @@
               localStorage.setItem('admin_permissions', JSON.stringify(d.permissions));
               showAdmin(d.username, d.permissions, d.role);
             } else {
-              localStorage.clear();
+              clearAdminStorage();
               window.location.replace('/login');
             }
           })
-          .catch(() => { localStorage.clear(); window.location.replace('/login'); });
+          .catch(() => { clearAdminStorage(); window.location.replace('/login'); });
       }
     });
 
@@ -693,7 +693,7 @@
 
     async function logout() {
       if (sessionToken) await fetch(AUTH_API + '/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sessionToken }) }).catch(() => {});
-      localStorage.clear();
+      clearAdminStorage();
       window.location.replace('/login');
     }
 
@@ -709,6 +709,15 @@
     }
 
     function authHeaders() { return { 'x-manager-token': sessionToken, 'Content-Type': 'application/json' }; }
+
+    // Signing out of the portal clears its storage — but not a volunteer's
+    // /scan sign-in on the same phone (same site, same localStorage).
+    function clearAdminStorage() {
+      const keep = {};
+      ['volunteer_token', 'volunteer_username'].forEach(k => { const v = localStorage.getItem(k); if (v !== null) keep[k] = v; });
+      localStorage.clear();
+      Object.entries(keep).forEach(([k, v]) => localStorage.setItem(k, v));
+    }
 
     async function launchPhotoPositioner() {
       const btn    = document.getElementById('launch-positioner-btn');
@@ -826,15 +835,24 @@
     }
 
     async function loadPasses() {
-      if (!selectedEventId) return;
+      const evId = selectedEventId;
+      if (!evId) return;
       selectedPassIds.clear();
       updateBulkToolbar();
       const c = document.getElementById('passes-container');
+      if (!c.querySelector('.item') || c.dataset.eventId !== String(evId)) {
+        c.innerHTML = '<div class="spinner"></div>';
+        document.getElementById('select-all-wrap').style.display = 'none';
+      }
       try {
-        const res = await fetch(PASSES_API + '?event_id=' + selectedEventId, { headers: { 'x-manager-token': sessionToken } });
-        if (!res.ok) { c.innerHTML = '<div class="empty-state">Could not load passes. Try refreshing or signing out and back in.</div>'; return; }
-        renderPasses(await res.json());
+        const res = await fetch(PASSES_API + '?event_id=' + encodeURIComponent(evId), { headers: { 'x-manager-token': sessionToken } });
+        const passes = res.ok ? await res.json() : null;
+        if (evId !== selectedEventId) return;          // another event was picked meanwhile
+        if (!passes) { c.innerHTML = '<div class="empty-state">Could not load passes. Try refreshing or signing out and back in.</div>'; return; }
+        c.dataset.eventId = String(evId);
+        renderPasses(passes);
       } catch (e) {
+        if (evId !== selectedEventId) return;
         c.innerHTML = '<div class="empty-state">Could not load passes. Try refreshing or signing out and back in.</div>';
       }
     }
@@ -1068,7 +1086,7 @@
         }
         selectedPassIds.delete(id);
         updateBulkToolbar();
-        document.getElementById('pass-' + id)?.remove();
+        loadPasses();
       } catch (e) {
         alert('Network error — could not delete pass. Please try again.');
       }
@@ -1822,7 +1840,7 @@
           </div>
           <div id="vol-pw-${v.id}" style="display:none;background:var(--cream);border-radius:10px;padding:14px">
             <div class="form-row">
-              <div class="form-group"><label>New Password</label><input type="password" id="vol-pw-input-${v.id}" placeholder="At least 4 characters" autocomplete="new-password" /></div>
+              <div class="form-group"><label>New Password</label><input type="password" id="vol-pw-input-${v.id}" placeholder="At least 6 characters" autocomplete="new-password" /></div>
             </div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:8px">Saving signs ${escapeHtml(v.username)} out on every phone.</div>
             <div style="display:flex;gap:8px;margin-top:12px">
@@ -1899,7 +1917,7 @@
       if (!passes.length || !('checked_in_at' in passes[0])) return '';
       const arrived = passes.filter(p => p.checked_in_at).length;
       const reset = arrived && sessionRole === 'superadmin'
-        ? '<button onclick="resetArrivals()" style="background:none;border:1px solid #fca5a5;color:#dc2626;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:\'DM Sans\',sans-serif;flex-shrink:0">↺ Reset all arrivals</button>'
+        ? '<button onclick="resetArrivals(\'' + escapeHtml(passes[0].event_id) + '\')" style="background:none;border:1px solid #fca5a5;color:#dc2626;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:\'DM Sans\',sans-serif;flex-shrink:0">↺ Reset all arrivals</button>'
         : '';
       return '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 14px;margin-bottom:12px;background:#f0fdf4;border-radius:10px;font-size:13px;color:#166534">'
         + '<span>✅ <strong>' + arrived + ' of ' + passes.length + '</strong> arrived</span>' + reset + '</div>';
@@ -1917,11 +1935,11 @@
       }
     }
 
-    async function resetArrivals() {
-      if (!selectedEventId) return;
+    async function resetArrivals(eventId) {
+      if (!eventId || String(eventId) !== String(selectedEventId)) { loadPasses(); return; }
       if (!confirm('Clear ALL arrivals for this event?\n\nUse this after testing. Everyone will show as not arrived, and the Telegram list starts again from the next scan. Messages already sent stay in Telegram.')) return;
       try {
-        const res = await fetch(PASSES_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ event_id: selectedEventId, reset_arrivals: true }) });
+        const res = await fetch(PASSES_API, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ event_id: eventId, reset_arrivals: true }) });
         const d = await res.json().catch(() => ({}));
         if (!res.ok) { alert(d.error || 'Could not reset arrivals'); return; }
         loadPasses();
@@ -2434,7 +2452,7 @@
 
     async function goHome() {
       if (sessionToken) await fetch(AUTH_API + '/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sessionToken }) }).catch(() => {});
-      localStorage.clear();
+      clearAdminStorage();
       window.location.href = 'https://screvents.com';
     }
 

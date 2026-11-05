@@ -237,9 +237,10 @@
       color: rgba(255,255,255,0.7);
       font-weight: 400;
     }
-    /* Date and time each stay whole; a narrow phone wraps at the " · " between
-       them rather than splitting "11:00 AM" across two lines. */
-    .pass-event-date span { white-space: nowrap; }
+    /* Date and time each stay whole where they fit, so a narrow phone wraps at
+       the " · " between them; a long free-text time ("Doors open 10:30 am,
+       program at 11") wraps inside the box instead of being cut off. */
+    .pass-event-date span { display: inline-block; overflow-wrap: anywhere; }
 
     /* Ticket notch effect */
     .pass-notch {
@@ -598,12 +599,13 @@
 
     // ── Event time ─────────────────────────────────────────────────────────
     // Typed free-form in the admin portal ("11 am", "11:00am", "6:00 pm").
-    // Tidy the common shapes to "11:00 AM"; anything else is shown as typed.
+    // Tidy the common shapes to "11:00 AM" (a no-break space keeps "AM" with
+    // its time); anything else is shown as typed.
     function formatTime(raw) {
       const t = String(raw || '').trim();
       const m = t.match(/^(\d{1,2})(?:[:.](\d{2}))?\s*([ap])\.?\s*m\.?$/i);
       if (!m || +m[1] < 1 || +m[1] > 12 || (m[2] && +m[2] > 59)) return t;
-      return (+m[1]) + ':' + (m[2] || '00') + ' ' + m[3].toUpperCase() + 'M';
+      return (+m[1]) + ':' + (m[2] || '00') + '\u00a0' + m[3].toUpperCase() + 'M';
     }
     function showEventDate(dateText, eventTime) {
       const el = document.getElementById('event-date');

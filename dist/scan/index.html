@@ -110,7 +110,9 @@
              text-align: center; line-height: 1.1; margin: 18px 0 6px; overflow-wrap: anywhere; }
     .event { text-align: center; font-size: 16px; color: var(--brown); }
     .when  { text-align: center; font-size: 14px; color: var(--text-muted); margin-top: 2px; }
-    .when span { white-space: nowrap; }
+    /* Date and time each stay whole where they fit; a long free-text time
+       wraps inside the card instead of running off it. */
+    .when span { display: inline-block; overflow-wrap: anywhere; }
     .note  { margin-top: 16px; font-size: 15px; line-height: 1.45; text-align: center; color: var(--amber); }
     .actions { margin-top: 20px; }
     .loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 28px 0; color: var(--text-muted); }
@@ -145,13 +147,13 @@
     <!-- ── Scanner ── -->
     <section id="scan-view" hidden>
       <div class="bar"><span id="who"></span><button type="button" id="logout-btn">Sign out</button></div>
-      <div class="viewer">
+      <div class="viewer" id="viewer">
         <video id="video" playsinline muted autoplay></video>
         <div class="frame" id="frame" hidden><i></i><i></i><i></i><i></i></div>
         <div class="viewer-msg" id="viewer-msg">Starting camera…</div>
       </div>
       <p class="hint">Point the camera at the QR code on the guest's pass. They're checked in as soon as it scans.</p>
-      <label class="btn btn-ghost" for="photo-input" style="text-transform:none;letter-spacing:0;font-size:17px;color:var(--brown);margin:0">
+      <label class="btn btn-ghost" id="photo-label" for="photo-input" style="text-transform:none;letter-spacing:0;font-size:17px;color:var(--brown);margin:0">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
         Take a photo instead
       </label>
@@ -173,22 +175,46 @@
     const TOKEN_KEY = 'volunteer_token', USER_KEY = 'volunteer_username';
     const TZ = 'America/New_York';
     const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    // Give up on a request after this long (the server's worst case is ~8 s:
+    // a few database reads plus up to 6 s for Telegram). A phone on one bar of
+    // signal would otherwise sit on a spinner for a minute or more.
+    const REQUEST_TIMEOUT_MS = 20000;
 
     const $ = (id) => document.getElementById(id);
     const views = ['login-view', 'scan-view', 'result-view'];
     function show(view) { views.forEach(v => $(v).hidden = v !== view); window.scrollTo(0, 0); }
 
     let token = localStorage.getItem(TOKEN_KEY) || '';
+    // A pass scanned just as the sign-in expired: checked in right after the
+    // volunteer signs back in, so that guest is not silently missed.
+    let pendingId = null;
 
+    // Throws an Error carrying .status (0 = no connection / no response) and,
+    // for a refused check-in, .data with the server's details.
     async function api(path, opts = {}) {
-      const res = await fetch(API + path, {
-        ...opts,
-        headers: { 'Content-Type': 'application/json', 'x-volunteer-token': token, ...(opts.headers || {}) }
-      });
-      let data = {};
-      try { data = await res.json(); } catch (e) {}
-      if (res.status === 401 && path !== '/login') { signedOut('Your sign-in has expired. Please sign in again.'); throw new Error('signed out'); }
-      if (!res.ok) { const err = new Error(data.error || 'Something went wrong. Please try again.'); err.status = res.status; throw err; }
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+      let res, data = {};
+      try {
+        res = await fetch(API + path, {
+          ...opts,
+          signal: ctrl.signal,
+          headers: { 'Content-Type': 'application/json', 'x-volunteer-token': token, ...(opts.headers || {}) }
+        });
+        data = await res.json().catch(() => ({}));
+      } catch (e) {
+        const err = new Error('No connection. Check your signal and try again.'); err.status = 0; throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+      if (res.status === 401 && path !== '/login') {
+        signedOut('Your sign-in has expired. Please sign in again.');
+        const err = new Error('signed out'); err.status = 401; throw err;
+      }
+      if (!res.ok) {
+        const err = new Error(data.error || 'Something went wrong. Please try again.');
+        err.status = res.status; err.data = data; throw err;
+      }
       return data;
     }
 
@@ -202,6 +228,8 @@
       show('login-view');
     }
 
+    function showWho() { $('who').textContent = 'Signed in as ' + (localStorage.getItem(USER_KEY) || ''); }
+
     $('login-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const btn = $('login-btn'), err = $('login-error');
@@ -211,7 +239,9 @@
         token = d.token;
         localStorage.setItem(TOKEN_KEY, d.token); localStorage.setItem(USER_KEY, d.username);
         $('password').value = '';
-        startScanning();
+        showWho();
+        if (pendingId) { const id = pendingId; pendingId = null; handled = true; checkIn(id); }
+        else startScanning();
       } catch (e) {
         err.textContent = e.message; err.hidden = false;
       } finally {
@@ -219,26 +249,45 @@
       }
     });
 
-    $('logout-btn').addEventListener('click', async () => {
+    $('logout-btn').addEventListener('click', () => {
       api('/logout', { method: 'POST' }).catch(() => {});
+      pendingId = null;
       signedOut('');
     });
 
     // ── Camera ───────────────────────────────────────────────────────────
+    // The camera stays open between scans (decoding just pauses), so the next
+    // car is scanned at once instead of waiting for the camera to restart. It
+    // is released when the phone locks or the tab is hidden, while a photo is
+    // being taken, on sign-out, and after a minute on a result screen.
     const video = $('video'), canvas = $('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    let stream = null, scanning = false, rafId = 0, lastTick = 0, wakeLock = null;
+    let stream = null, decoding = false, rafId = 0, lastTick = 0, wakeLock = null, idleStop = 0;
     // Opening the camera is slow (and may wait on a permission prompt). Every
     // stopCamera() bumps camGen, so a start that was overtaken while it waited
-    // (phone locked, photo scanned, screen left) releases what it got instead
-    // of leaving a second camera running. `starting` stops two opens at once.
+    // (phone locked, photo taken, screen left) releases what it got instead of
+    // leaving a second camera running. `starting` stops two opens at once.
     let camGen = 0, starting = false;
+    // 'idle' | 'picking' (the photo picker / camera app is open) | 'reading'
+    let photoState = 'idle';
+    // This scan screen has already found a code: ignore every further decode
+    // (camera or photo) until the volunteer taps Scan next / Scan again.
+    let handled = false;
+    // The pass just scanned, and when scanning resumed: the same pass seen
+    // again in the first seconds (still in front of the camera) is ignored.
+    let lastId = '', resumedAt = 0;
 
     function viewerMessage(text) { const m = $('viewer-msg'); m.textContent = text || ''; m.hidden = !text; $('frame').hidden = !!text; }
-    const wantCamera = () => !$('scan-view').hidden && !document.hidden;
+    const wantCamera = () => photoState === 'idle' && !$('scan-view').hidden && !document.hidden;
 
     async function startCamera() {
-      if (stream || starting) return;
+      if (!wantCamera()) return;
+      if (stream) { resumeDecoding(); return; }
+      if (starting) return;
+      if (!window.jsQR) {
+        viewerMessage('The scanner didn\'t load. Check your signal and reload this page.');
+        return;
+      }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         viewerMessage('This browser can\'t open the camera here. Use "Take a photo instead" below.');
         return;
@@ -246,37 +295,40 @@
       const gen = camGen;
       starting = true;
       viewerMessage('Starting camera…');
-      let s;
+      let s = null, err = null;
       try {
         s = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 },
+                   advanced: [{ focusMode: 'continuous' }] },   // ignored where unsupported
           audio: false
         });
-      } catch (e) {
-        if (gen === camGen) {
-          viewerMessage(e && e.name === 'NotAllowedError'
-            ? 'Camera access is blocked. Allow the camera for screvents.com in your browser settings, or use "Take a photo instead" below.'
-            : 'Could not open the camera. Use "Take a photo instead" below.');
-        }
-        return;
-      } finally {
-        starting = false;
-      }
+      } catch (e) { err = e; }
+      starting = false;
       if (gen !== camGen || !wantCamera()) {
-        s.getTracks().forEach(t => t.stop());
-        // Stopped while opening, but the scanner is showing again (e.g. the
-        // phone was unlocked): open it afresh.
+        // Overtaken while opening — succeeded or failed. Release it, and open
+        // afresh if the scanner is showing again (e.g. the phone was unlocked).
+        if (s) s.getTracks().forEach(t => t.stop());
         if (wantCamera()) startCamera();
         return;
       }
+      if (err) {
+        viewerMessage(err.name === 'NotAllowedError'
+          ? 'Camera access is blocked. Allow the camera for screvents.com in your browser settings, or use "Take a photo instead" below.'
+          : 'Could not open the camera. Use "Take a photo instead" below, or tap here to try again.');
+        return;
+      }
       stream = s;
+      // If something else takes the camera (a call, another app), reopen it.
+      s.getVideoTracks().forEach(t => t.addEventListener('ended', () => {
+        if (stream !== s) return;
+        stopCamera();
+        setTimeout(startCamera, 500);
+      }));
       video.srcObject = s;
       try { await video.play(); } catch (e) {}
       if (gen !== camGen) return;                 // stopCamera() already released it
-      viewerMessage('');
-      scanning = true;
-      lastTick = 0;
-      rafId = requestAnimationFrame(tick);
+      if (video.paused) viewerMessage('Tap here to start the camera.');
+      resumeDecoding();
       if ('wakeLock' in navigator) {
         try {
           const lock = await navigator.wakeLock.request('screen');
@@ -285,21 +337,41 @@
       }
     }
 
+    function resumeDecoding() {
+      if (!stream || decoding) return;
+      if (!video.paused) viewerMessage('');
+      decoding = true;
+      lastTick = 0;
+      resumedAt = performance.now();
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function pauseDecoding() {
+      decoding = false;
+      cancelAnimationFrame(rafId);
+    }
+
     function stopCamera() {
       camGen++;
-      scanning = false;
-      cancelAnimationFrame(rafId);
+      pauseDecoding();
       if (stream) stream.getTracks().forEach(t => t.stop());
       stream = null;
       video.srcObject = null;
       if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
     }
 
+    // A tap on the viewer starts a video the browser would not autoplay, or
+    // retries a camera that failed to open.
+    $('viewer').addEventListener('click', () => {
+      if (stream && video.paused) video.play().then(() => viewerMessage('')).catch(() => {});
+      else if (!stream) startCamera();
+    });
+
     // Decode a frame about 6 times a second, from a copy at most 720px on its
     // long side: plenty for a QR code filling part of the view, and light on
     // an older phone.
     function tick(now) {
-      if (!scanning) return;
+      if (!decoding) return;
       rafId = requestAnimationFrame(tick);
       if (now - lastTick < 160 || video.readyState < 2 || !video.videoWidth) return;
       lastTick = now;
@@ -313,7 +385,7 @@
       canvas.height = Math.max(1, Math.round(h * scale));
       ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
       const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = window.jsQR ? jsQR(img.data, img.width, img.height, { inversionAttempts: inversion }) : null;
+      const code = jsQR(img.data, img.width, img.height, { inversionAttempts: inversion });
       return code && code.data ? code.data : '';
     }
 
@@ -342,32 +414,62 @@
       return '';
     }
 
+    function photoError(text) { const e = $('scan-error'); e.textContent = text; e.hidden = false; }
+
+    // Opening the photo picker: let go of the live camera first (the phone's
+    // camera app needs it, and an interrupted stream may not come back).
+    $('photo-label').addEventListener('click', (ev) => {
+      if (!window.jsQR) { ev.preventDefault(); photoError('The scanner didn\'t load. Check your signal and reload this page.'); return; }
+      $('scan-error').hidden = true;
+      photoState = 'picking';
+      stopCamera();
+      viewerMessage('Waiting for the photo…');
+    });
+
+    // The picker closed without a photo: back to the live camera. 'cancel' is
+    // fired by current browsers; returning focus covers the rest.
+    function pickerClosed() {
+      setTimeout(() => {
+        if (photoState !== 'picking') return;
+        photoState = 'idle';
+        startCamera();
+      }, 800);
+    }
+    $('photo-input').addEventListener('cancel', pickerClosed);
+    window.addEventListener('focus', pickerClosed);
+
     $('photo-input').addEventListener('change', async (ev) => {
       const file = ev.target.files && ev.target.files[0];
       ev.target.value = '';
-      if (!file) return;
-      $('scan-error').hidden = true;
+      if (!file) { photoState = 'idle'; startCamera(); return; }
+      if ($('scan-view').hidden) { photoState = 'idle'; return; }
+      photoState = 'reading';
       stopCamera();
       viewerMessage('Reading photo…');
+      let text = '';
       try {
-        const text = await decodeFile(file);
-        if (text) { found(text); return; }
-        const e = $('scan-error');
-        e.textContent = 'No QR code found in that photo. Try again closer, with the whole code in the picture.';
-        e.hidden = false;
+        text = await decodeFile(file);
+        if (!text) photoError('No QR code found in that photo. Try again closer, with the whole code in the picture.');
       } catch (e) {
-        const el = $('scan-error'); el.textContent = e.message || 'Could not read that photo.'; el.hidden = false;
+        photoError(e.message || 'Could not read that photo.');
       }
-      startCamera();
+      photoState = 'idle';
+      if (text) found(text); else startCamera();
     });
 
     // ── Result ───────────────────────────────────────────────────────────
     function found(text) {
-      stopCamera();
-      if (navigator.vibrate) navigator.vibrate(80);
+      if (handled || $('scan-view').hidden) return;
       const m = String(text).match(UUID_RE);
-      if (!m) { renderError('Not a VIP pass', 'That QR code isn\'t from a VIP pass.'); return; }
-      checkIn(m[0].toLowerCase());
+      const id = m ? m[0].toLowerCase() : '';
+      // The pass just checked in, still in front of the camera after "Scan next".
+      if (id && id === lastId && performance.now() - resumedAt < 4000) return;
+      handled = true;
+      pauseDecoding();
+      if (navigator.vibrate) navigator.vibrate(80);
+      if (!id) { renderError('Not a VIP pass', 'That QR code isn\'t from a VIP pass.'); return; }
+      lastId = id;
+      checkIn(id);
     }
 
     const ICON_OK   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>';
@@ -386,16 +488,23 @@
     function button(cls, text, onClick) { const b = el('button', 'btn ' + cls, text); b.type = 'button'; b.addEventListener('click', onClick); return b; }
     function scanNextButton(label) { return button('btn-primary', label || 'Scan next pass', startScanning); }
 
+    const nyDay = (d) => d.toLocaleDateString('en-CA', { timeZone: TZ });
+    // "10:42 AM" today; "Nov 1, 10:42 AM" for another day.
     function formatClock(iso) {
-      try { return new Date(iso).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }); }
-      catch (e) { return ''; }
+      try {
+        const d = new Date(iso);
+        const time = d.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+        if (nyDay(d) === nyDay(new Date())) return time;
+        return d.toLocaleDateString('en-US', { timeZone: TZ, month: 'short', day: 'numeric' }) + ', ' + time;
+      } catch (e) { return ''; }
     }
-    // Same tidy-up as the pass page: "11 am" -> "11:00 AM"; anything else as typed.
+    // Same tidy-up as the pass page: "11 am" -> "11:00 AM" (a no-break space
+    // keeps "AM" with its time); anything else as typed.
     function formatTime(raw) {
       const t = String(raw || '').trim();
       const m = t.match(/^(\d{1,2})(?:[:.](\d{2}))?\s*([ap])\.?\s*m\.?$/i);
       if (!m || +m[1] < 1 || +m[1] > 12 || (m[2] && +m[2] > 59)) return t;
-      return (+m[1]) + ':' + (m[2] || '00') + ' ' + m[3].toUpperCase() + 'M';
+      return (+m[1]) + ':' + (m[2] || '00') + ' ' + m[3].toUpperCase() + 'M';
     }
 
     function passDetails(p) {
@@ -418,6 +527,9 @@
       c.textContent = '';
       nodes.forEach(n => n && c.appendChild(n));
       show('result-view');
+      // Don't keep the camera (and its light) on behind a result left on screen.
+      clearTimeout(idleStop);
+      idleStop = setTimeout(() => { if ($('scan-view').hidden) stopCamera(); }, 60000);
     }
 
     function renderLoading(text) {
@@ -455,44 +567,72 @@
       $('result-card').querySelector('.note').style.color = notified ? 'var(--green)' : 'var(--amber)';
     }
 
+    // The pass is for another day's event (an old link, or next month's).
+    // Nothing is recorded unless the volunteer chooses to.
+    function renderNotToday(p, id) {
+      const actions = el('div', 'actions');
+      actions.appendChild(scanNextButton());
+      actions.appendChild(button('btn-ghost', 'Check in anyway', () => checkIn(id, true)));
+      renderCard([
+        badge('warn', ICON_WARN, 'Not today\'s event'),
+        passDetails(p),
+        el('p', 'note', 'This pass is for a different day. Check with the guest — they may have opened an old invitation.'),
+        actions
+      ]);
+    }
+
     // The server records only the FIRST arrival (and only then messages the
-    // team); a repeat scan comes back as "already arrived".
-    async function checkIn(id) {
+    // team); a repeat scan comes back as "already arrived". Repeating a
+    // request is therefore always safe.
+    async function checkIn(id, force) {
       renderLoading('Checking in…');
       try {
-        const d = await api('/checkin', { method: 'POST', body: JSON.stringify({ id }) });
+        const d = await api('/checkin', { method: 'POST', body: JSON.stringify(force ? { id, force: true } : { id }) });
         if (d.first) renderCheckedIn(d.pass, d.notified); else renderAlreadyArrived(d.pass);
       } catch (e) {
-        if (e.message === 'signed out') return;
-        if (e.status === 404 || e.status === 400) renderError('Not a valid VIP pass', e.message);
-        else if (!e.status) renderError('Could not check in', 'No connection. Check your signal and scan again.');
+        if (e.status === 401) {
+          pendingId = id;
+          const m = $('login-error');
+          m.textContent = 'Your sign-in expired, so that guest is NOT checked in yet. Sign in and they\'ll be checked in straight away.';
+          m.hidden = false;
+          return;
+        }
+        if (e.status === 409 && e.data && e.data.pass) renderNotToday(e.data.pass, id);
+        else if (e.status === 404 || e.status === 400) renderError('Not a valid VIP pass', e.message);
+        else if (!e.status) renderError('No response', 'Check your signal and scan the pass again. Scanning twice never messages the team twice.');
         else renderError('Could not check in', e.message);
       }
     }
 
     function startScanning() {
+      clearTimeout(idleStop);
+      handled = false;
       $('scan-error').hidden = true;
-      $('who').textContent = 'Signed in as ' + (localStorage.getItem(USER_KEY) || '');
+      showWho();
       show('scan-view');
       startCamera();
     }
 
-    // Free the camera while the phone is locked or the tab is in the background.
+    // Free the camera while the phone is locked or the tab is in the
+    // background; on return, reopen it (or, if the photo picker was open and
+    // closed without a photo, go back to the live camera).
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopCamera();
-      else if (!$('scan-view').hidden) startCamera();
+      if (document.hidden) { stopCamera(); return; }
+      if (photoState === 'picking') pickerClosed(); else startCamera();
     });
 
+    // Back/forward cache: a restored page re-checks the camera like a return
+    // from the background.
+    window.addEventListener('pageshow', (e) => { if (e.persisted && !document.hidden) startCamera(); });
+
     // ── Start ────────────────────────────────────────────────────────────
-    (async function init() {
+    // Show the scanner straight away and confirm the sign-in alongside, so a
+    // slow connection never leaves a blank page. A refused sign-in switches to
+    // the sign-in form; a network problem just waits for the first scan.
+    (function init() {
       if (!token) { show('login-view'); return; }
-      try {
-        const d = await api('/verify');
-        localStorage.setItem(USER_KEY, d.username);
-        startScanning();
-      } catch (e) {
-        if (e.message !== 'signed out') startScanning();
-      }
+      startScanning();
+      api('/verify').then((d) => { localStorage.setItem(USER_KEY, d.username); showWho(); }).catch(() => {});
     })();
   </script>
 </body>

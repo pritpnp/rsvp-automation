@@ -1,8 +1,9 @@
 -- Volunteers and VIP arrival check-in.
 --
--- Volunteers sign in at screvents.com/scan, scan a guest's VIP pass QR code and
--- tap Check In. The first check-in of a pass records when and by whom, and
--- posts "VIP <name> has arrived" to the admin Telegram group.
+-- Volunteers sign in at screvents.com/scan and scan a guest's VIP pass QR
+-- code, which checks the guest in straight away. The first check-in of a pass
+-- records when and by whom, and posts "<name> has arrived at <time>" with the
+-- arrivals list to the SCREvents VIP Telegram group (TELEGRAM_CHAT_ID_VIP).
 --
 --   volunteers           accounts the superadmin adds in the admin portal
 --                        (Volunteers tab). Separate from managers: a volunteer

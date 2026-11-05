@@ -649,14 +649,17 @@ Each pass shows a **QR code** of its own link (`/vip/<id>`), drawn in the browse
 - **Netlify routing:** `/scan` is 200-rewritten to `/scan/index.html` in `netlify.toml`.
 - **Who uses it:** volunteers at the VIP parking lot, on their phones. Volunteer accounts are added, given new passwords and removed by the superadmin in the admin portal's **Volunteers** tab (`superadmin-volunteers.js`). They are not managers and cannot open `/admin`.
 
-Flow: sign in (username + password; token kept in `localStorage` as `volunteer_token` for 24 hours) → live camera viewfinder (rear camera, decoded ~6×/second) with a **Take a photo instead** fallback for phones where live video is blocked → the result card:
+Flow: sign in (username + password; token kept in `localStorage` as `volunteer_token`; the session lasts 24 hours and is extended while in use) → live camera viewfinder (rear camera, decoded ~6×/second) with a **Take a photo instead** fallback → a scan **checks the guest in straight away** (no extra tap) and shows one of:
 
-- **Valid VIP pass** — guest name, event, date · time, and a **Check In** button.
-- **Checked in** — records the arrival and posts to the admin Telegram group (see `volunteer-scan`). If Telegram fails the volunteer is told to let the team know.
-- **Already arrived at 10:42 AM** — the pass was checked in before (e.g. a second car). Informational only; the volunteer lets them through and no second message is sent.
+- **Checked in at 10:42 AM** — guest name, event, date · time. The first check-in of a pass posts to the SCREvents VIP Telegram group (see `volunteer-scan`). If Telegram fails the volunteer is told to let the team know.
+- **Already arrived at 10:42 AM** — the pass was checked in before (e.g. a second car; another day's arrival shows its date too). Informational only; the volunteer lets them through and no second message is sent.
+- **Not today's event** — the pass's event dates (read live from `events`) don't include today in New York, e.g. an old invitation link. Nothing is recorded; **Check in anyway** records it deliberately. Events whose dates can't be read are never blocked.
 - **Not a VIP pass / not found** — any other QR code, or a deleted pass.
+- **No response** — no signal or no reply within 20 s. Scanning again is always safe.
 
-The camera is released when the phone locks or the tab is hidden, and the screen is kept awake (Wake Lock API) while scanning where supported.
+If the sign-in has expired when a pass is scanned, the volunteer is told that guest is **not** checked in yet, and it is checked in automatically once they sign back in. A server or database hiccup never signs volunteers out (only a real 401 does).
+
+Camera lifecycle: the camera stays open between scans (decoding pauses on the result screen, and the same pass is ignored for 4 s after **Scan next pass** so a code still in front of the lens isn't re-read). It is released when the phone locks or the tab is hidden, while a photo is being taken (and reopened when the picker closes, including on cancel), on sign-out, and after a minute on a result screen. Opens overtaken by any of those release what they got (generation counter), so a second camera is never left running. The screen is kept awake (Wake Lock API) while scanning where supported. If `/lib/jsQR.js` failed to load, the viewer says so instead of silently never scanning.
 
 ### Login — `/login`
 
@@ -1057,16 +1060,17 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
 - **File:** `netlify/functions/volunteer-scan.js`
 - **Purpose:** Everything behind `/scan`: volunteer sign-in, pass lookup and arrival check-in.
 - **Routes (by path suffix, like `manager-auth`):**
-  - `POST /login { username, password }` → `{ token, username }` (24-hour session in `volunteer_sessions`). `401` wrong username/password.
+  - `POST /login { username, password }` → `{ token, username }` (24-hour session in `volunteer_sessions`, extended back to 24 h whenever it is used with under 12 h left). `401` wrong username/password; `429` after 10 failed sign-ins from one IP in 15 minutes (counted from `audit_log`); unknown usernames still run a bcrypt compare so timing doesn't reveal them. A sign-in that raced a password change is discarded.
   - `POST /logout` — deletes the session.
   - `GET /verify` → `{ valid, username }`.
   - `GET /pass?id=<uuid>` → `{ id, guest_name, event_name, event_date, event_time, checked_in_at, checked_in_by }`. No phone numbers. `400` not a pass id, `404` not found.
-  - `POST /checkin { id }` → `{ first, notified, pass }`.
+  - `POST /checkin { id, force? }` → `{ first, notified, pass }`; `409 { error: 'not_today', pass }` when the event's dates don't include today (America/New_York) and `force` isn't set.
 - **Auth:** `x-volunteer-token` header (everything except login/logout). Manager and superadmin tokens are NOT accepted, and volunteer tokens are not accepted anywhere else — the two session tables are separate on purpose (in `manager_sessions`, a null `manager_id` means superadmin).
-- **Check-in:** a single `UPDATE … WHERE id = ? AND checked_in_at IS NULL`, so only the first scan of a pass records `checked_in_at` / `checked_in_by`, even if two volunteers scan it at once. Only that first check-in posts to the admin group (`TELEGRAM_CHAT_ID`), HTML parse mode:
+- **Errors:** `401` only for a missing / expired / revoked sign-in. A database error is `503` "Could not reach the server" (never "not found" or "wrong password"), so the page keeps the volunteer signed in. Zero rows are told apart from errors with `.maybeSingle()`.
+- **Check-in:** a single `UPDATE … WHERE id = ? AND checked_in_at IS NULL`, so only the first scan of a pass records `checked_in_at` / `checked_in_by`, even if two volunteers scan it at once. Only that first check-in posts to the SCREvents VIP group (`TELEGRAM_CHAT_ID_VIP`, falling back to the admin group `TELEGRAM_CHAT_ID` while that is unset), HTML parse mode:
 
   ```
-  ⭐ <b>VIP Ravi Patel has arrived at 10:42 AM</b>
+  ⭐ <b><u>Ravi Patel</u> has arrived at 10:42 AM</b>
 
   <b>VIPs that have arrived (3 of 12):</b>
   Anil Shah
@@ -1074,10 +1078,10 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
   Ravi Patel
   ```
 
-  The list is every checked-in pass for the same event in arrival order ("of 12" = passes for the event). Times are America/New_York. Over Telegram's 4096-character limit the oldest names are folded into "…and N earlier". The Telegram call is awaited (6 s timeout); a failure leaves the check-in in place and returns `notified: false`.
+  The list is every checked-in pass for the same event in arrival order ("of 12" = passes for the event). Times are America/New_York. Over Telegram's 4096-character limit the oldest names are folded into "…and N earlier". If the list can't be read, the arrival line is sent alone rather than a wrong list. The Telegram call is awaited (6 s timeout); a failure leaves the check-in in place and returns `notified: false`. The bot must be a member of the VIP group.
 - **Before the migration:** `503` with "ask the admin to run the volunteers SQL" (`scripts/migrations/2026-11-05-add-volunteers-and-checkins.sql`).
-- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-- **Supabase tables:** `volunteers`, `volunteer_sessions`, `vip_passes`, `events` (start/end time), `audit_log` (`volunteer.login`, `pass.checkin`; actor shown as `<username> (volunteer)`).
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID_VIP` (fallback `TELEGRAM_CHAT_ID`).
+- **Supabase tables:** `volunteers`, `volunteer_sessions`, `vip_passes`, `events` (dates for the not-today check, start/end time), `audit_log` (`volunteer.login`, `pass.checkin`; actor shown as `<username> (volunteer)`).
 - **Called by:** `public/scan/index.html`.
 
 #### superadmin-volunteers
@@ -1086,7 +1090,7 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
 - **Purpose:** Superadmin CRUD for volunteer accounts (admin portal → Volunteers tab).
 - **HTTP method:** `GET` list (`id, username, created_at` — never the hash), `POST { username, password }`, `PATCH { id, username?, password? }`, `DELETE { id }`.
 - **Auth:** superadmin only — `x-admin-password` or a superadmin `x-manager-token`, same as `superadmin-managers`.
-- **Notes:** usernames are lower-cased and trimmed; passwords need 4+ characters (bcrypt-hashed). A new password, or removal, deletes that volunteer's sessions, signing them out on every phone at once. `503` with a setup message before the migration is run. Audited as `volunteer.create` / `volunteer.update` / `volunteer.delete`.
+- **Notes:** usernames are lower-cased and trimmed (64 characters max); passwords need 6+ characters (bcrypt-hashed). A new password, or removal, deletes that volunteer's sessions, signing them out on every phone at once — if that delete fails the request fails with "press Save again" rather than claiming success. `503` with a setup message before the migration is run. Audited as `volunteer.create` / `volunteer.update` / `volunteer.delete`.
 
 #### admin-passes
 
@@ -4040,6 +4044,7 @@ The Netlify Functions runtime and the GitHub Actions scripts are entirely separa
 | `TARGET_ZONE` | No | Workflow dispatch input | `scripts/summary.js`, `.github/workflows/rsvp-summary.yml` | Restricts `summary.js` to one zone. Values: `scranton`, `mountain-top`, `moosic`, `bloomsburg`, `mandir` (expands to `satsang-sabha` + `mandir-1..5`), or `all`. Default `all`. Set by the Telegram `/summary <suffix>` command via `telegram-webhook.js`. | Workflow dispatch input. Not a stored secret. |
 | `TELEGRAM_BOT_TOKEN` | Yes (for notifications) | Both | `netlify/functions/late-rsvp.js`, `netlify/functions/review-flyer.js`, `netlify/functions/telegram-webhook.js`, `scripts/cleanup-past-rsvps.js`, `scripts/final-summary.js`, `scripts/summary.js`, `scripts/sync-check.js`, `.github/workflows/cleanup-past-rsvps.yml`, `.github/workflows/final-summary.yml`, `.github/workflows/rsvp-automation.yml`, `.github/workflows/rsvp-summary.yml`, `.github/workflows/sync-check.yml` | Used in the URL of every Telegram Bot API call: `https://api.telegram.org/bot<TOKEN>/sendMessage` etc. One bot for the whole stack. | Open Telegram, chat with `@BotFather`, send `/newbot`, follow prompts. Copy the HTTP API token. To re-issue, send `/token` and pick the bot. |
 | `TELEGRAM_CHAT_ID` | Yes (for admin notifications) | Both | `netlify/functions/late-rsvp.js`, `netlify/functions/review-flyer.js`, `netlify/functions/telegram-webhook.js`, `scripts/cleanup-past-rsvps.js`, `scripts/final-summary.js`, `scripts/summary.js`, `scripts/sync-check.js`, plus all workflows that pass it through | The admin/notifications group chat ID. This is also the gate for admin-only Telegram commands: `telegram-webhook.js` checks `chat.id === TELEGRAM_CHAT_ID` before honoring `/uploadflyer`, `/removeflyer`, `/refreshall`, or any `review:approve`/`review:reject` callback button. | Add the bot to the admin Telegram group as an administrator (so it can read messages in groups; turn off privacy mode via `@BotFather → /setprivacy → Disable` if needed). Then call `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser after sending any message in the group. Copy `chat.id` (negative integer for groups). Alternatively add `@userinfobot` to the group temporarily. |
+| `TELEGRAM_CHAT_ID_VIP` | Optional (recommended) | Netlify | `netlify/functions/volunteer-scan.js` | The "SCREvents VIP" group that receives "<name> has arrived" messages when volunteers check guests in at `/scan`. Unset → those messages go to `TELEGRAM_CHAT_ID` (admin group). | Add the bot to the VIP group, then `getUpdates` or `@userinfobot` as for `TELEGRAM_CHAT_ID` (negative integer for groups). A change takes effect on the next deploy. |
 | `TELEGRAM_CHAT_ID_BLOOMSBURG` | Optional (per-zone routing) | Both | `netlify/functions/late-rsvp.js`, `netlify/functions/telegram-webhook.js`, `scripts/summary.js`, `.github/workflows/rsvp-summary.yml` | Bloomsburg zone group chat ID. Used by `late-rsvp.js` to ping zone organizers when someone tries to RSVP past the deadline, by `summary.js` to send the scheduled per-zone digest, and by `telegram-webhook.js`'s `ZONE_CHAT_MAP` so a bare `/getflyer` or `/summary` in that group is auto-routed to the Bloomsburg zone. | Add the bot to the Bloomsburg group, then `getUpdates` or `@userinfobot`. |
 | `TELEGRAM_CHAT_ID_MANDIR` | Optional (per-zone routing) | Both | Same set as `TELEGRAM_CHAT_ID_BLOOMSBURG` | Single chat ID shared by `satsang-sabha` and `mandir-1..5`. `late-rsvp.js` routes all six mandir zones to this one chat. | Add the bot to the Mandir group, then `getUpdates` or `@userinfobot`. |
 | `TELEGRAM_CHAT_ID_MOOSIC` | Optional (per-zone routing) | Both | Same set as `TELEGRAM_CHAT_ID_BLOOMSBURG` | Moosic zone group chat ID. | Add the bot to the Moosic group, then `getUpdates` or `@userinfobot`. |
