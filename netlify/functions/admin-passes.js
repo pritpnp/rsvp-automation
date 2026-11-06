@@ -71,8 +71,19 @@ function findConflict(eventPasses, numbers, excludeId) {
 function conflictMessage(c) {
   return `${c.number} is already on ${c.guest_name}'s pass for this event. Two people can't share a number.`;
 }
+// A pass's private note ("From Allentown", "Core Mark"): trimmed, one line,
+// at most 120 characters. Shown to admins, volunteers and the VIP Telegram
+// group — never on the guest's own pass.
+const NOTE_MAX = 120;
+function cleanNote(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
+}
+
 function dbError(error) {
   const m = (error && error.message) || 'Database error';
+  if (/\bnote\b/.test(m) && /(column|schema cache)/i.test(m)) {
+    return 'Pass notes are not set up in the database yet — run the notes SQL (scripts/migrations/2026-11-05-add-pass-notes.sql) in Supabase, then try again.';
+  }
   if (/extra_phones/.test(m) && /(column|schema cache)/i.test(m)) {
     return 'Extra phone numbers are not set up in the database yet — run the extra-phones SQL in Supabase, then try again.';
   }
@@ -170,7 +181,8 @@ exports.handler = async (event) => {
         if (ph.error) {
           return { statusCode: 400, headers, body: JSON.stringify({ error: `Row ${i + 1} (${name}): ${ph.error}` }) };
         }
-        prepared.push({ name, row: i + 1, phone: ph.primaryRaw, phone_normalized: ph.primary, extras: ph.extras, all: ph.all });
+        prepared.push({ name, row: i + 1, phone: ph.primaryRaw, phone_normalized: ph.primary, extras: ph.extras, all: ph.all,
+          note: typeof g === 'object' ? cleanNote(g?.note) : '' });
       }
 
       // Reject a number shared by two rows of the same upload
@@ -222,11 +234,15 @@ exports.handler = async (event) => {
       // entirely when nobody has extras, so uploads keep working before the
       // migration is run.
       const anyExtras = prepared.some(p => p.extras.length);
+      // Same for note: on every row or none, and left out when no row has
+      // one, so uploads keep working before the notes migration is run.
+      const anyNotes = prepared.some(p => p.note);
       const rows = prepared.map(p => ({
         guest_name: p.name,
         phone: p.phone,
         phone_normalized: p.phone_normalized,
         ...(anyExtras ? { extra_phones: p.extras } : {}),
+        ...(anyNotes ? { note: p.note } : {}),
         event_id,
         event_name: evt?.event_name || '',
         event_date
@@ -244,6 +260,7 @@ exports.handler = async (event) => {
 
     // ── Single create: { guest_name, phone, event_id } ────────────────────
     const { guest_name, phone, extra_phones, event_id } = body;
+    const note = cleanNote(body.note);
     if (!guest_name || !event_id) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
@@ -269,7 +286,7 @@ exports.handler = async (event) => {
       : `${evt?.start_date} – ${evt?.end_date}`;
     const { data, error } = await supabase
       .from('vip_passes')
-      .insert([{ guest_name, phone: ph.primaryRaw, phone_normalized: ph.primary, ...(ph.extras.length ? { extra_phones: ph.extras } : {}), event_id, event_name: evt?.event_name || '', event_date }])
+      .insert([{ guest_name, phone: ph.primaryRaw, phone_normalized: ph.primary, ...(ph.extras.length ? { extra_phones: ph.extras } : {}), ...(note ? { note } : {}), event_id, event_name: evt?.event_name || '', event_date }])
       .select()
       .single();
     if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: dbError(error) }) };
@@ -348,6 +365,7 @@ exports.handler = async (event) => {
 
     const update = {};
     if (typeof guest_name === 'string') update.guest_name = guest_name.trim();
+    if (typeof body.note === 'string') update.note = cleanNote(body.note);
     if (typeof phone === 'string') {
       // extra_phones is sent only when the admin portal knows the column
       // exists or extras were typed; omitted, the pass's extras are untouched.

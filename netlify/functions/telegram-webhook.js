@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const { logAudit } = require('./_audit');
+const { eventWindow, todayYmd, formatTime: formatEventTime } = require('../lib/vip-dates');
 
 // Constant-time string equality to prevent timing attacks on the webhook secret.
 const constantTimeEqual = (a, b) => {
@@ -31,6 +32,73 @@ if (MISSING_ZONE_ENV_VARS.length) {
   console.error(`Missing TELEGRAM_CHAT_ID_* env vars (zone routing disabled for these): ${MISSING_ZONE_ENV_VARS.join(', ')}`);
 }
 const ZONE_CHAT_MAP = Object.fromEntries(ZONE_CHAT_PAIRS.filter(([k]) => k));
+
+// ─── /vips: the VIP list for upcoming events ─────────────────────────────────
+// Who's invited (A–Z), each pass's note on a "- " line under the name, and ✅
+// with the time for anyone already checked in at /scan — so the greeting team
+// and parking volunteers know the names to look out for. Admin group and the
+// SCREvents VIP group only (TELEGRAM_CHAT_ID / TELEGRAM_CHAT_ID_VIP). Never
+// phone numbers. Upcoming = events whose dates (read with ../lib/vip-dates)
+// end today or later; the next three are listed.
+const VIP_TZ = 'America/New_York';
+const escHtml = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function showDate(v) {
+  const t = String(v == null ? '' : v).trim();
+  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return t;   // free text, shown as typed
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12)).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+function chunkLines(header, lines, limit = 3900) {
+  const out = [];
+  let cur = header;
+  for (const line of lines) {
+    if ((cur + '\n' + line).length > limit) { out.push(cur); cur = '<i>(continued)</i>'; }
+    cur += '\n' + line;
+  }
+  out.push(cur);
+  return out;
+}
+async function buildVipLists(supabase) {
+  const { data: events, error } = await supabase.from('events').select('*');
+  if (error) throw new Error(error.message);
+  const today = todayYmd();
+  const upcoming = (events || [])
+    .map((e) => ({ e, w: eventWindow(e) }))
+    .filter((x) => x.w && x.w.end >= today)
+    .sort((a, b) => a.w.start.localeCompare(b.w.start))
+    .slice(0, 3);
+  if (!upcoming.length) return ['🎟 No upcoming VIP events found.'];
+  const messages = [];
+  for (const { e } of upcoming) {
+    const { data: passes, error: pErr } = await supabase.from('vip_passes').select('*').eq('event_id', e.id);
+    if (pErr) throw new Error(pErr.message);
+    const list = (passes || []).slice().sort((a, b) =>
+      String(a.guest_name || '').localeCompare(String(b.guest_name || ''), 'en', { sensitivity: 'base' }));
+    const arrived = list.filter((x) => x.checked_in_at).length;
+    const start = showDate(e.start_date), end = showDate(e.end_date);
+    const t1 = formatEventTime(e.start_time), t2 = formatEventTime(e.end_time);
+    const when = [end && end !== start ? `${start} – ${end}` : start, t1 ? (t2 ? `${t1} – ${t2}` : t1) : '']
+      .filter(Boolean).join(' · ');
+    const header = [
+      `🎟 <b>VIP list — ${escHtml(e.event_name)}</b>`,
+      when ? escHtml(when) : '',
+      `<b>${list.length} invited · ${arrived} arrived</b>`,
+      '',
+    ].filter((x, i) => x !== '' || i === 3).join('\n');
+    if (!list.length) { messages.push(header + '\nNo passes yet.'); continue; }
+    const lines = list.map((x, i) => {
+      const at = x.checked_in_at
+        ? ' ✅ ' + new Date(x.checked_in_at).toLocaleTimeString('en-US', { timeZone: VIP_TZ, hour: 'numeric', minute: '2-digit' })
+        : '';
+      const note = String(x.note || '').trim();
+      return `${i + 1}. ${escHtml(x.guest_name)}${at}${note ? `\n    - ${escHtml(note)}` : ''}`;
+    });
+    messages.push(...chunkLines(header, lines));
+  }
+  return messages;
+}
+
+exports.buildVipLists = buildVipLists;   // exported for tests
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -731,6 +799,26 @@ exports.handler = async (event) => {
       '🗑 Which zone\'s flyer do you want to remove?',
       { reply_markup: JSON.stringify(zoneKeyboard('removezone')) }
     );
+    return { statusCode: 200, body: 'OK' };
+  }
+
+  // ── /vips (also /vip, /viplist) — admin group and SCREvents VIP group ──
+  if (/^\/vips?(list)?$/.test(normalizedText.replace(/\s+/g, ''))) {
+    const vipChatId = String(process.env.TELEGRAM_CHAT_ID_VIP || '');
+    if (chatId !== ADMIN_CHAT_ID && (!vipChatId || chatId !== vipChatId)) {
+      await sendMessage(chatId, '⚠️ /vips only works in the admin group or the SCREvents VIP group.');
+      return { statusCode: 200, body: 'OK' };
+    }
+    let messages;
+    try {
+      messages = await buildVipLists(supabase);
+    } catch (err) {
+      console.error('/vips failed:', err.message);
+      messages = ['⚠️ Could not load the VIP list right now. Please try again.'];
+    }
+    for (const text of messages) {
+      await sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+    }
     return { statusCode: 200, body: 'OK' };
   }
 

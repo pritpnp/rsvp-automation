@@ -83,62 +83,8 @@ async function getVolunteer(supabase, token) {
   return { vol: { id: s.volunteer_id, username } };
 }
 
-// ── Dates ──────────────────────────────────────────────────────────────────
-// Event dates come from a date column ("2026-11-08") or, on older rows, from
-// free text typed in the admin portal ("Sun, November 8, 2026", "11/8/2026").
-// null = can't tell, in which case nothing is blocked.
-const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-function ymd(y, mo, d) {
-  if (!(y >= 2000 && y <= 2100 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return null;
-  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-}
-// Every date found in a piece of text, in order. A "Month D" with no year
-// takes yearHint (an end date typed as "Sun, Nov 8" after a start of
-// "Sat, Nov 7, 2026").
-const DATE_RE = /(\d{4})-(\d{1,2})-(\d{1,2})|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?(?![\d:])|\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/gi;
-function datesIn(v, yearHint) {
-  const out = [];
-  for (const m of String(v == null ? '' : v).matchAll(DATE_RE)) {
-    let d = null;
-    if (m[1]) d = ymd(+m[1], +m[2], +m[3]);
-    else if (m[4]) d = (m[6] || yearHint) ? ymd(+(m[6] || yearHint), MONTHS.indexOf(m[4].toLowerCase()) + 1, +m[5]) : null;
-    else if (m[7]) d = ymd(+m[9], +m[7], +m[8]);
-    if (d) out.push(d);
-  }
-  return out;
-}
-const toYmd = (v) => datesIn(v)[0] || null;
-const todayYmd = () => new Date().toLocaleDateString('en-CA', { timeZone: TZ });   // "YYYY-MM-DD"
-
-// The event's first and last day, or null when the dates can't be read with
-// confidence. Reads ranges typed into one field ("Nov 7 - Nov 8, 2026") and
-// end dates without a year; a range like "Nov 7 - 8, 2026" that can't be
-// fully read means "can't tell".
-function eventWindow(evt) {
-  if (!evt) return null;
-  const startText = String(evt.start_date == null ? '' : evt.start_date).trim();
-  const endText = String(evt.end_date == null ? '' : evt.end_date).trim();
-  const first = datesIn(startText);
-  if (!first.length) return null;
-  const year = +first[0].slice(0, 4);
-  const starts = datesIn(startText, year);
-  // "Nov 7 – 8, 2026" (ISO dates aside, whose own dashes don't count)
-  if (/\d\s*[-–—]\s*\d/.test(startText.replace(/\d{4}-\d{1,2}-\d{1,2}/g, '')) && starts.length < 2) return null;
-  let ends = endText ? datesIn(endText, year) : [];
-  if (endText && !ends.length) return null;                                    // an end we can't read
-  // "Dec 31, 2026" to "Jan 1" (no year): the end is in the next year.
-  ends = ends.map((d) => (d < starts[0] ? datesIn(endText, year + 1)[0] || d : d));
-  const all = [...starts, ...ends].sort();
-  return { start: all[0], end: all[all.length - 1] };
-}
-
-// True only when the event's dates are known and today (New York) is outside them.
-function notToday(evt) {
-  const w = eventWindow(evt);
-  if (!w) return false;
-  const today = todayYmd();
-  return today < w.start || today > w.end;
-}
+// Event dates (not-today check): shared with the bot's /vips command.
+const { notToday, todayYmd } = require('../lib/vip-dates');
 
 function formatTime(iso) {
   return new Date(iso).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
@@ -146,19 +92,22 @@ function formatTime(iso) {
 
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-// The admin group message, e.g.
-//   ⭐ Ravi Patel has arrived at 10:42 AM              (bold, name underlined)
+// The VIP group message, e.g.
+//   ⭐ Kevin Brown has arrived at 10:42 AM             (bold, name underlined)
+//   - Core Mark                                         (the pass's note, if any)
 //
-//   VIPs that have arrived (3 of 12):                  (bold)
+//   VIPs that have arrived (3 of 12):                   (bold)
 //   Anil Shah
-//   Ravi Patel
+//   Kevin Brown
+//   - Core Mark
 // arrived = null when the list could not be read: the arrival line alone is
 // sent rather than a wrong list or count.
-function arrivalMessage(guestName, arrivedAt, arrived, total) {
-  const line = `⭐ <b><u>${esc(guestName)}</u> has arrived at ${esc(formatTime(arrivedAt))}</b>`;
+const noteLine = (note) => (String(note || '').trim() ? `\n- ${esc(String(note).trim())}` : '');
+function arrivalMessage(guestName, note, arrivedAt, arrived, total) {
+  const line = `⭐ <b><u>${esc(guestName)}</u> has arrived at ${esc(formatTime(arrivedAt))}</b>${noteLine(note)}`;
   if (!arrived) return line;
   const head = `${line}\n\n<b>VIPs that have arrived (${arrived.length}${total ? ' of ' + total : ''}):</b>\n`;
-  const names = arrived.map((a) => esc(a.guest_name));
+  const names = arrived.map((a) => esc(a.guest_name) + noteLine(a.note));
   // Telegram rejects a message over 4096 characters; keep the newest arrivals
   // visible by trimming from the top of the list.
   let body = names.join('\n');
@@ -208,12 +157,15 @@ async function loadEvent(supabase, eventId) {
   return error ? null : data;
 }
 
-const PASS_FIELDS = 'id, guest_name, event_id, event_name, event_date, checked_in_at, checked_in_by';
+// Whole rows, so a column added later (note) can't break scanning before its
+// SQL is run. Only what passView picks out ever leaves the server.
+const PASS_FIELDS = '*';
 
 function passView(p, evt) {
   return {
     id: p.id,
     guest_name: p.guest_name,
+    note: String(p.note || '').trim(),   // e.g. "Core Mark": tells apart guests with the same name
     event_name: p.event_name,
     event_date: p.event_date,
     event_time: { start: String((evt && evt.start_time) || '').trim(), end: String((evt && evt.end_time) || '').trim() },
@@ -369,7 +321,7 @@ exports.handler = async (event) => {
     // was for, and don't post that other event's arrivals list as today's.
     if (otherDay) {
       const when = [p.event_name, p.event_date].map((s) => String(s || '').trim()).filter(Boolean).join(', ');
-      const text = arrivalMessage(p.guest_name, p.checked_in_at || now, null, 0) +
+      const text = arrivalMessage(p.guest_name, p.note, p.checked_in_at || now, null, 0) +
         (when ? `\n<i>Checked in anyway with a pass for ${esc(when)}.</i>` : '');
       const notifiedOther = await sendTelegram(text);
       return reply(200, { first: true, notified: notifiedOther, pass: passView(p, evt) });
@@ -380,7 +332,7 @@ exports.handler = async (event) => {
     let total = 0;
     if (p.event_id) {
       const [list, counted] = await Promise.all([
-        supabase.from('vip_passes').select('guest_name, checked_in_at')
+        supabase.from('vip_passes').select('*')
           .eq('event_id', p.event_id).not('checked_in_at', 'is', null)
           .order('checked_in_at', { ascending: true }),
         supabase.from('vip_passes').select('*', { count: 'exact', head: true }).eq('event_id', p.event_id)
@@ -389,7 +341,7 @@ exports.handler = async (event) => {
       else if (list.data && list.data.length) arrived = list.data;
       total = counted.error ? 0 : (counted.count || 0);
     }
-    const notified = await sendTelegram(arrivalMessage(p.guest_name, p.checked_in_at || now, arrived, total));
+    const notified = await sendTelegram(arrivalMessage(p.guest_name, p.note, p.checked_in_at || now, arrived, total));
 
     return reply(200, { first: true, notified, pass: passView(p, evt) });
   }

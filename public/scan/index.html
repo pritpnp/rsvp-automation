@@ -108,6 +108,8 @@
     .badge.bad  { background: var(--red-bg);   color: var(--red); }
     .guest { font-family: 'Cormorant Garamond', serif; font-size: clamp(32px, 9vw, 42px); font-weight: 700;
              text-align: center; line-height: 1.1; margin: 18px 0 6px; overflow-wrap: anywhere; }
+    /* The pass note ("Core Mark"): tells the volunteer which of two same-named guests this is. */
+    .guest-note { text-align: center; font-size: 17px; font-weight: 500; color: var(--gold); margin: -2px 0 8px; overflow-wrap: anywhere; }
     .event { text-align: center; font-size: 16px; color: var(--brown); }
     .when  { text-align: center; font-size: 14px; color: var(--text-muted); margin-top: 2px; }
     /* Date and time each stay whole where they fit; a long free-text time
@@ -520,6 +522,7 @@
     function passDetails(p) {
       const frag = document.createDocumentFragment();
       frag.appendChild(el('div', 'guest', p.guest_name || '—'));
+      if (p.note) frag.appendChild(el('div', 'guest-note', '— ' + p.note));
       frag.appendChild(el('div', 'event', p.event_name || ''));
       const when = el('div', 'when');
       const start = formatTime(p.event_time && p.event_time.start);

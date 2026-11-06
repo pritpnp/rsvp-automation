@@ -212,6 +212,10 @@
               <div class="form-group" style="flex:2;min-width:160px"><label>Guest Name</label><input type="text" id="new-guest" placeholder="Full Name" /></div>
               <div class="form-group" style="flex:1;min-width:230px"><label>Phone Number(s) — 10 digits</label><div id="new-phones-wrap"></div></div>
             </div>
+            <div class="form-row" style="margin-top:10px">
+              <div class="form-group" style="flex:1"><label>Note (optional)</label><input type="text" id="new-guest-note" maxlength="120" placeholder="e.g. Core Mark, or From Allentown — tells apart guests with the same name" /></div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Only admins, volunteers and the VIP Telegram group see this — never the guest.</div>
             <button class="btn-create" style="margin-top:14px" onclick="createPass()">Generate Pass →</button>
             <div class="success-msg" id="pass-success"></div>
           </div>
@@ -222,7 +226,7 @@
               <h2 style="margin:0">Bulk Upload</h2>
               <button onclick="downloadTemplate()" style="background:none;border:1px solid rgba(200,134,10,0.4);color:var(--gold);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">⬇ Download Template</button>
             </div>
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Upload a CSV or Excel file. The <strong>Name</strong> and <strong>Phone</strong> columns are required — phone is what guests use to look up their invite. For a pass with more than one number (e.g. husband and wife), put them in the same Phone cell separated by commas.</p>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Upload a CSV or Excel file. The <strong>Name</strong> and <strong>Phone</strong> columns are required — phone is what guests use to look up their invite. For a pass with more than one number (e.g. husband and wife), put them in the same Phone cell separated by commas. An optional <strong>Note</strong> column (e.g. "Core Mark") tells apart guests with the same name; guests never see it.</p>
 
             <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()"
               ondragover="event.preventDefault();this.classList.add('drag-over')"
@@ -869,6 +873,7 @@
 
       LOADED_PASSES = passes;
       if (passes.length) EXTRA_PHONES_SUPPORTED = 'extra_phones' in passes[0];
+      if (passes.length) NOTES_SUPPORTED = 'note' in passes[0];
       if (!passes.length) { c.innerHTML = '<div class="empty-state">No passes for this event yet.</div>'; return; }
 
       // Any box ticked while the list was reloading is redrawn unticked, so
@@ -882,6 +887,7 @@
             ${canDelete ? `<input type="checkbox" id="cb-${p.id}" data-pass-id="${p.id}" onchange="togglePassSelect('${p.id}', this.checked)" style="width:16px;height:16px;flex-shrink:0;accent-color:var(--saffron);cursor:pointer" />` : ''}
             <div class="item-info">
               <div class="item-name">${escapeHtml(p.guest_name)}</div>
+              ${p.note ? `<div class="item-sub" style="color:var(--brown)">— ${escapeHtml(p.note)}</div>` : ''}
               ${p.checked_in_at ? `<div class="item-sub" style="color:#166534;font-weight:500">✅ Arrived ${escapeHtml(arrivalTime(p.checked_in_at))}${p.checked_in_by ? ' · checked in by ' + escapeHtml(p.checked_in_by) : ''}${canEdit ? ` <button onclick="undoArrival('${p.id}')" style="background:none;border:none;padding:0 0 0 6px;color:var(--gold);text-decoration:underline;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">Undo</button>` : ''}</div>` : ''}
               <div class="item-sub">${p.phone ? '📞 ' + [p.phone, ...(p.extra_phones || [])].map(escapeHtml).join(' · ') : '<span style="color:#dc2626">⚠ No phone — invite lookup disabled</span>'}</div>
               <a class="item-link" href="https://screvents.com/invite" target="_blank">screvents.com/invite ↗ (share this)</a>
@@ -895,6 +901,9 @@
             <div class="form-row">
               <div class="form-group" style="flex:2;min-width:160px"><label>Guest Name</label><input type="text" id="pass-edit-name-${p.id}" value="${escapeHtml(p.guest_name)}" /></div>
               <div class="form-group" style="flex:1;min-width:230px"><label>Phone Number(s) — 10 digits</label>${phoneListHtml('pass-edit-phones-' + p.id, passNumbers(p), p.id)}</div>
+            </div>
+            <div class="form-row" style="margin-top:10px">
+              <div class="form-group" style="flex:1"><label>Note (optional)</label><input type="text" id="pass-edit-note-${p.id}" maxlength="120" value="${escapeHtml(p.note || '')}" placeholder="e.g. Core Mark" /></div>
             </div>
             <div style="display:flex;gap:8px;margin-top:10px">
               <button onclick="savePass('${p.id}')" style="padding:8px 18px;background:linear-gradient(135deg,var(--saffron),var(--gold));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">Save</button>
@@ -990,6 +999,7 @@
     const MAX_PHONES = 4;
     let LOADED_PASSES = [];              // the selected event's passes, for the live warnings
     let EXTRA_PHONES_SUPPORTED = true;   // false until the extra-phones SQL has been run
+    let NOTES_SUPPORTED = true;          // false until the pass-notes SQL has been run
 
     function phoneRowHtml(value, removable) {
       return '<div class="phone-row"><input type="tel" value="' + escapeHtml(value || '') + '" placeholder="5705551234" inputmode="numeric" autocomplete="off" data-us-phone aria-label="Phone number" />'
@@ -1069,10 +1079,13 @@
       if (!numbers.length) { alert('Phone number is required so guests can look up their invitation.'); return; }
       const payload = { guest_name, phone: numbers[0], event_id: selectedEventId };
       if (numbers.length > 1) payload.extra_phones = numbers.slice(1);
+      const note = document.getElementById('new-guest-note').value.trim();
+      if (note) payload.note = note;
       const res = await fetch(PASSES_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Failed to create pass'); return; }
       document.getElementById('new-guest').value = '';
+      document.getElementById('new-guest-note').value = '';
       resetNewPhones();
       sucEl.innerHTML = `✅ Pass created! Share <a href="https://screvents.com/invite" target="_blank">screvents.com/invite</a> with the guest — they'll look it up by name + phone.`;
       sucEl.style.display = 'block';
@@ -1109,6 +1122,9 @@
       const numbers = phonesForSave('pass-edit-phones-' + id);
       if (!numbers) return;
       const body = { id, guest_name };
+      const note = (document.getElementById('pass-edit-note-' + id)?.value || '').trim();
+      // Sent once the column exists (so clearing a note clears it), or when typed.
+      if (NOTES_SUPPORTED || note) body.note = note;
       if (numbers.length) {
         body.phone = numbers[0];
         // Always sent once the column exists, so removing extras removes them.
@@ -1123,7 +1139,7 @@
     let parsedRows = [];
 
     function downloadTemplate() {
-      const csv = 'Name,Phone,Email,Telegram\nJohn Doe,5705551234,,\nRaj & Priya Shah,"2725550199, 2725550188",,\n';
+      const csv = 'Name,Phone,Note\nKevin Brown,5705551234,Core Mark\nRaj & Priya Shah,"2725550199, 2725550188",Dr. Shah\'s parents\nAnita Desai,5705550142,\n';
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -1156,6 +1172,7 @@
           const keys = Object.keys(data[0]);
           const nameKey  = keys.find(k => k.toLowerCase() === 'name');
           const phoneKey = keys.find(k => k.toLowerCase() === 'phone');
+          const noteKey  = keys.find(k => ['note', 'notes'].includes(k.toLowerCase().trim()));   // optional
           if (!nameKey)  { showUploadError('Could not find a "Name" column. Please use the template.'); return; }
           if (!phoneKey) { showUploadError('Could not find a "Phone" column. Phone is required so guests can look up their invite.'); return; }
 
@@ -1180,8 +1197,7 @@
               name,
               phone,
               numbers,
-              email:    (row['Email'] || row['email'] || '').toString().trim(),
-              telegram: (row['Telegram'] || row['telegram'] || '').toString().trim(),
+              note:     noteKey ? (row[noteKey] || '').toString().replace(/\s+/g, ' ').trim().slice(0, 120) : '',
               valid:    !issue,
               issue
             };
@@ -1227,15 +1243,14 @@
       const table = document.getElementById('preview-table');
       table.innerHTML = `
         <thead><tr>
-          <th>Name</th><th>Phone</th><th>Email</th><th>Telegram</th>
+          <th>Name</th><th>Phone</th><th>Note</th>
         </tr></thead>
         <tbody>
           ${parsedRows.map(r => `
             <tr class="${r.valid ? '' : 'invalid'}" ${r.issue ? `title="${escapeHtml(r.issue)}"` : ''}>
               <td>${escapeHtml(r.name) || '(empty)'}</td>
               <td>${r.numbers.length ? r.numbers.map(escapeHtml).join(' · ') : '<em style="color:#dc2626">missing</em>'}${r.issue ? `<div style="color:#dc2626;font-size:11px;margin-top:2px">⚠ ${escapeHtml(r.issue)}</div>` : ''}</td>
-              <td>${escapeHtml(r.email) || '—'}</td>
-              <td>${escapeHtml(r.telegram) || '—'}</td>
+              <td>${escapeHtml(r.note) || '—'}</td>
             </tr>`).join('')}
         </tbody>`;
 
@@ -1260,7 +1275,8 @@
 
     async function importPasses() {
       const guests = parsedRows.filter(r => r.valid).map(r => ({
-        name: r.name, phone: r.numbers[0], ...(r.numbers.length > 1 ? { extra_phones: r.numbers.slice(1) } : {})
+        name: r.name, phone: r.numbers[0], ...(r.numbers.length > 1 ? { extra_phones: r.numbers.slice(1) } : {}),
+        ...(r.note ? { note: r.note } : {})
       }));
       if (!guests.length || !selectedEventId) return;
 

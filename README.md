@@ -55,7 +55,7 @@ Pulled from `deadlines.json` at the repository root (the single source of truth 
 - **Admin dashboard** — Single-page app at `/admin` (source: `public/admin/index.html`) that surfaces every administrative operation: VIP passes, live + archived RSVPs, events CRUD, managers CRUD, per-zone RSVP toggles, zone event-name overrides, flyer uploads/removal, full-site redeploy, an IP rate-limit console for the invite lookup endpoint, and (superadmin-only) an Audit Log viewer.
 - **Manager dashboard** — The same `/admin` page renders a narrowed view for non-superadmin managers, gated by a JSONB `permissions` blob on the `managers` row (`view_rsvps`, `edit_rsvps`, `view_passes`, `create_delete_passes`, `edit_passes`, `flyer_builder`, `flyer_zones`, `upload_flyers`, `remove_flyers`, `refresh_flyers`, etc.). Authentication is shared with superadmin via `netlify/functions/manager-auth.js`.
 - **Flyer builder with Telegram-mediated approval** — `/flyer-builder` is a WYSIWYG composer (`public/flyer-builder/index.html`) that renders the flyer and a 1200×630 social preview onto `<canvas>` elements and exports them to base64 JPEGs via `toDataURL` (from a separate offscreen canvas, so the on-screen "PREVIEW" watermark is never baked in), then POSTs them to `netlify/functions/review-flyer.js`. The function stores the artifacts in the Supabase `flyer-reviews` Storage bucket, inserts a row into `flyer_reviews` with `status='pending'`, and sends the admin Telegram group a photo card with inline Approve / Reject buttons. On approval, `netlify/functions/telegram-webhook.js` atomically claims the row (`pending → processing`), deletes any stale flyer files in `flyers/<zone>/`, commits the new `flyer.jpg` and `og.jpg` to the GitHub repo `pritpnp/rsvp-automation`, and marks the row `approved`. On rejection the manager receives a follow-up message with a deep-link back into the builder, pre-filled from `event_data.rejectUrl`.
-- **Telegram bot for organizers** — `/getflyer`, `/summary`, `/uploadflyer`, `/removeflyer`, `/refreshall`, and `/cancel` commands are handled by `netlify/functions/telegram-webhook.js`. Zone group chats are mapped to zone slugs through `TELEGRAM_CHAT_ID_*` env vars so bare commands "know" which zone they belong to.
+- **Telegram bot for organizers** — `/getflyer`, `/summary`, `/uploadflyer`, `/removeflyer`, `/refreshall`, `/cancel` and `/vips` commands are handled by `netlify/functions/telegram-webhook.js`. `/vips` (also `/vip`, `/viplist`; admin group and the SCREvents VIP group only) posts the VIP list for each upcoming event (next three, by the dates in `events` read with `netlify/lib/vip-dates.js`): names A–Z, each note on a "- " line under the name, ✅ and the time for anyone checked in, "N invited · M arrived"; no phone numbers; long lists split under Telegram's 4096-character limit. Anywhere else it replies that it only works in those two groups. Zone group chats are mapped to zone slugs through `TELEGRAM_CHAT_ID_*` env vars so bare commands "know" which zone they belong to.
 - **Automated scheduled jobs** — Five GitHub Actions workflows under `.github/workflows/` run the recurring work (cron, dispatch, and event-triggered). Listed below.
 
 ### Scheduled GitHub Actions workflows
@@ -653,7 +653,7 @@ Each pass shows a **QR code** of its own link (`/vip/<id>`), drawn in the browse
 
 Flow: sign in (username + password; token kept in `localStorage` as `volunteer_token`; the session lasts 24 hours and is extended while in use) → live camera viewfinder (rear camera, decoded ~6×/second) with a **Take a photo instead** fallback → a scan **checks the guest in straight away** (no extra tap) and shows one of:
 
-- **Checked in at 10:42 AM** — guest name, event, date · time. The first check-in of a pass posts to the SCREvents VIP Telegram group (see `volunteer-scan`). If Telegram fails the volunteer is told to let the team know.
+- **Checked in at 10:42 AM** — guest name, the pass's note under it ("— Core Mark", to tell apart guests with the same name), event, date · time. The first check-in of a pass posts to the SCREvents VIP Telegram group (see `volunteer-scan`). If Telegram fails the volunteer is told to let the team know.
 - **Already arrived at 10:42 AM** — the pass was checked in before (e.g. a second car; another day's arrival shows its date too). Informational only; the volunteer lets them through and no second message is sent.
 - **Not today's event** — the pass's event dates (read live from `events`) don't include today in New York, e.g. an old invitation link. Nothing is recorded; **Check in anyway** records it deliberately (and the Telegram message then names the pass's event instead of listing that event's arrivals). Dates are read from both fields — a date column, "Sat, Nov 7, 2026", "11/7/2026", a range typed into one field ("Nov 7 - Nov 8, 2026"), an end date without a year — and anything that can't be read with confidence ("Nov 7 – 8", "TBD") never blocks. A pass already checked in today always shows **Already arrived**.
 - **Not a VIP pass / not found** — any other QR code, or a deleted pass.
@@ -1072,7 +1072,8 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
 - **Check-in:** a single `UPDATE … WHERE id = ? AND checked_in_at IS NULL`, so only the first scan of a pass records `checked_in_at` / `checked_in_by`, even if two volunteers scan it at once. Only that first check-in posts to the SCREvents VIP group (`TELEGRAM_CHAT_ID_VIP`, falling back to the admin group `TELEGRAM_CHAT_ID` while that is unset), HTML parse mode:
 
   ```
-  ⭐ <b><u>Ravi Patel</u> has arrived at 10:42 AM</b>
+  ⭐ <b><u>Kevin Brown</u> has arrived at 10:42 AM</b>
+  - Core Mark
 
   <b>VIPs that have arrived (3 of 12):</b>
   Anil Shah
@@ -1080,7 +1081,7 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
   Ravi Patel
   ```
 
-  The list is every checked-in pass for the same event in arrival order ("of 12" = passes for the event). Times are America/New_York. Over Telegram's 4096-character limit the oldest names are folded into "…and N earlier". If the list can't be read, the arrival line is sent alone rather than a wrong list. The Telegram call is awaited (6 s timeout); a failure leaves the check-in in place and returns `notified: false`. The bot must be a member of the VIP group.
+  A pass's note goes on a "- " line under the name, in the arrival line and in the list (no note, no line). The list is every checked-in pass for the same event in arrival order ("of 12" = passes for the event). Times are America/New_York. Over Telegram's 4096-character limit the oldest names are folded into "…and N earlier". If the list can't be read, the arrival line is sent alone rather than a wrong list. The Telegram call is awaited (6 s timeout); a failure leaves the check-in in place and returns `notified: false`. The bot must be a member of the VIP group.
 - **Before the migration:** `503` with "ask the admin to run the volunteers SQL" (`scripts/migrations/2026-11-05-add-volunteers-and-checkins.sql`).
 - **Env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID_VIP` (fallback `TELEGRAM_CHAT_ID`).
 - **Supabase tables:** `volunteers`, `volunteer_sessions`, `vip_passes`, `events` (dates for the not-today check, start/end time), `audit_log` (`volunteer.login`, `pass.checkin`; actor shown as `<username> (volunteer)`).
@@ -1944,6 +1945,7 @@ The GitHub Actions scripts (`scripts/automate.js`, `scripts/cleanup-past-rsvps.j
 | `created_at` | `timestamptz` | `ORDER BY created_at DESC`. |
 | `checked_in_at` | `timestamptz` null | First arrival, set by a volunteer at `/scan` (`volunteer-scan.js`). Never overwritten by a later scan. Shown as "✅ Arrived 10:42 AM" in the admin pass list. |
 | `checked_in_by` | `text` null | Volunteer username who checked them in. |
+| `note` | `text` not null default `''` | Private note, e.g. "Core Mark", to tell apart guests with the same name (max 120 characters, one line). Set when creating / editing a pass or from the upload's optional **Note** column. Shown in the admin pass list, on the /scan result, in the arrival messages and in `/vips`; never on the guest's own pass or link preview. Added by `scripts/migrations/2026-11-05-add-pass-notes.sql`; before it is run, passes and uploads without notes work as before and a note gets "run the notes SQL". |
 
 **Read by.** `netlify/functions/admin-passes.js` (full select with `events(event_name, start_date)` embed, plus per-event dedup `SELECT phone_normalized WHERE event_id = ? AND phone_normalized IN (...)` and count `SELECT * count exact head true WHERE event_id = ?`); `netlify/functions/lookup-pass.js` (`SELECT id, guest_name, event_id, created_at WHERE phone_normalized = ? ORDER BY created_at DESC`); `netlify/functions/get-pass.js` (`SELECT id, guest_name, event_name, event_date WHERE id = ?`).
 
