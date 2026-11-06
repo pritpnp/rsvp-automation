@@ -48,12 +48,16 @@ function showDate(v) {
   if (!m) return t;   // free text, shown as typed
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12)).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
-function chunkLines(header, lines, limit = 3900) {
+// sep goes BETWEEN entries; the first entry of each message (after the header
+// or "(continued)") always follows a single line break, so a gap never opens
+// a message.
+function chunkLines(header, lines, limit = 3900, sep = '\n') {
   const out = [];
-  let cur = header;
+  let cur = header, first = true;
   for (const line of lines) {
-    if ((cur + '\n' + line).length > limit) { out.push(cur); cur = '<i>(continued)</i>'; }
-    cur += '\n' + line;
+    if ((cur + (first ? '\n' : sep) + line).length > limit) { out.push(cur); cur = '<i>(continued)</i>'; first = true; }
+    cur += (first ? '\n' : sep) + line;
+    first = false;
   }
   out.push(cur);
   return out;
@@ -107,10 +111,14 @@ async function buildVipLists(supabase) {
           ? time
           : d.toLocaleDateString('en-US', { timeZone: VIP_TZ, month: 'short', day: 'numeric' }) + ', ' + time);
       }
+      // "20. <b>Tom Callihan</b> - (Pocono Dairy) ✅ 7:05 PM": the name in bold,
+      // the note that tells same-named guests apart beside it, arrival last.
       const note = String(x.note || '').trim();
-      return `${i + 1}. ${escHtml(x.guest_name)}${at}${note ? `\n    - ${escHtml(note)}` : ''}`;
+      return `${i + 1}. <b>${escHtml(x.guest_name)}</b>${note ? ` - (${escHtml(note)})` : ''}${at}`;
     });
-    messages.push(...chunkLines(header, lines));
+    // A blank line between guests. Telegram has no line-spacing control, so a
+    // full empty line is the smallest gap a message can show.
+    messages.push(...chunkLines(header, lines, 3900, '\n\n'));
   }
   return messages;
 }
