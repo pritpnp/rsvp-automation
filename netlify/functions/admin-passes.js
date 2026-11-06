@@ -76,7 +76,11 @@ function conflictMessage(c) {
 // group — never on the guest's own pass.
 const NOTE_MAX = 120;
 function cleanNote(v) {
-  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
+  const s = String(v == null ? '' : v)
+    .toWellFormed()                                   // a lone half of an emoji becomes U+FFFD
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')    // control characters (e.g. from a cp1252 CSV)
+    .replace(/\s+/g, ' ').trim();
+  return Array.from(s).slice(0, NOTE_MAX).join('').trim();   // whole characters, never half an emoji
 }
 
 function dbError(error) {

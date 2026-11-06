@@ -62,14 +62,23 @@ async function buildVipLists(supabase) {
   const { data: events, error } = await supabase.from('events').select('*');
   if (error) throw new Error(error.message);
   const today = todayYmd();
-  const upcoming = (events || [])
-    .map((e) => ({ e, w: eventWindow(e) }))
+  const withWindow = (events || []).map((e) => ({ e, w: eventWindow(e) }));
+  const upcoming = withWindow
     .filter((x) => x.w && x.w.end >= today)
     .sort((a, b) => a.w.start.localeCompare(b.w.start))
     .slice(0, 3);
+  // An event whose typed date can't be read (no year, "Nov 7 – 8", …) could
+  // be today's: list it too if it has passes made in the last 60 days,
+  // flagged so the date can be fixed — never silently leave it out.
+  const since = new Date(Date.now() - 60 * 86400e3).toISOString();
+  for (const x of withWindow.filter((y) => !y.w)) {
+    const { count, error: cErr } = await supabase.from('vip_passes')
+      .select('*', { count: 'exact', head: true }).eq('event_id', x.e.id).gte('created_at', since);
+    if (!cErr && count) upcoming.push({ ...x, undated: true });
+  }
   if (!upcoming.length) return ['🎟 No upcoming VIP events found.'];
   const messages = [];
-  for (const { e } of upcoming) {
+  for (const { e, undated } of upcoming) {
     const { data: passes, error: pErr } = await supabase.from('vip_passes').select('*').eq('event_id', e.id);
     if (pErr) throw new Error(pErr.message);
     const list = (passes || []).slice().sort((a, b) =>
@@ -82,14 +91,22 @@ async function buildVipLists(supabase) {
     const header = [
       `🎟 <b>VIP list — ${escHtml(e.event_name)}</b>`,
       when ? escHtml(when) : '',
+      undated ? '⚠️ <i>Couldn\'t read this event\'s date — fix it in the admin portal (e.g. "Sat, Nov 7, 2026").</i>' : '',
       `<b>${list.length} invited · ${arrived} arrived</b>`,
       '',
-    ].filter((x, i) => x !== '' || i === 3).join('\n');
+    ].filter((x, i, all) => x !== '' || i === all.length - 1).join('\n');
     if (!list.length) { messages.push(header + '\nNo passes yet.'); continue; }
     const lines = list.map((x, i) => {
-      const at = x.checked_in_at
-        ? ' ✅ ' + new Date(x.checked_in_at).toLocaleTimeString('en-US', { timeZone: VIP_TZ, hour: 'numeric', minute: '2-digit' })
-        : '';
+      // Time alone for a check-in today; "Nov 4, 7:30 PM" for an earlier
+      // day, so it isn't mistaken for today's arrival.
+      let at = '';
+      if (x.checked_in_at) {
+        const d = new Date(x.checked_in_at);
+        const time = d.toLocaleTimeString('en-US', { timeZone: VIP_TZ, hour: 'numeric', minute: '2-digit' });
+        at = ' ✅ ' + (d.toLocaleDateString('en-CA', { timeZone: VIP_TZ }) === today
+          ? time
+          : d.toLocaleDateString('en-US', { timeZone: VIP_TZ, month: 'short', day: 'numeric' }) + ', ' + time);
+      }
       const note = String(x.note || '').trim();
       return `${i + 1}. ${escHtml(x.guest_name)}${at}${note ? `\n    - ${escHtml(note)}` : ''}`;
     });

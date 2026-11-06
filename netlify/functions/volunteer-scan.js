@@ -36,6 +36,7 @@ const TZ = 'America/New_York';
 const TELEGRAM_LIMIT = 4096;
 const LOGIN_FAIL_LIMIT = 10;         // failed sign-ins for one volunteer from one IP ...
 const LOGIN_FAIL_IP_LIMIT = 40;      // ... or for anyone from one IP (venue Wi-Fi is shared) ...
+const LOGIN_FAIL_ACCOUNT_LIMIT = 30; // ... or for one volunteer from anywhere (4-digit PINs) ...
 const LOGIN_FAIL_WINDOW_MIN = 15;    // ... per this many minutes
 const MAX_PASSWORD = 200;            // superadmin-volunteers.js refuses longer ones too
 
@@ -195,24 +196,31 @@ exports.handler = async (event) => {
     if (username.length > 64 || password.length > MAX_PASSWORD) return failed();
 
     // Slow down password guessing, counted from the audit log: 10 failures
-    // for this volunteer from this IP, or 40 for anyone from this IP, in 15
-    // minutes. Per volunteer first, so one person mistyping on the venue
+    // for this volunteer from this IP, 40 for anyone from this IP, or 30 for
+    // this volunteer from anywhere, in 15 minutes. Per volunteer first, so one person mistyping on the venue
     // Wi-Fi can't lock everyone else out. If the count can't be read, sign-in
     // is not blocked. (A burst of simultaneous guesses can slip past a count
     // like this; bcrypt keeps each guess slow, and a volunteer account can
     // only check in passes it already has the link to.)
+    // A 4-digit PIN has 10,000 values, so one volunteer's account is also
+    // capped across all addresses: someone hopping between IPs can't keep
+    // guessing. (The trade-off: a flood of wrong tries can lock that one
+    // volunteer out for 15 minutes; a new PIN from the superadmin doesn't
+    // lift it, the window passing does.)
     const ip = getClientIp(event);
-    if (ip && ip !== 'unknown') {
-      const since = new Date(Date.now() - LOGIN_FAIL_WINDOW_MIN * 60e3).toISOString();
-      const failures = (extra) => {
-        let q = supabase.from('audit_log').select('*', { count: 'exact', head: true })
-          .eq('action', 'volunteer.login').eq('success', false).eq('ip', ip).gte('created_at', since);
-        return (extra ? q.eq('actor_name', extra) : q);
-      };
-      const [mine, all] = await Promise.all([failures(username.slice(0, 64) + ' (volunteer)'), failures(null)]);
-      if ((!mine.error && (mine.count || 0) >= LOGIN_FAIL_LIMIT) || (!all.error && (all.count || 0) >= LOGIN_FAIL_IP_LIMIT)) {
-        return reply(429, { error: `Too many wrong tries. Please wait ${LOGIN_FAIL_WINDOW_MIN} minutes and try again.` });
-      }
+    const since = new Date(Date.now() - LOGIN_FAIL_WINDOW_MIN * 60e3).toISOString();
+    const actor = username.slice(0, 64) + ' (volunteer)';
+    const failures = () => supabase.from('audit_log').select('*', { count: 'exact', head: true })
+      .eq('action', 'volunteer.login').eq('success', false).gte('created_at', since);
+    const knownIp = ip && ip !== 'unknown';
+    const [acct, mine, all] = await Promise.all([
+      failures().eq('actor_name', actor),
+      knownIp ? failures().eq('ip', ip).eq('actor_name', actor) : null,
+      knownIp ? failures().eq('ip', ip) : null,
+    ]);
+    const over = (r, limit) => !!r && !r.error && (r.count || 0) >= limit;
+    if (over(acct, LOGIN_FAIL_ACCOUNT_LIMIT) || over(mine, LOGIN_FAIL_LIMIT) || over(all, LOGIN_FAIL_IP_LIMIT)) {
+      return reply(429, { error: `Too many wrong tries. Please wait ${LOGIN_FAIL_WINDOW_MIN} minutes and try again.` });
     }
 
     const { data: vol, error } = await supabase

@@ -1159,11 +1159,29 @@
       if (file) processUploadFile(file);
     }
 
+    // A CSV is plain text whose encoding the file doesn't state: Google Sheets,
+    // Numbers and iPhone export UTF-8 (curly apostrophes, accents, Gujarati),
+    // Windows Excel's "CSV (Comma delimited)" exports Windows-1252. Decode it
+    // here — UTF-8 first, Windows-1252 if that fails — instead of letting the
+    // spreadsheet library read raw bytes, which garbled every non-English
+    // character. raw: true keeps cells as typed ("007", "11/8" stay text in a
+    // Name or Note). .xlsx / .xls files carry their own encoding.
+    function readWorkbook(buf, file) {
+      const bytes = new Uint8Array(buf);
+      const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;                                    // .xlsx
+      const isOle = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;   // .xls
+      if (isZip || isOle) return XLSX.read(bytes, { type: 'array' });
+      let text;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch (e) { text = new TextDecoder('windows-1252').decode(bytes); }
+      return XLSX.read(text, { type: 'string', raw: true });
+    }
+
     function processUploadFile(file) {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const wb = XLSX.read(e.target.result, { type: 'binary' });
+          const wb = readWorkbook(e.target.result, file);
           const ws = wb.Sheets[wb.SheetNames[0]];
           const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
           if (!data.length) { showUploadError('File appears to be empty.'); return; }
@@ -1197,7 +1215,8 @@
               name,
               phone,
               numbers,
-              note:     noteKey ? (row[noteKey] || '').toString().replace(/\s+/g, ' ').trim().slice(0, 120) : '',
+              // Same as the server: one line, 120 whole characters (never half an emoji).
+              note:     noteKey ? Array.from((row[noteKey] || '').toString().replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 120).join('').trim() : '',
               valid:    !issue,
               issue
             };
@@ -1229,7 +1248,7 @@
           showUploadError('Could not parse file. Please use CSV or Excel format.');
         }
       };
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     }
 
     function renderUploadPreview() {
