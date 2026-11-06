@@ -26,7 +26,7 @@ function fail(error) {
 }
 
 function cleanUsername(u) { return String(u || '').toLowerCase().trim(); }
-const MIN_PASSWORD = 6;
+const MIN_PASSWORD = 4;   // e.g. a 4-digit PIN; sign-in is rate-limited
 const MAX_PASSWORD = 200;  // the sign-in page refuses longer ones
 const MAX_USERNAME = 64;   // the sign-in page refuses longer names
 

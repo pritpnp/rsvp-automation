@@ -1092,7 +1092,7 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
 - **Purpose:** Superadmin CRUD for volunteer accounts (admin portal → Volunteers tab).
 - **HTTP method:** `GET` list (`id, username, created_at` — never the hash), `POST { username, password }`, `PATCH { id, username?, password? }`, `DELETE { id }`.
 - **Auth:** superadmin only — `x-admin-password` or a superadmin `x-manager-token`, same as `superadmin-managers`.
-- **Notes:** usernames are lower-cased and trimmed (64 characters max); passwords need 6–200 characters (bcrypt-hashed). A new password, or removal, deletes that volunteer's sessions, signing them out on every phone at once — if that delete fails the request fails with "press Save again" rather than claiming success. `503` with a setup message before the migration is run. Audited as `volunteer.create` / `volunteer.update` / `volunteer.delete`.
+- **Notes:** usernames are lower-cased and trimmed (64 characters max); passwords need 4–200 characters, e.g. a 4-digit PIN (bcrypt-hashed). A new password, or removal, deletes that volunteer's sessions, signing them out on every phone at once — if that delete fails the request fails with "press Save again" rather than claiming success. `503` with a setup message before the migration is run. Audited as `volunteer.create` / `volunteer.update` / `volunteer.delete`.
 
 #### admin-passes
 
