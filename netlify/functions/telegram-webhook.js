@@ -98,6 +98,31 @@ async function buildVipLists(supabase) {
   return messages;
 }
 
+// The SCREvents VIP group's "/" menu lists only /vip — the bot's flyer and
+// summary commands belong to the other groups. Telegram keeps a separate
+// command list per chat (setMyCommands, scope "chat"), which wins over the
+// bot's default list for everyone in that group. Set the first time anything
+// reaches the webhook from that group in a warm function; repeating it is
+// harmless. Clients may need the chat reopened to show the new menu.
+let vipMenuChat = null;
+async function ensureVipMenu(botToken, chatId) {
+  if (!botToken || vipMenuChat === chatId) return;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/setMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        commands: [{ command: 'vip', description: 'List invited VIPs and who has arrived' }],
+        scope: { type: 'chat', chat_id: chatId },
+      }),
+    });
+    if (res.ok) vipMenuChat = chatId;
+    else console.error('setMyCommands (VIP group) failed:', res.status);
+  } catch (e) {
+    console.error('setMyCommands (VIP group) failed:', e.message);
+  }
+}
+
 exports.buildVipLists = buildVipLists;   // exported for tests
 
 exports.handler = async (event) => {
@@ -131,6 +156,8 @@ exports.handler = async (event) => {
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   const GITHUB_PAT         = process.env.GITHUB_PAT;
   const ADMIN_CHAT_ID      = process.env.TELEGRAM_CHAT_ID;
+  const VIP_CHAT_ID        = String(process.env.TELEGRAM_CHAT_ID_VIP || '');
+  if (message && VIP_CHAT_ID && chatId === VIP_CHAT_ID) await ensureVipMenu(TELEGRAM_BOT_TOKEN, VIP_CHAT_ID);
 
   const supabase = createClient(
     process.env.SUPABASE_URL,
