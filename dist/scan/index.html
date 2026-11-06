@@ -185,13 +185,14 @@
     function show(view) { views.forEach(v => $(v).hidden = v !== view); window.scrollTo(0, 0); }
 
     let token = localStorage.getItem(TOKEN_KEY) || '';
-    // A pass scanned just as the sign-in expired: checked in right after the
-    // volunteer signs back in, so that guest is not silently missed.
-    let pendingId = null;
+    // A pass scanned just as the sign-in expired ({ id, force }): checked in
+    // right after the volunteer signs back in, so that guest is not missed.
+    let pending = null;
 
     // Throws an Error carrying .status (0 = no connection / no response) and,
     // for a refused check-in, .data with the server's details.
     async function api(path, opts = {}) {
+      const sent = token;            // the sign-in this request carries
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
       let res, data = {};
@@ -199,7 +200,7 @@
         res = await fetch(API + path, {
           ...opts,
           signal: ctrl.signal,
-          headers: { 'Content-Type': 'application/json', 'x-volunteer-token': token, ...(opts.headers || {}) }
+          headers: { 'Content-Type': 'application/json', 'x-volunteer-token': sent, ...(opts.headers || {}) }
         });
         data = await res.json().catch(() => ({}));
       } catch (e) {
@@ -208,7 +209,10 @@
         clearTimeout(timer);
       }
       if (res.status === 401 && path !== '/login') {
-        signedOut('Your sign-in has expired. Please sign in again.');
+        // Signed in again while this was in flight: try once more with the
+        // new sign-in (repeating a check-in is always safe).
+        if (token && token !== sent) return api(path, opts);
+        if (token === sent) signedOut('Your sign-in has expired. Please sign in again.');
         const err = new Error('signed out'); err.status = 401; throw err;
       }
       if (!res.ok) {
@@ -240,7 +244,7 @@
         localStorage.setItem(TOKEN_KEY, d.token); localStorage.setItem(USER_KEY, d.username);
         $('password').value = '';
         showWho();
-        if (pendingId) { const id = pendingId; pendingId = null; handled = true; checkIn(id); }
+        if (pending) { const p = pending; pending = null; handled = true; checkIn(p.id, p.force); }
         else startScanning();
       } catch (e) {
         err.textContent = e.message; err.hidden = false;
@@ -251,7 +255,7 @@
 
     $('logout-btn').addEventListener('click', () => {
       api('/logout', { method: 'POST' }).catch(() => {});
-      pendingId = null;
+      pending = null;
       signedOut('');
     });
 
@@ -418,8 +422,10 @@
 
     // Opening the photo picker: let go of the live camera first (the phone's
     // camera app needs it, and an interrupted stream may not come back).
+    let pickerTimer = 0;
     $('photo-label').addEventListener('click', (ev) => {
       if (!window.jsQR) { ev.preventDefault(); photoError('The scanner didn\'t load. Check your signal and reload this page.'); return; }
+      clearTimeout(pickerTimer);
       $('scan-error').hidden = true;
       photoState = 'picking';
       stopCamera();
@@ -429,7 +435,9 @@
     // The picker closed without a photo: back to the live camera. 'cancel' is
     // fired by current browsers; returning focus covers the rest.
     function pickerClosed() {
-      setTimeout(() => {
+      if (photoState !== 'picking') return;     // no picker open: nothing to do
+      clearTimeout(pickerTimer);
+      pickerTimer = setTimeout(() => {
         if (photoState !== 'picking') return;
         photoState = 'idle';
         startCamera();
@@ -439,6 +447,7 @@
     window.addEventListener('focus', pickerClosed);
 
     $('photo-input').addEventListener('change', async (ev) => {
+      clearTimeout(pickerTimer);
       const file = ev.target.files && ev.target.files[0];
       ev.target.value = '';
       if (!file) { photoState = 'idle'; startCamera(); return; }
@@ -454,22 +463,24 @@
         photoError(e.message || 'Could not read that photo.');
       }
       photoState = 'idle';
-      if (text) found(text); else startCamera();
+      if (!(text && found(text, true))) startCamera();
     });
 
     // ── Result ───────────────────────────────────────────────────────────
-    function found(text) {
-      if (handled || $('scan-view').hidden) return;
+    // Returns whether the code was acted on.
+    function found(text, fromPhoto) {
+      if (handled || $('scan-view').hidden) return false;
       const m = String(text).match(UUID_RE);
       const id = m ? m[0].toLowerCase() : '';
-      // The pass just checked in, still in front of the camera after "Scan next".
-      if (id && id === lastId && performance.now() - resumedAt < 4000) return;
+      // The pass just checked in, still in front of the camera after "Scan
+      // next". Not for photos: taking one is deliberate.
+      if (!fromPhoto && id && id === lastId && performance.now() - resumedAt < 4000) return false;
       handled = true;
       pauseDecoding();
       if (navigator.vibrate) navigator.vibrate(80);
-      if (!id) { renderError('Not a VIP pass', 'That QR code isn\'t from a VIP pass.'); return; }
-      lastId = id;
+      if (!id) { renderError('Not a VIP pass', 'That QR code isn\'t from a VIP pass.'); return true; }
       checkIn(id);
+      return true;
     }
 
     const ICON_OK   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>';
@@ -588,10 +599,11 @@
       renderLoading('Checking in…');
       try {
         const d = await api('/checkin', { method: 'POST', body: JSON.stringify(force ? { id, force: true } : { id }) });
+        lastId = id;                 // answered: a re-read in the next seconds is the same guest
         if (d.first) renderCheckedIn(d.pass, d.notified); else renderAlreadyArrived(d.pass);
       } catch (e) {
         if (e.status === 401) {
-          pendingId = id;
+          pending = { id, force: !!force };
           const m = $('login-error');
           m.textContent = 'Your sign-in expired, so that guest is NOT checked in yet. Sign in and they\'ll be checked in straight away.';
           m.hidden = false;
@@ -632,7 +644,8 @@
     (function init() {
       if (!token) { show('login-view'); return; }
       startScanning();
-      api('/verify').then((d) => { localStorage.setItem(USER_KEY, d.username); showWho(); }).catch(() => {});
+      const started = token;
+      api('/verify').then((d) => { if (token !== started) return; localStorage.setItem(USER_KEY, d.username); showWho(); }).catch(() => {});
     })();
   </script>
 </body>

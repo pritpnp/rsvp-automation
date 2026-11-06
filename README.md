@@ -622,7 +622,9 @@ What the user sees: a single card titled something like **"Find My Invitation"**
 
 **Notable behavior:** no `localStorage`, no cookies set client-side. The redirect to `/vip/<id>` is a same-origin location change, not a fetch, so the new page gets a clean load.
 
-**Link preview:** `/invite` and every `/vip/<id>` carry Open Graph / Twitter tags pointing at `images/vip-og.jpg` (1200×630, the "VIP Invitation" ticket card), so a shared link shows that card in iMessage, WhatsApp, etc. The pass page's tags are generic — crawlers do not run the script, so no guest name ever appears in a preview. Source: `tools/vip-og-template.html` (re-render steps in its header comment; keep the JPEG under ~300 KB for WhatsApp and bump the `?v=` on the tags after changing it).
+**Link preview:** `/invite` carries Open Graph / Twitter tags pointing at `images/vip-og.jpg` (1200×630, the generic "VIP Invitation" ticket card). Source: `tools/vip-og-template.html` (re-render steps in its header comment; keep the JPEG under ~300 KB for WhatsApp and bump the `?v=` on the tags after changing it).
+
+Each **`/vip/<id>` link gets a personal preview**: chat apps never run the page's script, so the edge function `netlify/edge-functions/vip-pass-preview.js` (path `/vip/*`) rewrites the static page's tags for that pass — title "<Name> — VIP Invitation", description "<Event> · <date> · <time>", `<title>`, `og:url` — and points `og:image` at `/.netlify/functions/vip-og-image?id=<id>&v=<hash>`. That function draws the same dark-and-gold card with the invitee's name, the event name and date · time (resvg WebAssembly + jpeg-js, vendored under `netlify/functions/vip-og-image/vendor`; Cormorant Garamond / DM Sans and the APM-1 art under `…/assets`, shipped via `included_files` in `netlify.toml`), ~85 KB JPEG. `v` is a hash of the card's text, so an edited name or time gets a fresh URL while unchanged cards stay cached on the CDN for good. Both pieces fall back to the generic card/tags on any problem (bad id, missing pass, missing `SUPABASE_URL` / `SUPABASE_SERVICE_KEY`, database slower than 1.5 s, render error), so the page itself is never affected.
 
 ### VIP pass viewer — `/vip/<id>`
 
@@ -653,7 +655,7 @@ Flow: sign in (username + password; token kept in `localStorage` as `volunteer_t
 
 - **Checked in at 10:42 AM** — guest name, event, date · time. The first check-in of a pass posts to the SCREvents VIP Telegram group (see `volunteer-scan`). If Telegram fails the volunteer is told to let the team know.
 - **Already arrived at 10:42 AM** — the pass was checked in before (e.g. a second car; another day's arrival shows its date too). Informational only; the volunteer lets them through and no second message is sent.
-- **Not today's event** — the pass's event dates (read live from `events`) don't include today in New York, e.g. an old invitation link. Nothing is recorded; **Check in anyway** records it deliberately. Events whose dates can't be read are never blocked.
+- **Not today's event** — the pass's event dates (read live from `events`) don't include today in New York, e.g. an old invitation link. Nothing is recorded; **Check in anyway** records it deliberately (and the Telegram message then names the pass's event instead of listing that event's arrivals). Dates are read from both fields — a date column, "Sat, Nov 7, 2026", "11/7/2026", a range typed into one field ("Nov 7 - Nov 8, 2026"), an end date without a year — and anything that can't be read with confidence ("Nov 7 – 8", "TBD") never blocks. A pass already checked in today always shows **Already arrived**.
 - **Not a VIP pass / not found** — any other QR code, or a deleted pass.
 - **No response** — no signal or no reply within 20 s. Scanning again is always safe.
 
@@ -1060,7 +1062,7 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
 - **File:** `netlify/functions/volunteer-scan.js`
 - **Purpose:** Everything behind `/scan`: volunteer sign-in, pass lookup and arrival check-in.
 - **Routes (by path suffix, like `manager-auth`):**
-  - `POST /login { username, password }` → `{ token, username }` (24-hour session in `volunteer_sessions`, extended back to 24 h whenever it is used with under 12 h left). `401` wrong username/password; `429` after 10 failed sign-ins from one IP in 15 minutes (counted from `audit_log`); unknown usernames still run a bcrypt compare so timing doesn't reveal them. A sign-in that raced a password change is discarded.
+  - `POST /login { username, password }` → `{ token, username }` (24-hour session in `volunteer_sessions`, extended back to 24 h whenever it is used with under 12 h left). `401` wrong username/password; `429` after 10 failed sign-ins for that volunteer from one IP, or 40 for anyone from one IP, in 15 minutes (counted from `audit_log`; per volunteer so one person mistyping on the venue Wi-Fi can't lock everyone out); unknown usernames still run a bcrypt compare so timing doesn't reveal them. A sign-in that raced a password change is discarded.
   - `POST /logout` — deletes the session.
   - `GET /verify` → `{ valid, username }`.
   - `GET /pass?id=<uuid>` → `{ id, guest_name, event_name, event_date, event_time, checked_in_at, checked_in_by }`. No phone numbers. `400` not a pass id, `404` not found.
@@ -1090,7 +1092,7 @@ This is the largest cluster. RSVPs flow public → `submit-rsvp.js` (writes the 
 - **Purpose:** Superadmin CRUD for volunteer accounts (admin portal → Volunteers tab).
 - **HTTP method:** `GET` list (`id, username, created_at` — never the hash), `POST { username, password }`, `PATCH { id, username?, password? }`, `DELETE { id }`.
 - **Auth:** superadmin only — `x-admin-password` or a superadmin `x-manager-token`, same as `superadmin-managers`.
-- **Notes:** usernames are lower-cased and trimmed (64 characters max); passwords need 6+ characters (bcrypt-hashed). A new password, or removal, deletes that volunteer's sessions, signing them out on every phone at once — if that delete fails the request fails with "press Save again" rather than claiming success. `503` with a setup message before the migration is run. Audited as `volunteer.create` / `volunteer.update` / `volunteer.delete`.
+- **Notes:** usernames are lower-cased and trimmed (64 characters max); passwords need 6–200 characters (bcrypt-hashed). A new password, or removal, deletes that volunteer's sessions, signing them out on every phone at once — if that delete fails the request fails with "press Save again" rather than claiming success. `503` with a setup message before the migration is run. Audited as `volunteer.create` / `volunteer.update` / `volunteer.delete`.
 
 #### admin-passes
 

@@ -54,6 +54,11 @@
 [functions]
   directory = "netlify/functions"
 
+# Personal VIP link-preview pictures: fonts, artwork and the resvg WebAssembly
+# file are read from disk at runtime, so they must ship with the function.
+[functions."vip-og-image"]
+  included_files = ["netlify/functions/vip-og-image/assets/**", "netlify/functions/vip-og-image/vendor/**"]
+
 [[redirects]]
   from = "/vip/*"
   to = "/vip/index.html"

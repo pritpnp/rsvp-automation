@@ -34,8 +34,10 @@ const REFRESH_BELOW_HOURS = 12;      // a session in use is extended back to 24 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TZ = 'America/New_York';
 const TELEGRAM_LIMIT = 4096;
-const LOGIN_FAIL_LIMIT = 10;         // failed sign-ins per IP ...
+const LOGIN_FAIL_LIMIT = 10;         // failed sign-ins for one volunteer from one IP ...
+const LOGIN_FAIL_IP_LIMIT = 40;      // ... or for anyone from one IP (venue Wi-Fi is shared) ...
 const LOGIN_FAIL_WINDOW_MIN = 15;    // ... per this many minutes
+const MAX_PASSWORD = 200;            // superadmin-volunteers.js refuses longer ones too
 
 const NOT_SET_UP = 'Volunteer check-in is not set up in the database yet — ask the admin to run the volunteers SQL in Supabase.';
 const UNAVAILABLE = 'Could not reach the server. Please try again.';
@@ -90,26 +92,52 @@ function ymd(y, mo, d) {
   if (!(y >= 2000 && y <= 2100 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return null;
   return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
-function toYmd(v) {
-  const s = String(v == null ? '' : v).trim();
-  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) return ymd(+m[1], +m[2], +m[3]);
-  m = s.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/i);
-  if (m) return ymd(+m[3], MONTHS.indexOf(m[1].toLowerCase()) + 1, +m[2]);
-  m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
-  if (m) return ymd(+m[3], +m[1], +m[2]);
-  return null;
+// Every date found in a piece of text, in order. A "Month D" with no year
+// takes yearHint (an end date typed as "Sun, Nov 8" after a start of
+// "Sat, Nov 7, 2026").
+const DATE_RE = /(\d{4})-(\d{1,2})-(\d{1,2})|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?(?![\d:])|\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/gi;
+function datesIn(v, yearHint) {
+  const out = [];
+  for (const m of String(v == null ? '' : v).matchAll(DATE_RE)) {
+    let d = null;
+    if (m[1]) d = ymd(+m[1], +m[2], +m[3]);
+    else if (m[4]) d = (m[6] || yearHint) ? ymd(+(m[6] || yearHint), MONTHS.indexOf(m[4].toLowerCase()) + 1, +m[5]) : null;
+    else if (m[7]) d = ymd(+m[9], +m[7], +m[8]);
+    if (d) out.push(d);
+  }
+  return out;
 }
+const toYmd = (v) => datesIn(v)[0] || null;
 const todayYmd = () => new Date().toLocaleDateString('en-CA', { timeZone: TZ });   // "YYYY-MM-DD"
+
+// The event's first and last day, or null when the dates can't be read with
+// confidence. Reads ranges typed into one field ("Nov 7 - Nov 8, 2026") and
+// end dates without a year; a range like "Nov 7 - 8, 2026" that can't be
+// fully read means "can't tell".
+function eventWindow(evt) {
+  if (!evt) return null;
+  const startText = String(evt.start_date == null ? '' : evt.start_date).trim();
+  const endText = String(evt.end_date == null ? '' : evt.end_date).trim();
+  const first = datesIn(startText);
+  if (!first.length) return null;
+  const year = +first[0].slice(0, 4);
+  const starts = datesIn(startText, year);
+  // "Nov 7 – 8, 2026" (ISO dates aside, whose own dashes don't count)
+  if (/\d\s*[-–—]\s*\d/.test(startText.replace(/\d{4}-\d{1,2}-\d{1,2}/g, '')) && starts.length < 2) return null;
+  let ends = endText ? datesIn(endText, year) : [];
+  if (endText && !ends.length) return null;                                    // an end we can't read
+  // "Dec 31, 2026" to "Jan 1" (no year): the end is in the next year.
+  ends = ends.map((d) => (d < starts[0] ? datesIn(endText, year + 1)[0] || d : d));
+  const all = [...starts, ...ends].sort();
+  return { start: all[0], end: all[all.length - 1] };
+}
 
 // True only when the event's dates are known and today (New York) is outside them.
 function notToday(evt) {
-  if (!evt) return false;
-  const start = toYmd(evt.start_date);
-  if (!start) return false;
-  const end = toYmd(evt.end_date) || start;
+  const w = eventWindow(evt);
+  if (!w) return false;
   const today = todayYmd();
-  return today < start || today > end;
+  return today < w.start || today > w.end;
 }
 
 function formatTime(iso) {
@@ -212,17 +240,25 @@ exports.handler = async (event) => {
       logAudit(supabase, event, { actorName: username.slice(0, 64) + ' (volunteer)', action: 'volunteer.login', success: false });
       return reply(401, { error: 'Wrong username or password' });
     };
-    if (username.length > 64 || password.length > 200) return failed();
+    if (username.length > 64 || password.length > MAX_PASSWORD) return failed();
 
-    // Slow down password guessing: too many failed sign-ins from one IP.
-    // Counted from the audit log; if that read fails, sign-in is not blocked.
+    // Slow down password guessing, counted from the audit log: 10 failures
+    // for this volunteer from this IP, or 40 for anyone from this IP, in 15
+    // minutes. Per volunteer first, so one person mistyping on the venue
+    // Wi-Fi can't lock everyone else out. If the count can't be read, sign-in
+    // is not blocked. (A burst of simultaneous guesses can slip past a count
+    // like this; bcrypt keeps each guess slow, and a volunteer account can
+    // only check in passes it already has the link to.)
     const ip = getClientIp(event);
     if (ip && ip !== 'unknown') {
       const since = new Date(Date.now() - LOGIN_FAIL_WINDOW_MIN * 60e3).toISOString();
-      const { count, error: cErr } = await supabase.from('audit_log')
-        .select('*', { count: 'exact', head: true })
-        .eq('action', 'volunteer.login').eq('success', false).eq('ip', ip).gte('created_at', since);
-      if (!cErr && (count || 0) >= LOGIN_FAIL_LIMIT) {
+      const failures = (extra) => {
+        let q = supabase.from('audit_log').select('*', { count: 'exact', head: true })
+          .eq('action', 'volunteer.login').eq('success', false).eq('ip', ip).gte('created_at', since);
+        return (extra ? q.eq('actor_name', extra) : q);
+      };
+      const [mine, all] = await Promise.all([failures(username.slice(0, 64) + ' (volunteer)'), failures(null)]);
+      if ((!mine.error && (mine.count || 0) >= LOGIN_FAIL_LIMIT) || (!all.error && (all.count || 0) >= LOGIN_FAIL_IP_LIMIT)) {
         return reply(429, { error: `Too many wrong tries. Please wait ${LOGIN_FAIL_WINDOW_MIN} minutes and try again.` });
       }
     }
@@ -298,7 +334,10 @@ exports.handler = async (event) => {
     // A pass for another day's event (an old link kept in someone's messages,
     // or next month's) must not be announced as today's arrival. The volunteer
     // sees the event and its date, and can still check them in deliberately.
-    if (!body.force && notToday(evt)) {
+    const otherDay = notToday(evt);
+    const checkedInToday = !!pass.checked_in_at &&
+      new Date(pass.checked_in_at).toLocaleDateString('en-CA', { timeZone: TZ }) === todayYmd();
+    if (!body.force && otherDay && !checkedInToday) {
       return reply(409, { error: 'not_today', pass: passView(pass, evt) });
     }
 
@@ -325,6 +364,16 @@ exports.handler = async (event) => {
 
     const p = claimed[0];
     logAudit(supabase, event, { actorId: vol.id, actorName: vol.username + ' (volunteer)', action: 'pass.checkin', target: p.id, details: { guest_name: p.guest_name, event_name: p.event_name, forced: !!body.force } });
+
+    // A pass for another day's event, checked in anyway: say which event it
+    // was for, and don't post that other event's arrivals list as today's.
+    if (otherDay) {
+      const when = [p.event_name, p.event_date].map((s) => String(s || '').trim()).filter(Boolean).join(', ');
+      const text = arrivalMessage(p.guest_name, p.checked_in_at || now, null, 0) +
+        (when ? `\n<i>Checked in anyway with a pass for ${esc(when)}.</i>` : '');
+      const notifiedOther = await sendTelegram(text);
+      return reply(200, { first: true, notified: notifiedOther, pass: passView(p, evt) });
+    }
 
     // Everyone checked in for this event so far, in arrival order.
     let arrived = [{ guest_name: p.guest_name }];

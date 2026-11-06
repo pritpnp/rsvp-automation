@@ -27,6 +27,7 @@ function fail(error) {
 
 function cleanUsername(u) { return String(u || '').toLowerCase().trim(); }
 const MIN_PASSWORD = 6;
+const MAX_PASSWORD = 200;  // the sign-in page refuses longer ones
 const MAX_USERNAME = 64;   // the sign-in page refuses longer names
 
 function parseBody(event) {
@@ -79,8 +80,8 @@ exports.handler = async (event) => {
     if (username.length > MAX_USERNAME) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: `Username must be at most ${MAX_USERNAME} characters` }) };
     }
-    if (password.length < MIN_PASSWORD) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: `Password must be at least ${MIN_PASSWORD} characters` }) };
+    if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: `Password must be ${MIN_PASSWORD} to ${MAX_PASSWORD} characters` }) };
     }
     const password_hash = await bcrypt.hash(password, 10);
     const { data, error } = await supabase
@@ -106,8 +107,8 @@ exports.handler = async (event) => {
     }
     if (username) updates.username = username;
     if (password) {
-      if (password.length < MIN_PASSWORD) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: `Password must be at least ${MIN_PASSWORD} characters` }) };
+      if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: `Password must be ${MIN_PASSWORD} to ${MAX_PASSWORD} characters` }) };
       }
       updates.password_hash = await bcrypt.hash(password, 10);
     }
