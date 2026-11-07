@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const { logAudit } = require('./_audit');
 const { eventWindow, todayYmd, formatTime: formatEventTime } = require('../lib/vip-dates');
+const { preparePhones, loadEventPhones, findConflict, conflictMessage, createVipPass } = require('../lib/vip-passes');
 
 // Constant-time string equality to prevent timing attacks on the webhook secret.
 const constantTimeEqual = (a, b) => {
@@ -62,7 +63,9 @@ function chunkLines(header, lines, limit = 3900, sep = '\n') {
   out.push(cur);
   return out;
 }
-async function buildVipLists(supabase) {
+// The events /vip lists and /invite offers: the next 3 by date, plus any whose
+// typed date can't be read but which have recent passes (flagged undated).
+async function findUpcomingVipEvents(supabase) {
   const { data: events, error } = await supabase.from('events').select('*');
   if (error) throw new Error(error.message);
   const today = todayYmd();
@@ -80,6 +83,12 @@ async function buildVipLists(supabase) {
       .select('*', { count: 'exact', head: true }).eq('event_id', x.e.id).gte('created_at', since);
     if (!cErr && count) upcoming.push({ ...x, undated: true });
   }
+  return upcoming;
+}
+
+async function buildVipLists(supabase) {
+  const today = todayYmd();
+  const upcoming = await findUpcomingVipEvents(supabase);
   if (!upcoming.length) return ['🎟 No upcoming VIP events found.'];
   const messages = [];
   for (const { e, undated } of upcoming) {
@@ -123,8 +132,74 @@ async function buildVipLists(supabase) {
   return messages;
 }
 
-// The SCREvents VIP group's "/" menu lists only /vip — the bot's flyer and
-// summary commands belong to the other groups. Telegram keeps a separate
+// ─── /invite: make a VIP pass from the SCREvents VIP group ──────────────────
+// /invite → (pick the event, if more than one is upcoming) → name → phone →
+// note → the pass is created and its link posted in the group.
+//
+// Each question is a force-reply prompt, and the answers so far ride INSIDE
+// that prompt — in the URL of the link on the event name. A reply to the
+// prompt carries the whole prompt back (reply_to_message, with its entities),
+// so the bot needs no stored session: several people can run /invite at once
+// without crossing wires, an abandoned invite leaves nothing behind, and a
+// cold-started function has everything it needs. Only replies to the BOT's own
+// prompts are read (checked against the bot's id), so the state can't be forged.
+//
+// Phone numbers: /vip never shows them in the group. The prompts confirm a
+// number by its last 4 digits only, and the finished message has none.
+const INVITE_STATE_URL = 'https://screvents.com/admin/';
+const INVITE_SKIP = /^(skip|none|no|n\/a|-|—)$/i;
+
+function inviteStateUrl(st) {
+  const q = new URLSearchParams({ vipinvite: '1', e: st.e });
+  if (st.n) q.set('n', st.n);
+  if (st.p) q.set('p', st.p);
+  return INVITE_STATE_URL + '?' + q.toString();
+}
+
+// The state carried by one of the bot's invite prompts, or null if the message
+// is not one. Entity offsets are UTF-16 units, the same as JS string indices.
+function readInviteState(msg) {
+  const ent = (msg && msg.entities || []).find((x) => x.type === 'text_link' && /[?&]vipinvite=1(&|$)/.test(x.url || ''));
+  if (!ent) return null;
+  let u;
+  try { u = new URL(ent.url); } catch (e) { return null; }
+  const step = Number(((msg.text || '').match(/Step ([123]) of 3/) || [])[1]) || 0;
+  return {
+    step,
+    e: u.searchParams.get('e') || '',
+    n: u.searchParams.get('n') || '',
+    p: u.searchParams.get('p') || '',
+    eventName: (msg.text || '').slice(ent.offset, ent.offset + ent.length),
+  };
+}
+
+const maskPhone = (n) => '••••' + String(n).slice(-4);
+
+function invitePromptText(step, st, eventName, notice) {
+  const lines = [`🎟 <b>New VIP pass</b> · <a href="${escHtml(inviteStateUrl(st))}">${escHtml(eventName)}</a>`];
+  if (notice) lines.push('⚠️ ' + escHtml(notice));
+  if (st.n) lines.push(`Name: <b>${escHtml(st.n)}</b>`);
+  if (st.p) lines.push('Phone: ' + st.p.split(',').map(maskPhone).join(', '));
+  lines.push(step === 1 ? "<b>Step 1 of 3</b> — reply with the guest's <b>full name</b>."
+    : step === 2 ? '<b>Step 2 of 3</b> — reply with their <b>phone number</b> (10 digits). Two numbers? Separate them with a comma.'
+    : '<b>Step 3 of 3</b> — reply with a <b>note</b> (e.g. their company), or <b>skip</b>.');
+  return lines.join('\n');
+}
+
+// A typed name: one line, collapsed spaces, at most 100 characters.
+function cleanGuestName(v) {
+  const s = String(v || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim();
+  return Array.from(s).slice(0, 100).join('').trim();
+}
+// Phone answer → list of numbers, split the same way as a spreadsheet's
+// Phone cell (commas, ; / & | or "and").
+function splitPhones(v) {
+  return String(v || '').split(/[,;\/&|\n]+|\s+and\s+/i).map((x) => x.trim()).filter(Boolean);
+}
+
+// The SCREvents VIP group's "/" menu lists only /vip and /invite — the bot's
+// flyer and summary commands belong to the other groups. (/cancel works there
+// too but stays out of the menu, as in the other groups.) Telegram keeps a separate
 // command list per chat (setMyCommands, scope "chat"), which wins over the
 // bot's default list for everyone in that group. Set the first time anything
 // reaches the webhook from that group in a warm function; repeating it is
@@ -137,7 +212,10 @@ async function ensureVipMenu(botToken, chatId) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        commands: [{ command: 'vip', description: 'List invited VIPs and who has arrived' }],
+        commands: [
+          { command: 'vip', description: 'List invited VIPs and who has arrived' },
+          { command: 'invite', description: 'Make a VIP pass (name, phone, note)' },
+        ],
         scope: { type: 'chat', chat_id: chatId },
       }),
     });
@@ -213,6 +291,18 @@ exports.handler = async (event) => {
       .eq('chat_id', chat_id);
   };
 
+  // /cancel in the SCREvents VIP group. /invite keeps no session to clear, but
+  // an old half-answered prompt could still be replied to later and carry on.
+  // So /cancel records WHEN it happened, in this chat's session row (the
+  // group has no other use for it), and every /invite prompt or event button
+  // sent before that moment is dead. Telegram message dates are whole seconds.
+  const inviteCancelledBefore = async (chat_id, sentAtSeconds) => {
+    const s = await getSession(chat_id);
+    if (!s || s.step !== 'invite_cancelled' || !s.updated_at) return false;
+    return sentAtSeconds * 1000 <= Date.parse(s.updated_at);
+  };
+  const BOT_ID = String(TELEGRAM_BOT_TOKEN || '').split(':')[0];
+
   // ─── Constants ─────────────────────────────────────────────────────────────
   // ZONE_CHAT_MAP is hoisted to module scope (see top of file) so undefined
   // env vars don't collapse onto a single 'undefined' key.
@@ -287,6 +377,21 @@ exports.handler = async (event) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id, message_id, caption, reply_markup: JSON.stringify({ inline_keyboard: [] }), ...extra }),
+    });
+
+  // One /invite question, as a force-reply so the asker's app opens a reply to
+  // it. replyTo is the asker's message: "selective" then shows the reply box to
+  // them alone, not the whole group.
+  const sendInvitePrompt = (chat_id, replyTo, step, st, eventName, notice = '') =>
+    sendMessage(chat_id, invitePromptText(step, st, eventName, notice), {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      ...(replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}),
+      reply_markup: JSON.stringify({
+        force_reply: true,
+        selective: !!replyTo,
+        input_field_placeholder: step === 1 ? 'Guest name' : step === 2 ? 'Phone number' : 'Note, or skip',
+      }),
     });
 
   const clearButtons = (chat_id, message_id) =>
@@ -465,6 +570,32 @@ exports.handler = async (event) => {
     // path carries no portal auth, so the actor is passed to logAudit explicitly).
     const cbFrom   = callbackQuery.from || {};
     const cbActor  = cbFrom.username ? '@' + cbFrom.username : (cbFrom.first_name || 'telegram-user');
+
+    // /invite's event picker, in the SCREvents VIP group. Handled before the
+    // admin-only gate below, which drops every other chat's buttons.
+    if (cbData && cbData.startsWith('vipinv:')) {
+      if (!VIP_CHAT_ID || cbChatId !== VIP_CHAT_ID) {
+        await answerCallbackQuery(callbackQuery.id);
+        return { statusCode: 200, body: 'OK' };
+      }
+      if (await inviteCancelledBefore(cbChatId, callbackQuery.message.date)) {
+        await answerCallbackQuery(callbackQuery.id, 'That invite was cancelled. Start again with /invite.');
+        await editMessageText(cbChatId, msgId, '❌ Cancelled.', { reply_markup: JSON.stringify({ inline_keyboard: [] }) });
+        return { statusCode: 200, body: 'OK' };
+      }
+      const { data: evt } = await supabase.from('events').select('id, event_name').eq('id', cbData.slice('vipinv:'.length)).single();
+      if (!evt) {
+        await answerCallbackQuery(callbackQuery.id, 'That event no longer exists. Try /invite again.');
+        return { statusCode: 200, body: 'OK' };
+      }
+      await answerCallbackQuery(callbackQuery.id);
+      await editMessageText(cbChatId, msgId, `🎟 <b>New VIP pass</b> · ${escHtml(evt.event_name)}`,
+        { parse_mode: 'HTML', reply_markup: JSON.stringify({ inline_keyboard: [] }) });
+      // Reply to the original /invite, so the reply box opens for whoever asked.
+      const asker = callbackQuery.message.reply_to_message;
+      await sendInvitePrompt(cbChatId, asker ? asker.message_id : null, 1, { e: evt.id }, evt.event_name);
+      return { statusCode: 200, body: 'OK' };
+    }
 
     if (cbChatId !== ADMIN_CHAT_ID) {
       await answerCallbackQuery(callbackQuery.id);
@@ -797,6 +928,113 @@ exports.handler = async (event) => {
   const isRemoveFlyer   = normalizedText === '/removeflyer';
   const isCancel        = normalizedText === '/cancel';
   const isRefreshAll    = normalizedText === '/refreshall';
+  const inVipGroup      = !!VIP_CHAT_ID && chatId === VIP_CHAT_ID;
+
+  // ── /cancel (SCREvents VIP group) — stops every /invite in progress ──
+  if (isCancel && inVipGroup) {
+    await setSession(chatId, 'invite_cancelled');
+    await sendMessage(chatId, '❌ Cancelled. Any /invite in progress has been stopped and nothing was saved. Start again with /invite.',
+      { reply_parameters: { message_id: message.message_id, allow_sending_without_reply: true } });
+    return { statusCode: 200, body: 'OK' };
+  }
+
+  // ── An answer to one of /invite's questions (SCREvents VIP group) ──
+  // Other commands sent as replies (e.g. /vip) are left to their own handlers.
+  const repliedTo = message.reply_to_message;
+  if (inVipGroup && repliedTo && repliedTo.from && String(repliedTo.from.id) === BOT_ID && !text.startsWith('/')) {
+    const st = readInviteState(repliedTo);
+    if (st && st.e && st.step) {
+      const answerTo = message.message_id;
+      const reply = (t, extra = {}) => sendMessage(chatId, t,
+        { parse_mode: 'HTML', reply_parameters: { message_id: answerTo, allow_sending_without_reply: true }, ...extra });
+      if (await inviteCancelledBefore(chatId, repliedTo.date)) {
+        await reply('❌ That invite was cancelled. Start again with /invite.');
+        return { statusCode: 200, body: 'OK' };
+      }
+      const eventName = st.eventName || 'VIP event';
+      const state = { e: st.e, n: st.n, p: st.p };
+
+      if (st.step === 1) {
+        const name = cleanGuestName(text);
+        if (!name) { await sendInvitePrompt(chatId, answerTo, 1, state, eventName, 'Please send the name as text.'); return { statusCode: 200, body: 'OK' }; }
+        await sendInvitePrompt(chatId, answerTo, 2, { ...state, n: name }, eventName);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      if (st.step === 2 && st.n) {
+        const parts = splitPhones(text);
+        const ph = preparePhones(parts[0], parts.slice(1));
+        if (ph.error) { await sendInvitePrompt(chatId, answerTo, 2, state, eventName, ph.error); return { statusCode: 200, body: 'OK' }; }
+        // Catch a number already on someone's pass now, not after the note.
+        const ev = await loadEventPhones(supabase, st.e);
+        const clash = ev.passes ? findConflict(ev.passes, ph.all) : null;
+        if (clash) { await sendInvitePrompt(chatId, answerTo, 2, state, eventName, conflictMessage(clash)); return { statusCode: 200, body: 'OK' }; }
+        await sendInvitePrompt(chatId, answerTo, 3, { ...state, p: ph.all.join(',') }, eventName);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      if (st.step === 3 && st.n && st.p) {
+        const phones = st.p.split(',');
+        const note = INVITE_SKIP.test(text) ? '' : text;
+        const result = await createVipPass(supabase, { guest_name: st.n, phone: phones[0], extra_phones: phones.slice(1), note, event_id: st.e });
+        if (result.status !== 200) {
+          await reply(`❌ Couldn't make the pass: ${escHtml(result.error)}\nStart again with /invite.`);
+          return { statusCode: 200, body: 'OK' };
+        }
+        const pass = result.pass;
+        const from = message.from || {};
+        logAudit(supabase, event, {
+          actorName: from.username ? '@' + from.username : (from.first_name || 'telegram-user'),
+          actorId: from.id ? 'tg:' + from.id : null,
+          action: 'pass.create', target: String(st.e), details: { count: 1, via: 'telegram', passId: pass.id },
+        });
+        await reply([
+          `✅ <b>VIP pass made</b> · ${escHtml(pass.event_name || eventName)}`,
+          `<b>${escHtml(pass.guest_name)}</b>${pass.note ? ` - (${escHtml(pass.note)})` : ''}`,
+          `https://screvents.com/vip/${pass.id}`,
+        ].join('\n'));
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      await reply('⚠️ That invite is missing some answers. Start again with /invite.');
+      return { statusCode: 200, body: 'OK' };
+    }
+  }
+
+  // ── /invite (SCREvents VIP group) — make a VIP pass ──
+  if (normalizedText.replace(/\s+/g, '') === '/invite') {
+    if (!inVipGroup) {
+      await sendMessage(chatId, '⚠️ /invite only works in the SCREvents VIP group.');
+      return { statusCode: 200, body: 'OK' };
+    }
+    let upcoming;
+    try {
+      upcoming = await findUpcomingVipEvents(supabase);
+    } catch (err) {
+      console.error('/invite failed:', err.message);
+      await sendMessage(chatId, '⚠️ Could not load the events right now. Please try again.');
+      return { statusCode: 200, body: 'OK' };
+    }
+    if (!upcoming.length) {
+      await sendMessage(chatId, '🎟 No upcoming VIP events. Create the event in the admin portal first, with a date like "Sat, Nov 7, 2026".');
+      return { statusCode: 200, body: 'OK' };
+    }
+    if (upcoming.length === 1) {
+      await sendInvitePrompt(chatId, message.message_id, 1, { e: upcoming[0].e.id }, upcoming[0].e.event_name);
+      return { statusCode: 200, body: 'OK' };
+    }
+    await sendMessage(chatId, '🎟 <b>New VIP pass</b> — which event?', {
+      parse_mode: 'HTML',
+      reply_parameters: { message_id: message.message_id, allow_sending_without_reply: true },
+      reply_markup: JSON.stringify({
+        inline_keyboard: upcoming.map(({ e, undated }) => [{
+          text: e.event_name + (undated ? ' (check date)' : (showDate(e.start_date) ? ' · ' + showDate(e.start_date) : '')),
+          callback_data: 'vipinv:' + e.id,
+        }]),
+      }),
+    });
+    return { statusCode: 200, body: 'OK' };
+  }
 
   // ── /refreshall (admin chat only) — force OCR on all zones ──
   if (isRefreshAll && chatId === ADMIN_CHAT_ID) {
