@@ -34,6 +34,72 @@ if (MISSING_ZONE_ENV_VARS.length) {
 }
 const ZONE_CHAT_MAP = Object.fromEntries(ZONE_CHAT_PAIRS.filter(([k]) => k));
 
+// ─── Publishing an approved flyer: ONE commit, all or nothing ────────────────
+// Approving used to delete a zone's old images and upload the new flyer.jpg
+// and og.jpg through the contents API — a separate commit for each. A GitHub
+// timeout part-way left the zone with its old flyer deleted and no new one
+// (Satsang Sabha, Nov 18). This builds the whole change with the Git Data API
+// instead: the images go up first as blobs, which change nothing until a
+// commit uses them; then one tree (new images in, other old images out), one
+// commit, and finally the branch is moved to it. Any failure before that last
+// step leaves main exactly as it was, so a retry is always safe — and one
+// commit means one GitHub Actions run, not three or four.
+const GH_REPO = 'pritpnp/rsvp-automation';
+
+// fetch + JSON, retrying ONCE on a GitHub 5xx (its "couldn't respond in time"
+// is a 5xx) while there is still time: the whole approval must finish inside
+// the function's ~10s limit. 4xx are not retried — they won't change.
+async function ghJson(url, { method = 'GET', body, headers, deadline }) {
+  let last;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(url, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+    if (res.ok) return res.json();
+    last = { status: res.status, text: (await res.text()).slice(0, 300) };
+    if (res.status < 500 || Date.now() > deadline) break;
+  }
+  const err = new Error(`GitHub ${method} ${url.replace(/^.*\/repos\/[^/]+\/[^/]+\//, '')} failed (${last.status}): ${last.text}`);
+  err.status = last.status;
+  throw err;
+}
+
+// files: { 'flyer.jpg': base64, 'og.jpg': base64 }. Returns the new commit sha.
+async function publishFlyerFiles({ zone, files, message, headers, deadline }) {
+  const git = `https://api.github.com/repos/${GH_REPO}/git`;
+  const blobs = {};
+  for (const [name, content] of Object.entries(files)) {
+    blobs[name] = (await ghJson(`${git}/blobs`, { method: 'POST', body: { content, encoding: 'base64' }, headers, deadline })).sha;
+  }
+  for (let attempt = 0; ; attempt++) {
+    const ref = await ghJson(`${git}/ref/heads/main`, { headers, deadline });
+    const baseSha = ref.object.sha;
+    const baseCommit = await ghJson(`${git}/commits/${baseSha}`, { headers, deadline });
+    let existing = [];
+    try {
+      existing = await ghJson(`https://api.github.com/repos/${GH_REPO}/contents/flyers/${zone}?ref=${baseSha}`, { headers, deadline });
+    } catch (e) { if (e.status !== 404) throw e; }   // no folder yet: nothing to remove
+    const tree = [
+      // Any other image in the folder goes, in the same commit (sha null = delete).
+      ...(Array.isArray(existing) ? existing : [])
+        .filter((f) => f.type === 'file' && /\.(jpg|jpeg|png)$/i.test(f.name) && !(f.name in blobs))
+        .map((f) => ({ path: `flyers/${zone}/${f.name}`, mode: '100644', type: 'blob', sha: null })),
+      ...Object.entries(blobs).map(([name, sha]) => ({ path: `flyers/${zone}/${name}`, mode: '100644', type: 'blob', sha })),
+    ];
+    const newTree = await ghJson(`${git}/trees`, { method: 'POST', body: { base_tree: baseCommit.tree.sha, tree }, headers, deadline });
+    const commit = await ghJson(`${git}/commits`, { method: 'POST', body: { message, tree: newTree.sha, parents: [baseSha] }, headers, deadline });
+    try {
+      // The only step that changes main. Re-sending the same sha is harmless,
+      // so a retry after a timed-out-but-applied update is safe.
+      await ghJson(`${git}/refs/heads/main`, { method: 'PATCH', body: { sha: commit.sha, force: false }, headers, deadline });
+      return commit.sha;
+    } catch (e) {
+      // 422 = main moved on meanwhile (e.g. the deadlines bot committed):
+      // rebuild on top of the new head rather than overwrite it.
+      if (e.status === 422 && attempt < 2 && Date.now() < deadline) continue;
+      throw e;
+    }
+  }
+}
+
 // ─── /vips: the VIP list for upcoming events ─────────────────────────────────
 // Who's invited (A–Z), each pass's note on a "- " line under the name, and ✅
 // with the time for anyone already checked in at /scan — so the greeting team
@@ -713,6 +779,7 @@ exports.handler = async (event) => {
         return { statusCode: 200, body: 'OK' };
       }
 
+      const approveStarted = Date.now();
       try {
         // Download main flyer from Supabase storage
         const { data: signedData } = await supabase.storage
@@ -739,67 +806,21 @@ exports.handler = async (event) => {
           }
         }
 
-        // Commit to GitHub — delete any existing flyers first, then upload new one
+        // Publish: new flyer.jpg + og.jpg in, any other old image out — one
+        // commit, all or nothing (see publishFlyerFiles). og.jpg falls back to
+        // the main flyer if the builder's 1200×630 preview wasn't captured.
         const zone = review.zone.replace('-santos', '');
-        const ghHeaders = {
-          'Authorization': `Bearer ${GITHUB_PAT}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json',
-        };
-
-        // Delete any existing flyer files in the zone folder
-        const listUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/flyers/${zone}`;
-        const listRes = await fetch(listUrl, { headers: ghHeaders });
-        if (listRes.ok) {
-          const existing = await listRes.json();
-          for (const file of existing) {
-            if (/\.(jpg|jpeg|png)$/i.test(file.name)) {
-              const delRes = await fetch(file.url, {
-                method: 'DELETE', headers: ghHeaders,
-                body: JSON.stringify({
-                  message: `Remove old flyer for ${zone} before approved upload`,
-                  sha: file.sha,
-                }),
-              });
-              if (!delRes.ok) {
-                const errText = await delRes.text();
-                throw new Error(`GitHub delete failed for ${file.name} (${delRes.status}): ${errText}`);
-              }
-            }
-          }
-        }
-
-        // Commit new flyer.jpg
-        const filePath = `flyers/${zone}/flyer.jpg`;
-        const apiUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/${filePath}`;
-        const putRes = await fetch(apiUrl, {
-          method: 'PUT', headers: ghHeaders,
-          body: JSON.stringify({
-            message: `Upload flyer for ${zone} via flyer builder (approved)`,
-            content: base64Image,
-          }),
+        await publishFlyerFiles({
+          zone,
+          files: { 'flyer.jpg': base64Image, 'og.jpg': ogBase64Image || base64Image },
+          message: `Publish approved flyer for ${zone} (flyer builder)`,
+          headers: {
+            'Authorization': `Bearer ${GITHUB_PAT}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json',
+          },
+          deadline: approveStarted + 7000,   // stop retrying with time left to report back
         });
-
-        if (!putRes.ok) {
-          const err = await putRes.text();
-          throw new Error(`GitHub commit failed: ${err}`);
-        }
-
-        // Commit og.jpg (builder 1200×630 preview) — falls back to main flyer if preview wasn't captured
-        const ogContent = ogBase64Image || base64Image;
-        const ogApiUrl = `https://api.github.com/repos/pritpnp/rsvp-automation/contents/flyers/${zone}/og.jpg`;
-        const ogPutRes = await fetch(ogApiUrl, {
-          method: 'PUT', headers: ghHeaders,
-          body: JSON.stringify({
-            message: `Upload og.jpg for ${zone} via flyer builder (approved)`,
-            content: ogContent,
-          }),
-        });
-
-        if (!ogPutRes.ok) {
-          const err = await ogPutRes.text();
-          throw new Error(`GitHub og.jpg commit failed: ${err}`);
-        }
 
         // Mark review as approved
         await supabase.from('flyer_reviews').update({ status: 'approved' }).eq('id', reviewId);
@@ -834,7 +855,14 @@ exports.handler = async (event) => {
         } catch (rollbackErr) {
           console.error('Failed to roll back review status to pending:', rollbackErr);
         }
-        await editMessageCaption(cbChatId, msgId, `❌ Approval failed: ${err.message}`);
+        // The claim was rolled back above, so give the buttons back: a retry is
+        // a single tap. Publishing is all-or-nothing, so the site is unchanged.
+        await editMessageCaption(cbChatId, msgId,
+          `❌ Approval failed: ${String(err.message).slice(0, 400)}\n\nThe site was not changed. Tap Approve to try again.`,
+          { reply_markup: JSON.stringify({ inline_keyboard: [[
+            { text: '✅ Approve', callback_data: `review:approve:${reviewId}` },
+            { text: '❌ Reject',  callback_data: `review:reject:${reviewId}` },
+          ]] }) });
       }
 
       return { statusCode: 200, body: 'OK' };
